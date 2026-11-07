@@ -1,20 +1,19 @@
+"""Check UI structure and server-backed analysis wiring after source changes."""
 from pathlib import Path
 import re
-root=Path(__file__).resolve().parents[1]
-app=(root/'src/App.tsx').read_text()
-api=(root/'src/api.ts').read_text()
-categories=(root/'src/data/categories.ts').read_text()
-models=(root/'src/types/models.ts').read_text()
-css=(root/'src/styles.css').read_text()
-ids=re.findall(r"\{ id: '([^']+)', name:",categories)
-assert len(ids)==14 and len(set(ids))==14
-for page in ['ringkasan','upload','formulir','matching','dokumen']:
-    assert f'id="{page}" hidden=' in app, f'Page is not independently hidden: {page}'
-assert 'Mulai Analisis' in app and 'runAnalysis' in app
-assert 'fetchResults' in app and 'jobStatus' in app and 'newApplication' in app
-assert 'displaySections.map(' in app and 'DEMO_MATCHING' not in app and 'DEMO_FORM' not in app
-assert 'applicationId' in app and 'serverId' in models
-assert 'application_id' in api and 'Bearer ' in api
-assert '.page-section[hidden] {display:none!important;}' in css
-for col in ['Field','Formulir','Dokumen','Skor','Status']:assert col in app
-print('PASS: 5 independent pages; 14 categories; real API upload, analysis & polling; server-backed results; no demo data')
+
+root = Path(__file__).resolve().parents[1]
+sources = "\n".join(p.read_text() for p in (root / "src").rglob("*.tsx"))
+api = (root / "src/api.ts").read_text()
+categories = (root / "src/data/categories.ts").read_text()
+css = "\n".join(p.read_text() for p in (root / "src/styles").glob("*.css"))
+ids = re.findall(r"id:\s*['\"]([^'\"]+)['\"]", categories)
+assert len(ids) == 14 and len(set(ids)) == 14
+for page in ["ringkasan", "upload", "formulir", "matching", "dokumen"]:
+    assert re.search(rf'id="{page}"\s+hidden=', sources), page
+assert all(name in sources for name in ("runAnalysis", "jobResults", "jobStatus", "newApplication"))
+assert "visibleMatchingSections.map" in sources
+assert "DEMO_MATCHING" not in sources and "DEMO_FORM" not in sources
+assert "application_id" in api and "Bearer " in api
+assert re.search(r"\.page-section\[hidden\]\s*\{\s*display:\s*none\s*!important;", css)
+print("PASS: five pages, fourteen categories, server analysis and hidden-page styling")

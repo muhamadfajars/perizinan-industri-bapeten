@@ -1,0 +1,379 @@
+/* Matching report and source evidence */
+.matching-report {
+  border-radius: 14px;
+  background: #fff;
+}
+
+.matching-report .match-section-content {
+  padding: 22px;
+}
+
+.matching-report .table-scroll {
+  border-radius: 7px;
+  border-color: #dce2e9;
+}
+
+.matching-report .matching-table {
+  font-size: 13px;
+  color: #17263b;
+  line-height: 1.6;
+}
+
+.matching-report .matching-table th {
+  font-size: 12px;
+  background: #f0f3f7;
+  color: #172b47;
+  font-weight: 600;
+}
+
+.matching-report .matching-table td {
+  padding: 13px 14px;
+  vertical-align: top;
+}
+
+.matching-report .matching-table th {
+  padding: 13px 14px;
+}
+
+.matching-report .matching-table th:nth-child(1) {
+  width: 20%;
+}
+
+.matching-report .matching-table th:nth-child(2) {
+  width: 30%;
+}
+
+.matching-report .matching-table th:nth-child(3) {
+  width: 30%;
+}
+
+.matching-report .matching-table th:nth-child(4) {
+  width: 9%;
+}
+
+.matching-report .matching-table th:nth-child(5) {
+  width: 11%;
+}
+
+.matching-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+  margin: 2px 0 22px;
+}
+
+.matching-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.matching-stats span {
+  color: #566780;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.matching-stats strong {
+  color: #15263e;
+  font-size: clamp(24px, 2.6vw, 34px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.matching-table .matching-row-mismatch {
+  background: #fff1f3;
+}
+
+.matching-table .matching-row-mismatch:hover {
+  background: #ffe5e9;
+}
+
+.matching-table .matching-row-review {
+  background: #fffbeb;
+}
+
+.matching-table .matching-row-review:hover {
+  background: #fff3cf;
+}
+
+.field-detail-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.field-detail-button:hover {
+  text-decoration: underline;
+}
+
+.matching-table-scroll {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+}
+
+.matching-table-scroll .matching-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.matching-table-scroll .matching-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  box-shadow: 0 1px 0 #dce2e9;
+}
+
+.matching-status {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: normal;
+  white-space: nowrap;
+}
+
+.status-text-match {
+  color: #148b5a;
+}
+
+.status-text-review,
+.status-text-missing {
+  color: #bd7c00;
+}
+
+.status-text-mismatch {
+  color: #c8404d;
+}
+
+.matching-extras {
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.evidence-accordion {
+  border: 1px solid #e3e7ee;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.evidence-accordion summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: #26344e;
+}
+
+.evidence-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.evidence-accordion[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.evidence-body {
+  border-top: 1px solid #e7ebef;
+  padding: 18px;
+  font-size: 13px;
+  color: #53627a;
+  line-height: 1.7;
+}
+
+.evidence-body strong {
+  color: #1c2941;
+}
+
+.evidence-body p {
+  margin: 8px 0 15px;
+}
+
+.evidence-quote {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  background: #f6f8fb;
+  color: #4b5463;
+}
+
+.maintenance-detail {
+  padding: 20px 3px 10px;
+}
+
+.maintenance-detail h3 {
+  font-size: 16px;
+  color: #17243b;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.maintenance-source {
+  color: #7b899c;
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+
+.maintenance-columns {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 25px;
+  margin-bottom: 14px;
+}
+
+.maintenance-columns h4 {
+  font-size: 13px;
+  margin-bottom: 12px;
+  color: #26364d;
+  font-weight: 600;
+}
+
+.maintenance-columns ul {
+  margin: 0;
+  padding-left: 24px;
+}
+
+.maintenance-columns li {
+  font-size: 13px;
+  color: #273750;
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 780px) {
+  .matching-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .maintenance-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .matching-report .matching-table {
+    min-width: 790px;
+  }
+}
+
+@media (max-width: 720px) {
+  .match-section-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 13px 12px;
+  }
+
+  .match-heading-group {
+    flex-basis: calc(100% - 30px);
+  }
+
+  .match-section-header .match-chevron {
+    order: 1;
+  }
+
+  .match-section-header .match-pills {
+    display: flex;
+    order: 2;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    padding-left: 45px;
+  }
+
+  .matching-report .match-section-content {
+    padding: 14px;
+  }
+
+  .matching-table-scroll {
+    max-height: 65vh;
+  }
+
+  .matching-section .table-footer {
+    flex-wrap: wrap;
+  }
+}
+
+.source-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.inline-source-preview {
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+
+.inline-evidence-frame {
+  background: #f5f6f8;
+  margin: 12px 0 5px;
+  border: 1px solid #dce2e9;
+  width: 100%;
+  height: min(65vh, 640px);
+  border-radius: 8px;
+}
+
+.inline-preview-state {
+  font-size: 12px;
+  color: #687e92;
+}
+
+.inline-preview-error {
+  color: #bc3d49;
+  font-size: 12px;
+}
+
+/* v0.5.2: evidence page shown directly instead of hidden behind extra actions */
+.source-actions {
+  display: block;
+  width: 100%;
+}
+
+.source-actions .inline-source-preview {
+  width: 100%;
+}
+
+.source-actions .inline-evidence-frame {
+  width: 100%;
+  height: 660px;
+  max-height: 80vh;
+}
+
+.inline-evidence-image {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  max-height: 850px;
+  object-fit: contain;
+  margin: 12px auto;
+  border: 1px solid #dce4ed;
+  border-radius: 9px;
+  background: white;
+}
+
+/* BAPETEN v0.5.6 UI-only refinements */
+.form-surface .list-data-row small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #596d85;
+}
+
+.matching-filter-empty {
+  border: 1px dashed #dae1ea;
+  padding: 28px;
+  text-align: center;
+  color: #728096;
+  border-radius: 12px;
+  font-size: 13px;
+}

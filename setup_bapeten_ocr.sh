@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # BAPETEN OCR environment repair v0.2.2: backend venv ONLY.
-# No sudo. Does not touch Streamlit, uploaded files, matching, frontend or .env.
+# No sudo. Does not alter uploaded files, matching, frontend or .env.
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND="$ROOT/backend"

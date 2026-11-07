@@ -5,38 +5,24 @@ FIELDS = {
     "alamat_proyek": "Alamat Proyek",
 }
 
+
 def clean_value(value):
     if value is None:
         return None
 
-    value = re.sub(
-        r"\s+",
-        " ",
-        value
-    )
+    value = re.sub(r"\s+", " ", value)
 
-    value = value.strip(
-        " :\n\t"
-    )
+    value = value.strip(" :\n\t")
 
     return value or None
 
-def extract_value(
-    text,
-    label,
-    next_labels
-):
 
-    escaped_label = re.escape(
-        label
-    )
+def extract_value(text, label, next_labels):
+
+    escaped_label = re.escape(label)
 
     if next_labels:
-
-        next_pattern = "|".join(
-            re.escape(item)
-            for item in next_labels
-        )
+        next_pattern = "|".join(re.escape(item) for item in next_labels)
 
         lookahead = (
             rf"(?=\s*(?:{next_pattern})\s*:?"
@@ -44,7 +30,6 @@ def extract_value(
         )
 
     else:
-
         lookahead = r"(?=$)"
 
     pattern = (
@@ -54,30 +39,17 @@ def extract_value(
         rf"{lookahead}"
     )
 
-    match = re.search(
-        pattern,
-        text,
-        flags=(
-            re.IGNORECASE
-            |
-            re.DOTALL
-        )
-    )
+    match = re.search(pattern, text, flags=(re.IGNORECASE | re.DOTALL))
 
     if not match:
         return None
 
-    value = match.group(
-        1
-    )
+    value = match.group(1)
 
-    return clean_value(
-        value
-    )
+    return clean_value(value)
 
-def extract_general_info(
-    text
-):
+
+def extract_general_info(text):
     all_labels = [
         "Nomor Registrasi",
         "Tanggal Registrasi",
@@ -91,34 +63,18 @@ def extract_general_info(
 
     result = {}
 
-    instansi_index = all_labels.index(
-        "Instansi"
+    instansi_index = all_labels.index("Instansi")
+
+    result["instansi"] = extract_value(
+        text=text, label="Instansi", next_labels=all_labels[instansi_index + 1 :]
     )
 
-    result[
-        "instansi"
-    ] = extract_value(
-        text=text,
-        label="Instansi",
-        next_labels=all_labels[
-            instansi_index + 1:
-        ]
-    )
+    alamat_proyek_index = all_labels.index("Alamat Proyek")
 
-    alamat_proyek_index = (
-        all_labels.index(
-            "Alamat Proyek"
-        )
-    )
-
-    result[
-        "alamat_proyek"
-    ] = extract_value(
+    result["alamat_proyek"] = extract_value(
         text=text,
         label="Alamat Proyek",
-        next_labels=all_labels[
-            alamat_proyek_index + 1:
-        ]
+        next_labels=all_labels[alamat_proyek_index + 1 :],
     )
 
     # Pisahkan nama fasilitas dari alamat proyek serta buang segmen kontak.
@@ -128,11 +84,12 @@ def extract_general_info(
     address_start = re.search(
         r"(?<![A-Za-z])(?:jl\.?|jln\.?|jalan|gg\.?|gang|kompleks|komplek|"
         r"kawasan|dusun|desa|kelurahan|kampung|kp\.?|lorong|lr\.?)\s+",
-        raw_project, flags=re.I,
+        raw_project,
+        flags=re.I,
     )
     if address_start:
-        facility = raw_project[:address_start.start()].strip(" ,;:-")
-        address = raw_project[address_start.start():].strip(" ,;:-")
+        facility = raw_project[: address_start.start()].strip(" ,;:-")
+        address = raw_project[address_start.start() :].strip(" ,;:-")
     elif "," in raw_project:
         facility, address = (part.strip(" ,;:-") for part in raw_project.split(",", 1))
     else:
@@ -148,7 +105,7 @@ def extract_general_info(
     )
     m = contact_label.search(address)
     if m:
-        address = address[:m.start()]
+        address = address[: m.start()]
     # Buang pemisah tersisa dari akhir alamat, jangan potong angka kode pos.
     address = re.sub(r"[\s,;:/-]+$", "", address).strip()
 

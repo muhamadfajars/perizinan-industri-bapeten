@@ -1,0 +1,73 @@
+.form-review-badge {
+  display: inline-block;
+  border-radius: 20px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 340px;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+[tabindex='0']:focus-visible {
+  outline: 3px solid #529988;
+  outline-offset: 3px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+.form-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  color: #68768e;
+  font-size: 12px;
+}

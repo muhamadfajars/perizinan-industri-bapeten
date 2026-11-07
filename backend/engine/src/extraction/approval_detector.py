@@ -114,10 +114,7 @@ def get_search_region(image):
 
     y_start = int(height * 0.50)
 
-    search_region = image[
-        y_start:height,
-        0:width
-    ].copy()
+    search_region = image[y_start:height, 0:width].copy()
 
     offset = {
         "x": 0,
@@ -202,13 +199,15 @@ def find_signature_candidates(search_region):
         if aspect_ratio < 1.0 or aspect_ratio > 10.0:
             continue
 
-        candidates.append({
-            "x": x,
-            "y": y,
-            "w": w,
-            "h": h,
-            "area": round(float(area), 2),
-        })
+        candidates.append(
+            {
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "area": round(float(area), 2),
+            }
+        )
 
     return candidates
 
@@ -257,14 +256,16 @@ def find_stamp_candidates(search_region):
             if (w * h) > region_area * 0.04:
                 continue
 
-            candidates.append({
-                "x": int(x - radius),
-                "y": int(y - radius),
-                "w": int(w),
-                "h": int(h),
-                "radius": int(radius),
-                "area": float(np.pi * (radius ** 2)),
-            })
+            candidates.append(
+                {
+                    "x": int(x - radius),
+                    "y": int(y - radius),
+                    "w": int(w),
+                    "h": int(h),
+                    "radius": int(radius),
+                    "area": float(np.pi * (radius**2)),
+                }
+            )
 
     return candidates
 
@@ -310,9 +311,7 @@ def select_primary_cluster(signature_candidates, stamp_candidates, search_region
         score = score_signature_candidate(signature, search_region.shape)
 
         near_stamps = [
-            stamp
-            for stamp in stamp_candidates
-            if boxes_are_near(signature, stamp, max_distance)
+            stamp for stamp in stamp_candidates if boxes_are_near(signature, stamp, max_distance)
         ]
 
         if near_stamps:
@@ -419,10 +418,7 @@ def make_focused_crop(search_region, combined_box):
     w = expanded["w"]
     h = expanded["h"]
 
-    crop = search_region[
-        y:y + h,
-        x:x + w
-    ].copy()
+    crop = search_region[y : y + h, x : x + w].copy()
 
     return crop, expanded
 
@@ -438,10 +434,7 @@ def fallback_context_crop(search_region):
     x2 = int(width * 0.98)
     y2 = int(height * 0.78)
 
-    crop = search_region[
-        y1:y2,
-        x1:x2
-    ].copy()
+    crop = search_region[y1:y2, x1:x2].copy()
 
     box = {
         "x": x1,
@@ -514,20 +507,41 @@ def approval_page_preview(page, max_width=1000):
 
     Visual previews are for human inspection only and are not authenticity proof.
     """
-    image=page.get('image')
-    if image is None:return None
-    height,width=image.shape[:2]
-    if width>max_width:
-        image=cv2.resize(image,(max_width,max(1,round(height*max_width/width))),interpolation=cv2.INTER_AREA)
+    image = page.get("image")
+    if image is None:
+        return None
+    height, width = image.shape[:2]
+    if width > max_width:
+        image = cv2.resize(
+            image,
+            (max_width, max(1, round(height * max_width / width))),
+            interpolation=cv2.INTER_AREA,
+        )
     return image
+
 
 def _signing_context(page_text):
     """Signing authority near a signature; a generic QR is NOT such evidence."""
-    value=str(page_text or '')
-    explicit=bool(re.search(r'(?i)(?:tanda\s+tangan|\bttd\b|disetujui\s+oleh|approved\s+by|ditandatangani|mengetahui\s*[:,]|disahkan\s+oleh|pengesahan\s*[:])',value))
-    signer=bool(re.search(r'(?i)\b(?:direktur\s*[:,]|kepala\s+(?:rumah\s+sakit|dinas|klinik)|a\.?n\.?\s+(?:direktur|kepala)|ketua\s+tim|penanggung\s+jawab|pengesahan\s*:|pejabat\s+penandatangan)',value))
-    electronic=bool(re.search(r'(?i)(?:ditandatangani\s+secara\s+elektronik|tanda\s+tangan\s+elektronik|ttd\s+elektronik|tt\s+elektronik|electronically\s+signed|digital\s+signature|sertifikat\s+elektronik\s+(?:bsre|bssn))',value))
-    return explicit,signer,electronic
+    value = str(page_text or "")
+    explicit = bool(
+        re.search(
+            r"(?i)(?:tanda\s+tangan|\bttd\b|disetujui\s+oleh|approved\s+by|ditandatangani|mengetahui\s*[:,]|disahkan\s+oleh|pengesahan\s*[:])",
+            value,
+        )
+    )
+    signer = bool(
+        re.search(
+            r"(?i)\b(?:direktur\s*[:,]|kepala\s+(?:rumah\s+sakit|dinas|klinik)|a\.?n\.?\s+(?:direktur|kepala)|ketua\s+tim|penanggung\s+jawab|pengesahan\s*:|pejabat\s+penandatangan)",
+            value,
+        )
+    )
+    electronic = bool(
+        re.search(
+            r"(?i)(?:ditandatangani\s+secara\s+elektronik|tanda\s+tangan\s+elektronik|ttd\s+elektronik|tt\s+elektronik|electronically\s+signed|digital\s+signature|sertifikat\s+elektronik\s+(?:bsre|bssn))",
+            value,
+        )
+    )
+    return explicit, signer, electronic
 
 
 def detect_approval(pages, text):
@@ -537,80 +551,89 @@ def detect_approval(pages, text):
     neither alone ever establishes approval. Image signatures are heuristic,
     always display the complete selected source page for evaluator inspection.
     """
-    qr_results=[]
-    barcode_results=[]
-    visual_results=[]
-    preview_candidates=[]
-    all_pages=[]
-    for index,page in enumerate(pages or []):
-        image=page.get('image')
-        lines=[str(row.get('text') or '') for row in (page.get('ocr') or [])]
-        page_text=(str(page.get('native_text') or '')+'\n'+'\n'.join(lines)).strip()
-        exp,signer,electronic=_signing_context(page_text)
+    qr_results = []
+    barcode_results = []
+    visual_results = []
+    preview_candidates = []
+    all_pages = []
+    for index, page in enumerate(pages or []):
+        image = page.get("image")
+        lines = [str(row.get("text") or "") for row in (page.get("ocr") or [])]
+        page_text = (str(page.get("native_text") or "") + "\n" + "\n".join(lines)).strip()
+        exp, signer, electronic = _signing_context(page_text)
         if image is not None:
-            qr=detect_qr_code(image)
-            barcode=detect_barcode(image)
-            visual=analyze_visual_approval(image)
+            qr = detect_qr_code(image)
+            barcode = detect_barcode(image)
+            visual = analyze_visual_approval(image)
         else:
-            qr={'detected':False,'data':None}
-            barcode={'detected':False,'values':[]}
-            visual={'detected':False,'signature':{},'stamp':{}}
-        if qr.get('detected'):qr_results.append({'page':page.get('page'),**qr})
-        if barcode.get('detected'):barcode_results.append({'page':page.get('page'),**barcode})
-        if visual.get('detected'):visual_results.append({'page':page.get('page'),**visual})
-        all_pages.append((page,exp,signer,electronic,bool(visual.get('detected'))))
+            qr = {"detected": False, "data": None}
+            barcode = {"detected": False, "values": []}
+            visual = {"detected": False, "signature": {}, "stamp": {}}
+        if qr.get("detected"):
+            qr_results.append({"page": page.get("page"), **qr})
+        if barcode.get("detected"):
+            barcode_results.append({"page": page.get("page"), **barcode})
+        if visual.get("detected"):
+            visual_results.append({"page": page.get("page"), **visual})
+        all_pages.append((page, exp, signer, electronic, bool(visual.get("detected"))))
 
-    full_text=str(text or '')
-    explicit,signer,electronic=_signing_context(full_text)
+    full_text = str(text or "")
+    explicit, signer, electronic = _signing_context(full_text)
     # DOCX native fallback: the signature image is an embedded-media pseudo
     # page, separated from the paragraph containing 'Direktur'. Require the
     # entire source to have signer context AND real visual evidence.
-    found_electronic=any(row[3] for row in all_pages) or electronic
-    has_signer=any(row[2] for row in all_pages) or signer
-    strong_visual=[]
-    for index,(page,exp,signed,esig,visual_hit) in enumerate(all_pages):
-        if page.get('image') is None:continue
-        is_docx_image=page.get('source_type')=='docx-image'
-        context=exp or signed
+    found_electronic = any(row[3] for row in all_pages) or electronic
+    has_signer = any(row[2] for row in all_pages) or signer
+    strong_visual = []
+    for index, (page, exp, signed, esig, visual_hit) in enumerate(all_pages):
+        if page.get("image") is None:
+            continue
+        is_docx_image = page.get("source_type") == "docx-image"
+        context = exp or signed
         if (visual_hit and context) or esig or (is_docx_image and visual_hit and has_signer):
             # Do not prefer a QR-only appendix to an actual signing page.
-            rank=(100 if esig else 50 if exp and visual_hit else 35 if signed and visual_hit else 22)
+            rank = (
+                100 if esig else 50 if exp and visual_hit else 35 if signed and visual_hit else 22
+            )
             # Later pages are usually the signature page when scores tie.
-            preview_candidates.append((rank,index,page))
+            preview_candidates.append((rank, index, page))
         if visual_hit and (context or (is_docx_image and has_signer)):
             strong_visual.append(page)
     if found_electronic and not preview_candidates:
         # Text statements without attached page context can be used, but
         # choose the relevant source page if available rather than first QR.
-        for idx,(page,exp,signed,esig,_) in enumerate(all_pages):
-            if page.get('image') is not None and (exp or signed or esig):
-                preview_candidates.append((30 if esig else 12,idx,page))
+        for idx, (page, exp, signed, esig, _) in enumerate(all_pages):
+            if page.get("image") is not None and (exp or signed or esig):
+                preview_candidates.append((30 if esig else 12, idx, page))
     # Text-only claims may be forged / quoted in a regulation, so explicit
     # electronic context additionally needs a responsible signer reference.
-    detected=bool(strong_visual) or bool(found_electronic and has_signer)
-    preview_candidates.sort(key=lambda item:(item[0],item[1]),reverse=True)
-    selected=preview_candidates[0][2] if preview_candidates else None
+    detected = bool(strong_visual) or bool(found_electronic and has_signer)
+    preview_candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    selected = preview_candidates[0][2] if preview_candidates else None
     # If not enough evidence for a MATCH, still let the evaluator inspect
     # the most likely signature-context page (not a random barcode page).
     if selected is None:
-        for idx,(page,exp,signed,esig,vis) in reversed(list(enumerate(all_pages))):
-            if page.get('image') is not None and (exp or signed):
-                selected=page;break
+        for idx, (page, exp, signed, esig, vis) in reversed(list(enumerate(all_pages))):
+            if page.get("image") is not None and (exp or signed):
+                selected = page
+                break
     if selected is None and found_electronic and has_signer:
         # Native Word/pdf text may survive even when per-page extraction is
         # empty; keep a human-auditable page, never choose it based on barcode.
-        selected=next((p for p in reversed(pages or []) if p.get('image') is not None),None)
-    preview=approval_page_preview(selected) if selected is not None else None
+        selected = next((p for p in reversed(pages or []) if p.get("image") is not None), None)
+    preview = approval_page_preview(selected) if selected is not None else None
     return {
-        'status':'DETECTED' if detected else 'REVIEW',
-        'page_preview':preview,
-        'page_preview_number':selected.get('page') if selected is not None else None,
-        'evidence_count':int(bool(strong_visual))+int(bool(found_electronic and has_signer)),
-        'qr_codes':qr_results,
-        'barcodes':barcode_results,
-        'visual_evidence':visual_results,
-        'text_evidence':detect_approval_text(full_text),
-        'note':('Indikasi pengesahan pada halaman sumber; pemeriksaan keaslian '
-                'tanda tangan atau stempel tetap dilakukan evaluator. '
-                'QR/barcode sendiri tidak dihitung sebagai pengesahan.'),
+        "status": "DETECTED" if detected else "REVIEW",
+        "page_preview": preview,
+        "page_preview_number": selected.get("page") if selected is not None else None,
+        "evidence_count": int(bool(strong_visual)) + int(bool(found_electronic and has_signer)),
+        "qr_codes": qr_results,
+        "barcodes": barcode_results,
+        "visual_evidence": visual_results,
+        "text_evidence": detect_approval_text(full_text),
+        "note": (
+            "Indikasi pengesahan pada halaman sumber; pemeriksaan keaslian "
+            "tanda tangan atau stempel tetap dilakukan evaluator. "
+            "QR/barcode sendiri tidak dihitung sebagai pengesahan."
+        ),
     }

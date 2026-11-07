@@ -1,14 +1,41 @@
-# BAPETEN AI Evaluator — React Frontend v0.2
+# Frontend BAPETEN Industri
 
-Five separate pages controlled by the left sidebar, no infinite scrolling: Dashboard, Upload Dokumen, Formulir Permohonan, Hasil Matching and Dokumen.
+Lima halaman: Dashboard, Upload Dokumen, Formulir Permohonan, Hasil Matching,
+dan Dokumen. Backend menyimpan unggahan dan hasil; frontend memantau status
+analisis dan menampilkan bukti halaman.
 
-**Start:** Node.js 20.19+ / 22.12+, `npm install && npm run dev`.
-The local dev proxy routes `/api` to FastAPI on `http://127.0.0.1:8000` (see root `../README.md` for SSH forwarding and backend setup).
+## Pengembangan
 
-Workflow: select category, attach files; one PDF Formulir Permohonan and >=1 supporting document are required. Click **Mulai Analisis** on Upload. Enter the backend token in the top bar if required. The app uploads pending documents, creates job, polls progress, and renders only returned backend result. It shows per-document extraction errors and warnings. No demo data is shipped as analysis results.
+Gunakan Node.js 24, lalu jalankan:
 
-Selected files live in browser memory until uploaded; server-saved metadata is restored with the current application ID after token reentry. Application ID is in sessionStorage, token only in memory. An ordinary refresh does not persist unsubmitted files. To start a new application use Dashboard > Permohonan Baru.
+```bash
+npm install
+npm run dev
+```
 
-React source syntax was checked offline; npm registry could not be accessed in the current environment, so npm build and browser E2E must be checked on a machine with package access.
+Lihat `vite.config.ts` untuk tujuan proxy API. Produksi menggunakan
+`npm run build`; FastAPI dapat menyajikan hasil di `dist/`.
 
-Before external exposure: implement institutional SSO, per-user access rights, PDF audit trails and retention. Current API token should only be used within an internal controlled network.
+## Struktur
+
+- `src/pages/`: tampilan setiap halaman.
+- `src/components/`: navigasi, dialog, tabel, pratinjau, dan bukti.
+- `src/hooks/useEvaluationWorkspace.tsx`: sesi, pemulihan, dan pengelolaan analisis.
+- `src/hooks/useUploadIntake.ts`: validasi berkas serta klasifikasi unggahan.
+- `src/lib/`: utilitas dan logika yang dapat diuji terpisah.
+- `src/styles/theme.css`: pengaturan warna; urutan stylesheet di `styles/index.css`.
+- `src/types/`: kontrak model data.
+- `src/api.ts`: komunikasi dengan backend.
+
+## Pemeriksaan
+
+```bash
+npm test
+npm run test:static
+npm run build
+npm run format:check
+```
+
+ID permohonan disimpan di sessionStorage. Berkas yang belum diunggah tidak
+bertahan setelah refresh. Token dapat dibaca dari URL atau localStorage
+sesuai integrasi klien yang sudah ada.

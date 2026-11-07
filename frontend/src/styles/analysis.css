@@ -1,0 +1,273 @@
+.page-section[hidden] {
+  display: none !important;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.token-entry {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #6b778a;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.token-entry input {
+  width: 145px;
+  max-width: 24vw;
+  border: 1px solid #d7dee9;
+  background: #fff;
+  border-radius: 7px;
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+.token-badge-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.analysis-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 18px;
+  background: linear-gradient(105deg, #f7fafe, #fff);
+  border: 1px solid #d7e1ef;
+  border-radius: 12px;
+  margin: 17px 0 2px;
+}
+
+.analysis-action-bar strong,
+.analysis-action-bar small {
+  display: block;
+}
+
+.analysis-action-bar strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.analysis-action-bar small {
+  color: #637da2;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.analysis-readiness {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent);
+}
+
+.analysis-readiness > svg {
+  flex: none;
+}
+
+.analysis-blocked {
+  background: #fffbeb;
+  border-color: #f1dbad;
+}
+
+.analysis-blocked .analysis-readiness,
+.analysis-blocked strong {
+  color: #92400e;
+}
+
+.analysis-action-bar .button:disabled {
+  background: #b0b6c1;
+  color: #fff;
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+@media (max-width: 720px) {
+  .dropzone-compact {
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .dropzone-compact .dropzone-copy {
+    min-width: 0;
+    flex-basis: calc(100% - 80px);
+  }
+
+  .dropzone-compact .dropzone-actions {
+    width: 100%;
+    flex-direction: row;
+  }
+
+  .dropzone-compact .dropzone-actions .button {
+    flex: 1;
+  }
+}
+
+.analysis-progress,
+.analysis-errors,
+.analysis-error,
+.analysis-empty {
+  padding: 22px;
+  border-radius: 12px;
+  margin: 13px 0 20px;
+  background: #fbf7f7;
+  border: 1px solid #f0e5e5;
+}
+
+.analysis-progress strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.analysis-progress small {
+  font-size: 12px;
+  color: #63748a;
+}
+
+.analysis-progress-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--accent);
+  margin-bottom: 20px;
+}
+
+.analysis-progress-heading > svg {
+  flex: none;
+}
+
+.analysis-progress-heading strong {
+  font-size: 18px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.analysis-progress p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #68768e;
+}
+
+.analysis-progress .progress-track {
+  width: 100%;
+  max-width: none;
+  height: 8px;
+  margin-bottom: 8px;
+}
+
+.analysis-progress .progress-track > span {
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.analysis-progress .analysis-progress-hint {
+  margin-top: 18px;
+  font-size: 12px;
+}
+
+.progress-indeterminate > span {
+  width: 30%;
+  animation: analysis-progress-slide 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes analysis-progress-slide {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(233%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-spinner,
+  .progress-indeterminate > span {
+    animation: none;
+  }
+
+  .analysis-progress .progress-track > span {
+    transition: none;
+  }
+}
+
+.analysis-error > svg {
+  flex: none;
+  align-self: flex-start;
+}
+
+.analysis-error p {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin: 8px 0 16px;
+}
+
+.analysis-error,
+.analysis-errors {
+  color: #a73c46;
+}
+
+.analysis-error {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.analysis-errors p {
+  font-size: 12px;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.analysis-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  gap: 12px;
+  color: #6f7c91;
+}
+
+.analysis-empty p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.analysis-empty strong {
+  color: #34435a;
+}
+
+@media (max-width: 850px) {
+  .analysis-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .token-entry input {
+    width: 100px;
+  }
+
+  .hero-actions {
+    flex-wrap: wrap;
+  }
+}

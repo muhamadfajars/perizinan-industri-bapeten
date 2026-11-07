@@ -3,6 +3,7 @@
 Uses synthetic in-memory PDFs for regression testing without
 requiring proprietary hospital documents.
 """
+
 from __future__ import annotations
 
 import os
@@ -34,7 +35,9 @@ def _make_synthetic_form_pdf() -> bytes:
     return doc.tobytes()
 
 
-def _make_synthetic_support_pdf(title: str = "LAPORAN PERAWATAN DAN UJI KESESUAIAN") -> bytes:
+def _make_synthetic_support_pdf(
+    title: str = "LAPORAN PERAWATAN DAN UJI KESESUAIAN",
+) -> bytes:
     doc = pymupdf.open()
     page = doc.new_page()
     text = (
@@ -56,6 +59,7 @@ class TestBapetenApi(unittest.TestCase):
         os.environ["BAPETEN_DATA_DIR"] = cls.temp_dir
 
         import sys
+
         backend_dir = Path(__file__).resolve().parents[1]
         if str(backend_dir) not in sys.path:
             sys.path.insert(0, str(backend_dir))
@@ -81,84 +85,139 @@ class TestBapetenApi(unittest.TestCase):
         shutil.rmtree(cls.temp_dir, ignore_errors=True)
 
     def test_category_correction_persists_and_invalidates_results(self):
-        aid = self.client.post('/api/v1/applications', headers=self.headers).json()['application_id']
-        base = f'/api/v1/applications/{aid}'
-        uploaded = self.client.post(base + '/documents', headers=self.headers,
-            data={'category': 'teknis'},
-            files={'file': ('scan.pdf', _make_synthetic_support_pdf(), 'application/pdf')})
+        aid = self.client.post("/api/v1/applications", headers=self.headers).json()[
+            "application_id"
+        ]
+        base = f"/api/v1/applications/{aid}"
+        uploaded = self.client.post(
+            base + "/documents",
+            headers=self.headers,
+            data={"category": "teknis"},
+            files={"file": ("scan.pdf", _make_synthetic_support_pdf(), "application/pdf")},
+        )
         self.assertEqual(uploaded.status_code, 200)
-        document = uploaded.json()['document']
-        url = base + '/documents/' + document['id']
+        document = uploaded.json()["document"]
+        url = base + "/documents/" + document["id"]
         jid = self.storage.create_job(aid)
-        self.storage.update_job(jid, status='completed', result={'old_category': 'teknis'})
-        response = self.client.patch(url, headers=self.headers,
-            json={'category': 'personel', 'subtype': 'Surat Perintah'})
+        self.storage.update_job(jid, status="completed", result={"old_category": "teknis"})
+        response = self.client.patch(
+            url,
+            headers=self.headers,
+            json={"category": "personel", "subtype": "Surat Perintah"},
+        )
         self.assertEqual(response.status_code, 200, response.text)
-        corrected = response.json()['document']
-        self.assertEqual(corrected['category'], 'personel')
-        self.assertEqual(corrected['subtype'], 'Surat Perintah')
-        self.assertEqual(corrected['sha256'], document['sha256'])
-        persisted = self.client.get(base + '/documents', headers=self.headers).json()['documents'][0]
+        corrected = response.json()["document"]
+        self.assertEqual(corrected["category"], "personel")
+        self.assertEqual(corrected["subtype"], "Surat Perintah")
+        self.assertEqual(corrected["sha256"], document["sha256"])
+        persisted = self.client.get(base + "/documents", headers=self.headers).json()["documents"][
+            0
+        ]
         self.assertEqual(persisted, corrected)
-        self.assertEqual(self.client.get(base + '/results', headers=self.headers).status_code, 404)
-        response = self.client.patch(url, headers=self.headers, json={'category': 'perawatan'})
-        self.assertIsNone(response.json()['document']['subtype'])
+        self.assertEqual(self.client.get(base + "/results", headers=self.headers).status_code, 404)
+        response = self.client.patch(url, headers=self.headers, json={"category": "perawatan"})
+        self.assertIsNone(response.json()["document"]["subtype"])
 
     def test_category_correction_validation_and_active_analysis(self):
-        aid = self.client.post('/api/v1/applications', headers=self.headers).json()['application_id']
-        base = f'/api/v1/applications/{aid}'
-        uploaded = self.client.post(base + '/documents', headers=self.headers,
-            data={'category': 'label'}, files={'file': ('label.png', b'image', 'image/png')})
+        aid = self.client.post("/api/v1/applications", headers=self.headers).json()[
+            "application_id"
+        ]
+        base = f"/api/v1/applications/{aid}"
+        uploaded = self.client.post(
+            base + "/documents",
+            headers=self.headers,
+            data={"category": "label"},
+            files={"file": ("label.png", b"image", "image/png")},
+        )
         self.assertEqual(uploaded.status_code, 200)
-        did = uploaded.json()['document']['id']
-        url = base + '/documents/' + did
-        for payload, status in [({'category': 'unknown'}, 422),
-                                ({'category': 'personel', 'subtype': ' '}, 422),
-                                ({'category': 'formulir'}, 415)]:
-            self.assertEqual(self.client.patch(url, headers=self.headers, json=payload).status_code, status)
-        other = self.client.post('/api/v1/applications', headers=self.headers).json()['application_id']
-        self.assertEqual(self.client.patch(f'/api/v1/applications/{other}/documents/{did}',
-            headers=self.headers, json={'category': 'teknis'}).status_code, 404)
+        did = uploaded.json()["document"]["id"]
+        url = base + "/documents/" + did
+        for payload, status in [
+            ({"category": "unknown"}, 422),
+            ({"category": "personel", "subtype": " "}, 422),
+            ({"category": "formulir"}, 415),
+        ]:
+            self.assertEqual(
+                self.client.patch(url, headers=self.headers, json=payload).status_code,
+                status,
+            )
+        other = self.client.post("/api/v1/applications", headers=self.headers).json()[
+            "application_id"
+        ]
+        self.assertEqual(
+            self.client.patch(
+                f"/api/v1/applications/{other}/documents/{did}",
+                headers=self.headers,
+                json={"category": "teknis"},
+            ).status_code,
+            404,
+        )
         jid = self.storage.create_job(aid)
         try:
-            for status in ('queued', 'running'):
+            for status in ("queued", "running"):
                 self.storage.update_job(jid, status=status)
-                self.assertEqual(self.client.patch(url, headers=self.headers,
-                    json={'category': 'teknis'}).status_code, 409)
-                self.assertEqual(self.storage.document(did, aid)['category'], 'label')
+                self.assertEqual(
+                    self.client.patch(
+                        url, headers=self.headers, json={"category": "teknis"}
+                    ).status_code,
+                    409,
+                )
+                self.assertEqual(self.storage.document(did, aid)["category"], "label")
         finally:
-            self.storage.update_job(jid, status='failed')
+            self.storage.update_job(jid, status="failed")
 
     def test_analysis_recovery_endpoints(self):
-        aid = self.client.post('/api/v1/applications', headers=self.headers).json()['application_id']
-        other = self.client.post('/api/v1/applications', headers=self.headers).json()['application_id']
-        base = f'/api/v1/applications/{aid}'
-        self.assertIsNone(self.client.get(base + '/jobs/latest', headers=self.headers).json()['job'])
+        aid = self.client.post("/api/v1/applications", headers=self.headers).json()[
+            "application_id"
+        ]
+        other = self.client.post("/api/v1/applications", headers=self.headers).json()[
+            "application_id"
+        ]
+        base = f"/api/v1/applications/{aid}"
+        self.assertIsNone(
+            self.client.get(base + "/jobs/latest", headers=self.headers).json()["job"]
+        )
         old_id = self.storage.create_job(aid)
-        self.storage.update_job(old_id, status='completed', result={'job_id': old_id})
+        self.storage.update_job(old_id, status="completed", result={"job_id": old_id})
         jid = self.storage.create_job(aid)
-        for status, progress in [('queued', 0), ('running', 47), ('completed', 100)]:
-            self.storage.update_job(jid, status=status, progress=progress,
-                result={'job_id': jid, 'application_id': aid})
-            latest = self.client.get(base + '/jobs/latest', headers=self.headers)
+        for status, progress in [("queued", 0), ("running", 47), ("completed", 100)]:
+            self.storage.update_job(
+                jid,
+                status=status,
+                progress=progress,
+                result={"job_id": jid, "application_id": aid},
+            )
+            latest = self.client.get(base + "/jobs/latest", headers=self.headers)
             self.assertEqual(latest.status_code, 200)
-            self.assertEqual(latest.json()['job']['id'], jid)
-            self.assertEqual(latest.json()['job']['status'], status)
-            self.assertEqual(latest.json()['job']['progress'], progress)
-            result = self.client.get(base + f'/jobs/{jid}/results', headers=self.headers)
-            self.assertEqual(result.status_code, 200 if status == 'completed' else 404)
-            if status == 'completed':
-                self.assertEqual(result.json()['job_id'], jid)
-        self.assertEqual(self.client.get(f'/api/v1/applications/{other}/jobs/{jid}/results',
-            headers=self.headers).status_code, 404)
-        self.assertIsNone(self.client.get(f'/api/v1/applications/{other}/jobs/latest',
-            headers=self.headers).json()['job'])
+            self.assertEqual(latest.json()["job"]["id"], jid)
+            self.assertEqual(latest.json()["job"]["status"], status)
+            self.assertEqual(latest.json()["job"]["progress"], progress)
+            result = self.client.get(base + f"/jobs/{jid}/results", headers=self.headers)
+            self.assertEqual(result.status_code, 200 if status == "completed" else 404)
+            if status == "completed":
+                self.assertEqual(result.json()["job_id"], jid)
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/applications/{other}/jobs/{jid}/results", headers=self.headers
+            ).status_code,
+            404,
+        )
+        self.assertIsNone(
+            self.client.get(
+                f"/api/v1/applications/{other}/jobs/latest", headers=self.headers
+            ).json()["job"]
+        )
         self.storage.update_job(jid, result=None)
-        self.assertEqual(self.client.get(base + f'/jobs/{jid}/results', headers=self.headers).status_code, 404)
-        self.storage.update_job(jid, status='failed', error='Server terhenti sebelum analisis selesai')
-        latest = self.client.get(base + '/jobs/latest', headers=self.headers).json()['job']
-        self.assertEqual(latest['status'], 'failed')
-        self.assertIn('Server terhenti', latest['error'])
+        self.assertEqual(
+            self.client.get(base + f"/jobs/{jid}/results", headers=self.headers).status_code,
+            404,
+        )
+        self.storage.update_job(
+            jid, status="failed", error="Server terhenti sebelum analisis selesai"
+        )
+        latest = self.client.get(base + "/jobs/latest", headers=self.headers).json()["job"]
+        self.assertEqual(latest["status"], "failed")
+        self.assertIn("Server terhenti", latest["error"])
 
     def test_01_health(self):
         res = self.client.get("/api/v1/health")
@@ -241,9 +300,7 @@ class TestBapetenApi(unittest.TestCase):
         maint_doc = res_maint.json().get("document")
 
         # List documents
-        res_list = self.client.get(
-            f"/api/v1/applications/{aid}/documents", headers=self.headers
-        )
+        res_list = self.client.get(f"/api/v1/applications/{aid}/documents", headers=self.headers)
         self.assertEqual(res_list.status_code, 200)
         docs = res_list.json().get("documents", [])
         self.assertEqual(len(docs), 2)
@@ -280,18 +337,14 @@ class TestBapetenApi(unittest.TestCase):
         self.assertTrue(res_del.json().get("deleted"))
 
         # Verify only 1 document remains
-        res_list2 = self.client.get(
-            f"/api/v1/applications/{aid}/documents", headers=self.headers
-        )
+        res_list2 = self.client.get(f"/api/v1/applications/{aid}/documents", headers=self.headers)
         self.assertEqual(len(res_list2.json().get("documents", [])), 1)
 
     def test_06_analysis_validation_requires_single_form(self):
         aid = self._create_app()
 
         # No documents at all -> should reject with 422
-        res = self.client.post(
-            f"/api/v1/applications/{aid}/analyses", headers=self.headers
-        )
+        res = self.client.post(f"/api/v1/applications/{aid}/analyses", headers=self.headers)
         self.assertEqual(res.status_code, 422)
         self.assertIn("Formulir", res.json().get("detail", ""))
 
@@ -317,9 +370,7 @@ class TestBapetenApi(unittest.TestCase):
         )
 
         # Start analysis
-        res_an = self.client.post(
-            f"/api/v1/applications/{aid}/analyses", headers=self.headers
-        )
+        res_an = self.client.post(f"/api/v1/applications/{aid}/analyses", headers=self.headers)
         self.assertEqual(res_an.status_code, 200)
         jid = res_an.json().get("job_id")
         self.assertTrue(jid)
@@ -340,14 +391,15 @@ class TestBapetenApi(unittest.TestCase):
         self.assertTrue(completed, "Analysis did not complete within timeout")
 
         # Fetch results
-        res_res = self.client.get(
-            f"/api/v1/applications/{aid}/results", headers=self.headers
-        )
+        res_res = self.client.get(f"/api/v1/applications/{aid}/results", headers=self.headers)
         self.assertEqual(res_res.status_code, 200)
         result_data = res_res.json()
         self.assertIn("matching_sections", result_data)
         self.assertIn("form_reference", result_data)
         self.assertEqual(result_data.get("analyzed_documents"), 1)
+        self.assertEqual(result_data.get("errors"), [])
+        self.assertTrue(result_data["matching_sections"])
+        self.assertTrue(result_data["matching_sections"][0]["rows"])
 
     def test_08_recover_stale_jobs(self):
         aid = self._create_app()

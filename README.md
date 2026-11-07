@@ -1,158 +1,136 @@
-# BAPETEN AI Evaluator — Frontend + FastAPI v0.2
+# BAPETEN Industri — Asisten Evaluasi Dokumen
 
-This is a **working local/intranet integration candidate**, not a certified 100%-production-ready system. It contains a React TypeScript interface and a backend executing the original v46 BAPETEN extraction/matching modules. It is not a replacement for regulatory review.
+Aplikasi React/TypeScript dan FastAPI untuk mengunggah dokumen permohonan,
+membaca PDF/OCR, membandingkan data dengan formulir, dan menampilkan bukti sumber.
+Hasil pencocokan membantu evaluator; keputusan izin tetap dilakukan melalui
+proses penilaian yang berlaku.
 
-## Pages
+Identitas aplikasi sudah Industri. Parser dan aturan domain masih berasal dari
+kebutuhan RDI dan perlu disesuaikan berdasarkan jenis kegiatan industri yang
+akan didukung. Perapihan struktur tidak mengubah aturan domain tersebut.
 
-The left menu switches between five independent pages (other pages are hidden): **Dashboard**, **Upload Dokumen**, **Formulir Permohonan**, **Hasil Matching**, and **Dokumen**. Upload a single PDF application form and supporting files, then click **Mulai Analisis** in Upload. The frontend submits all pending files to the API, polls the job, and displays real backend results, per-document errors, and evidence source pages. No demo matching is displayed as real data.
+## Menjalankan aplikasi
 
-Refreshing an existing application's page restores its latest analysis from the server.
-Queued/running analyses resume progress polling; completed analyses load their own result,
-and failed analyses show their recorded error. Monitoring retries temporary connection errors
-and server failures with a delay capped at 15 seconds, without resubmitting an analysis.
-This restores server-side analyses, not files that have not yet been uploaded.
-
-## Shared classification rules
-
-Edit filename patterns, their order, category/subtype mappings, and weak filename hints only in
-`backend/app/classification_rules.json`. Python reads this file alongside the backend module;
-the frontend imports the same JSON and bundles it for instant browser matching. Keep the JSON
-with the backend when packaging, and include it when building the frontend. After changing
-rules, rebuild the frontend and restart the backend together. Content/OCR rules remain in
-`backend/app/classifier.py` because they run only on the backend.
-
-The consolidation preserves the existing matching logic and regex flags in each runtime.
-`backend/tests/fixtures/classification_filename_baseline.json` records 51 pre-consolidation
-cases, including ambiguous and unknown filenames. Both classifier test suites check those
-results; expected results should change only when a behavior change is intentional.
-
-
-## Single-command HPC launch (port 8001; recommended for internal pilot)
-
-This package additionally contains four root-level executable shell scripts. The frontend is
-built **once** and served by FastAPI at the **same origin**, so **no second Vite process or
-port 5173** is needed on the HPC after build. Your previous Streamlit port 8501 is untouched.
+Gunakan Python >=3.10. Lingkungan pengembangan yang telah diperiksa menggunakan
+Node.js 24 (pengujian TypeScript langsung membutuhkan Node.js >=22.18).
 
 ```bash
-cd ~/bapeten-fullstack-v2
-bash setup_bapeten_fullstack.sh          # once: pip + npm + build + private token
-bash start_bapeten_fullstack.sh          # each start, daemon/background
+bash setup_bapeten_fullstack.sh
+bash start_bapeten_fullstack.sh
 bash status_bapeten_fullstack.sh
-# when needed:
 bash stop_bapeten_fullstack.sh
 ```
 
-The setup needs Python >=3.10, Node.js >=20, npm and access to package dependencies.
-For an existing OCR-enabled Python venv, you can provide an explicit interpreter path:
-`BAPETEN_PYTHON=/absolute/path/to/venv/bin/python bash setup_bapeten_fullstack.sh`
-and use the same `BAPETEN_PYTHON` when starting. Test PaddleOCR/PaddlePaddle and any
-Tesseract models in the selected environment; **pip installing the requirements.txt alone
-does not install/guarantee every OCR model**. If HPC cannot access npm registry, build
-`frontend/dist` on a trusted developer machine and copy that directory onto the HPC,
-then set up Python manually (see old instructions below).
-
-On the user's machine open an SSH tunnel and browse **one** forwarded port:
+Peluncur menyajikan frontend dan API pada satu port, bawaan
+`http://127.0.0.1:8010`. `backend/.env` dapat mengubah port dan konfigurasi.
+Lokasi data bawaan peluncur adalah `~/bapeten-industri-private-data`.
+Akses dari komputer lain menggunakan SSH tunnel:
 
 ```bash
-ssh -L 8001:127.0.0.1:8001 USER@HPC_HOST
+ssh -L 8010:127.0.0.1:8010 USER@HPC_HOST
 ```
 
-Then open `http://localhost:8001`. API and frontend share that port.
-`backend/.env` is generated only if absent; it stores the persistent private access token
-and data folder. Keep permissions at `0600` and never share its content. To view it
-locally on the HPC: `grep '^BAPETEN_API_TOKEN=' backend/.env`. Logs are written to
-`logs/bapeten-fullstack.log`; PID to `run/bapeten-fullstack.pid`. No Streamlit files are
-modified. The launcher is intentionally bound only to `127.0.0.1`; for multi-user
-production deploy use an approved authentication/TLS/reverse-proxy solution.
-
----
-## 1. Install backend on the same HPC where Python OCR works
+Untuk backend saja:
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-# IMPORTANT: keep existing working PaddleOCR, PaddlePaddle, Tesseract, system libraries,
-# and GPU/CPU configuration on the HPC. Install missing OCR engine dependencies there.
-export BAPETEN_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(40))')"
-export BAPETEN_DATA_DIR="$HOME/bapeten-private-data"
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Keep the generated token in a safe place; enter it in the web frontend **API Token** field. The API refuses most requests without a configured token. It binds to loopback by default. SQLite stores metadata and serialized job results; uploaded binary files are saved in a private directory. Never place this directory under a public static/web root. No medical files are included in the source ZIP.
+Konfigurasi `.env` dibaca sebelum layanan penyimpanan diinisialisasi.
+Tanpa `BAPETEN_DATA_DIR`, backend langsung menggunakan `backend/runtime_data`.
 
-For Tesseract scanned documents you need the `tesseract-ocr` executable plus appropriate Indonesian/English language packs. OCR for labels and certain documents additionally requires PaddleOCR/PaddlePaddle and compatible local models already used by the v46 engine. This source package does not bundle proprietary models.
+## Struktur kode
 
-## 2. Install React frontend (Windows / Linux)
-
-Install Node.js >=20, then:
-
-```bash
-cd frontend
-npm install
-npm run dev
+```text
+backend/
+  app/
+    main.py              # Perakitan aplikasi dan middleware
+    config.py            # Konfigurasi lingkungan
+    schemas.py           # Model permintaan HTTP
+    api/                 # Endpoint permohonan, dokumen, klasifikasi, analisis
+    services/jobs.py     # Pelaksanaan pekerjaan latar
+    analysis/            # Koordinasi, handler kategori, format hasil, bukti
+    storage.py           # SQLite dan berkas per permohonan
+    performance.py       # Pool OCR dan cache
+    *_evidence.py        # Kebijakan bukti dan pemeriksaan identitas
+  engine/src/
+    extraction/          # Pembacaan dokumen, OCR, parser
+    matching/            # Pencocokan label, personel, peralatan
+  engine/tests/          # Regresi mesin evaluasi
+  tests/                 # API dan klasifikasi
+  scripts/               # Pemeriksaan dan alat diagnosis
+frontend/src/
+  App.tsx                # Tata letak dan penggabungan halaman
+  pages/                 # Lima halaman aplikasi
+  components/            # Komponen tampilan dan bukti
+  hooks/                 # Sesi evaluasi dan penerimaan berkas
+  styles/                # Tema dan stylesheet menurut bagian tampilan
+  lib/                   # Klasifikasi, pemantauan analisis, utilitas
+  api.ts                 # Klien HTTP
+  types/                 # Model data
+docs/
+  CLEANUP.md             # Catatan perapihan dan hasil pemeriksaan
 ```
 
-Open `http://localhost:5173`. The Vite proxy forwards `/api` to **localhost:8000**. If the Python backend runs on your HPC, open SSH port forwarding in another local terminal:
+Modul dinamai menurut fungsinya. Riwayat perubahan disimpan di Git.
+Nomor versi API, format cache, dan hasil analisis tetap dapat digunakan untuk
+menjaga kompatibilitas data. Import Python di dalam handler/OCR sebagian sengaja
+ditunda agar dependensi berat tidak dimuat saat aplikasi mulai.
 
-```bash
-ssh -L 8000:127.0.0.1:8000 <ssh-user>@<hpc-host>
-```
+## Mengubah warna
 
-Replace placeholders with your real SSH configuration. Enter the backend token in the frontend field after opening the app.
-
-Production build (on a machine that can download npm dependencies):
+Edit `frontend/src/styles/theme.css`. Variabel utama meliputi
+`--accent`, `--accent-light`, `--accent-strong`, `--accent-pale`,
+`--accent-rgb`, dan warna permukaan/border aksen.
+Sidebar serta tombol menggunakan variabel tersebut.
+Warna status evaluasi berada pada stylesheet komponen terkait.
 
 ```bash
 cd frontend
 npm run build
 ```
 
-Deploy `frontend/dist/` as static files through Nginx, proxy `/api/` to `http://127.0.0.1:8001/api/`, enforce TLS, internal-network restriction, RBAC/authentication, logging policy, encryption at rest, resource limits, retention, malware scan, backups, and security review.
+Jika Node.js belum berada di PATH, aktifkan instalasi Node.js Anda terlebih dahulu.
+`styles/index.css` mempertahankan urutan stylesheet; urutan tersebut penting
+untuk aturan responsif dan penimpaan gaya. Metadata warna browser pada
+`frontend/index.html` perlu disesuaikan jika tema diganti.
 
-## 3. Test backend
-
-```bash
-cd backend
-python -m compileall -q app engine/src
-python -m unittest discover -s tests -p 'test_api.py' -v
-```
-
-The test creates a synthetic *form* and uploads a synthetic multi-page maintenance PDF for a fictionalized regression flow. The bundled `tests/test_api.py` generates synthetic form and maintenance PDFs in memory, so it runs without distributing original hospital documents. For fixture-free smoke validation:
+## Pemeriksaan
 
 ```bash
-curl http://127.0.0.1:8001/api/v1/health
+backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
+backend/.venv/bin/python backend/scripts/run_checks.py
+backend/.venv/bin/ruff check backend/app backend/engine/src
+backend/.venv/bin/ruff format --check backend/app backend/engine/src
+
+cd frontend
+npm test
+npm run test:static
+npm run build
 ```
 
-## Implemented backend API
+Runner backend memakai penyimpanan sementara, token pengujian, dan proses
+terpisah untuk setiap modul pengujian OCR. Ia tetap mengembalikan kegagalan
+untuk regresi lama yang belum terselesaikan; lihat `docs/CLEANUP.md`.
+Pengujian dengan dokumen lokal yang tidak tersedia dilewati secara eksplisit.
 
-- `POST /api/v1/applications` — create opaque application ID
-- `GET /api/v1/applications/{id}/documents` — list uploads
-- `POST /api/v1/applications/{id}/documents` — multipart file, category, optional subtype
-- `DELETE /api/v1/applications/{id}/documents/{document_id}` — remove upload
-- `GET /api/v1/applications/{id}/documents/{document_id}/file` — authenticated raw source
-- `POST /api/v1/applications/{id}/analyses` — run analysis in worker thread
-- `GET /api/v1/applications/{id}/jobs/{job_id}` — poll status/progress/failure
-- `GET /api/v1/applications/{id}/results` — latest completed result and per-document failures
+Aturan klasifikasi nama berkas berasal dari
+`backend/app/classification_rules.json`, digunakan bersama oleh Python dan
+frontend. Setelah aturan berubah, bangun ulang frontend dan mulai ulang backend.
 
-All except `/api/v1/health` require `Authorization: Bearer <token>` unless explicitly overridden **for local development only**.
+## Operasional
 
-## Important limits before actual operational deployment
-
-1. **Single-workspace API token**, not full per-evaluator accounts, roles, or document-level authorization. Do not expose on the public internet. Implement institution SSO and audit logs before production.
-2. **Threaded worker**, not durable Redis/RQ/Celery. Jobs can be interrupted by process restarts, and concurrency requires validation on the actual HPC. Run only one Uvicorn worker unless replacing this job model with a durable queue.
-3. **Matching is evidence-first**. An unrecognized document, OCR failure, missing form data or unsupported file type produces an explicit error/REVIEW, never synthetic MATCH. Category-specific robustness is inherited from the baseline v46, including its known limitations.
-4. **No front-end build in current source-creation environment** due unavailable npm registry dependencies. TypeScript/TSX syntax was checked with the global TypeScript compiler, but you must run `npm install`, `npm run build`, and browser E2E tests on a network-connected developer machine.
-5. **Data handling**: Files may contain personal/clinical/regulatory data. Obtain approval for deployment, set quotas, TLS, secure storage, access policy, encryption, file retention, backup, incident monitoring, and penetration testing.
-6. **Persistence and sessions**: The client stores only opaque application ID in `sessionStorage`; entered API token stays in volatile React state. A browser refresh requires entering the token again. The app attempts to restore previous uploaded file metadata and latest **matching-fingerprint-consistent** result after authorization.
-
-## Package layout
-
-- `frontend/`: source-only React + Vite app
-- `backend/app/`: authenticated REST endpoints, SQLite metadata, threaded job orchestration, engine adapter
-- `backend/engine/src/`: original source modules from provided baseline plus v43, v44, and v46 patch modules
-- `backend/tests/`: API integration tests (test fixture path is environment-specific)
-- `deploy/`: minimal internal Nginx template
-
-No Streamlit app is modified. Keep the existing Streamlit instance as a fallback until the HPC acceptance tests pass.
+- Satu worker Uvicorn mengoordinasikan pekerjaan analisis dan pool OCR.
+- Metadata/hasil tersimpan di SQLite; berkas unggahan tersimpan privat.
+- Pekerjaan yang terputus saat restart ditandai gagal, bukan dilanjutkan otomatis.
+- Sesi browser menyimpan ID permohonan di sessionStorage. Berkas yang belum
+  dikirim masih berada dalam memori browser.
+- Klien dapat membaca token dari parameter URL atau localStorage.
+  Endpoint selain health memerlukan token, kecuali mode pengembangan lokal.
+- Pemisahan pemilik permohonan melalui gateway tersedia ketika
+  `BAPETEN_VPN_MULTIUSER=1`; ini bukan sistem SSO lengkap.
+- OCR membutuhkan dependensi sistem/model yang sesuai. Gunakan
+  `backend/scripts/doctor_ocr.py` untuk diagnosis.
+- `frontend/dist`, lingkungan virtual, log, cache, dan data unggahan merupakan
+  hasil build/runtime dan tidak dimasukkan ke Git.

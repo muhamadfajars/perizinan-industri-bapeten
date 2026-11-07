@@ -6,6 +6,8 @@
 *.env
 !.env.example
 !*.env.example
+client_package/bapeten_key
+client_package/bapeten_key.id
 
 # Private storage, data and uploaded hospital documents
 runtime_data/
@@ -42,6 +44,7 @@ __pycache__/
 *$py.class
 *.so
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 

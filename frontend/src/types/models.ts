@@ -1,9 +1,20 @@
 export type MatchStatus = 'MATCH' | 'REVIEW' | 'MISMATCH' | 'MISSING';
 
 export type CategoryId =
-  | 'formulir' | 'proteksi' | 'perawatan' | 'manajemen' | 'teknis'
-  | 'personel' | 'tld' | 'spesifikasi' | 'label' | 'impor'
-  | 'kesesuaian' | 'fungsi' | 'paparan' | 'kebocoran';
+  | 'formulir'
+  | 'proteksi'
+  | 'perawatan'
+  | 'manajemen'
+  | 'teknis'
+  | 'personel'
+  | 'tld'
+  | 'spesifikasi'
+  | 'label'
+  | 'impor'
+  | 'kesesuaian'
+  | 'fungsi'
+  | 'paparan'
+  | 'kebocoran';
 
 export type DocumentCategory = {
   id: CategoryId;
