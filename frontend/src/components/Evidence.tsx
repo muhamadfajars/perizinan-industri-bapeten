@@ -9,6 +9,8 @@ export function InlineSourcePreview({ documentId, page }: { documentId: string; 
   useEffect(() => {
     if (!page || page < 1) return;
     let active = true;
+    setBlobUrl(null);
+    setError('');
     let allocated: string | null = null;
     const application = sessionStorage.getItem('bapeten_application_id');
     if (!application) {
@@ -31,17 +33,11 @@ export function InlineSourcePreview({ documentId, page }: { documentId: string; 
   }, [documentId, page]);
   return (
     <div className="inline-source-preview">
-      {(!page || page < 1) && (
-        <span className="inline-preview-state">Halaman pengesahan belum terdeteksi.</span>
-      )}
-      {page && !blobUrl && !error && <span className="inline-preview-state">Memuat halaman pengesahan…</span>}
+      {(!page || page < 1) && <span className="inline-preview-state">Halaman bukti belum terdeteksi.</span>}
+      {page && !blobUrl && !error && <span className="inline-preview-state">Memuat halaman bukti…</span>}
       {error && <span className="inline-preview-error">{error}</span>}
       {blobUrl && (
-        <img
-          src={blobUrl}
-          alt={`Bukti pengesahan hanya halaman PDF ${page}`}
-          className="inline-evidence-image"
-        />
+        <img src={blobUrl} alt={`Bukti dokumen halaman PDF ${page}`} className="inline-evidence-image" />
       )}
     </div>
   );

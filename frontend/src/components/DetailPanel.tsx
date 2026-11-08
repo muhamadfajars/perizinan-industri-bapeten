@@ -3,6 +3,8 @@ import { matchingSectionTitle } from '../lib/matchingDisplay';
 import type { CategoryId, MatchRow, MatchSection } from '../types/models';
 import { DataPair, ScoreBadge } from './Common';
 import { ApprovalEvidence } from './Evidence';
+import { FieldSourceEvidence } from './FieldSourceEvidence';
+import { protectionFieldLabel } from '../lib/protectionDisplay';
 
 export function DetailPanel({
   selected,
@@ -27,7 +29,7 @@ export function DetailPanel({
             <X size={20} />
           </button>
         </div>
-        <h3>{row.field}</h3>
+        <h3>{protectionFieldLabel(row)}</h3>
         <p className="detail-origin">{matchingSectionTitle(section)}</p>
         <ScoreBadge status={row.status} />
         <div className="detail-divider" />
@@ -37,10 +39,12 @@ export function DetailPanel({
           label="Kemiripan karakter / skor field"
           value={row.score === null ? 'Tidak tersedia' : `${row.score.toFixed(1)}%`}
         />
-        <DataPair
-          label="Halaman bukti"
-          value={row.page ? `Halaman ${row.page}` : 'Tidak dicatat pada hasil pemeriksaan'}
-        />
+        {row.detail?.type !== 'protection' && (
+          <DataPair
+            label="Halaman bukti"
+            value={row.page ? `Halaman ${row.page}` : 'Tidak dicatat pada hasil pemeriksaan'}
+          />
+        )}
         {row.note && (
           <div className="detail-note">
             <Info size={17} />
@@ -51,8 +55,11 @@ export function DetailPanel({
           </div>
         )}
         <div className="detail-divider" />
+        {row.detail?.type === 'protection' && (
+          <FieldSourceEvidence key={row.id} row={row} openDocument={openEvidence} />
+        )}
         {row.document_id && row.detail?.type === 'approval' && <ApprovalEvidence row={row} />}
-        {row.document_id && row.detail?.type !== 'approval' && (
+        {row.document_id && row.detail?.type !== 'approval' && row.detail?.type !== 'protection' && (
           <button
             className="button button-soft button-full"
             type="button"

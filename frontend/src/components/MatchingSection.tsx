@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { categoryById } from '../data/categories';
 import { matchingTotals } from '../lib/matching';
 import { matchingSectionTitle, rowMatchesFilter } from '../lib/matchingDisplay';
@@ -7,6 +7,14 @@ import type { MatchRow, MatchSection } from '../types/models';
 import { Filter } from '../types/workspace';
 import { ApprovalEvidence, MaintenanceEvidence } from './Evidence';
 import Glyph from './Glyph';
+import { ProtectionEvidence } from './ProtectionEvidence';
+import {
+  isAdditionalLocation,
+  isSupportingInformation,
+  personnelGroups,
+  orderProtectionRows,
+  protectionFieldLabel,
+} from '../lib/protectionDisplay';
 
 export function MatchingEvidence({
   section,
@@ -52,8 +60,25 @@ export function MatchingSection({
   expandedByDefault?: boolean;
 }) {
   const [open, setOpen] = useState(expandedByDefault);
-  const stats = useMemo(() => matchingTotals([section]), [section]);
-  const filtered = section.rows.filter((row) => rowMatchesFilter(row, filter, search));
+  const scopedRows = useMemo(() => {
+    const rows = section.rows.filter((row) => !isAdditionalLocation(row));
+    return section.category === 'proteksi' ? orderProtectionRows(rows) : rows;
+  }, [section]);
+  const stats = useMemo(() => matchingTotals([{ ...section, rows: scopedRows }]), [section, scopedRows]);
+  const filtered = scopedRows.filter((row) => rowMatchesFilter(row, filter, search));
+  const isPerson = (row: MatchRow) => row.detail?.type === 'protection' && row.detail.group === 'Petugas';
+  const comparisonRows = filtered.filter(
+    (row) => !isSupportingInformation(row) && row.detail?.group !== 'Catatan pembacaan',
+  );
+  const personLabels = new Map(
+    personnelGroups(scopedRows).flatMap((person, index) =>
+      person.rows.map(
+        (row) => [row.id, `Petugas ${/^\d+$/.test(person.id) ? person.id : index + 1}`] as const,
+      ),
+    ),
+  );
+  const informationRows = filtered.filter(isSupportingInformation);
+  const readingNotes = filtered.filter((row) => row.detail?.group === 'Catatan pembacaan');
   return (
     <div className="matching-section matching-report">
       <button
@@ -69,9 +94,9 @@ export function MatchingSection({
           <span>
             <strong>{matchingSectionTitle(section)}</strong>
             <small>
-              {filtered.length === section.rows.length
+              {filtered.length === scopedRows.length
                 ? `${filtered.length} field`
-                : `${filtered.length} dari ${section.rows.length} field ditampilkan`}
+                : `${filtered.length} dari ${scopedRows.length} field ditampilkan`}
             </small>
           </span>
         </span>
@@ -79,6 +104,7 @@ export function MatchingSection({
           <span className="pill green">{stats.match} Match</span>
           {stats.review > 0 && <span className="pill amber">{stats.review} Review</span>}
           {stats.mismatch > 0 && <span className="pill red">{stats.mismatch} Mismatch</span>}
+          {stats.info > 0 && <span className="pill">{stats.info} Informasi</span>}
         </span>
         <ChevronDown size={19} className={`match-chevron ${open ? 'rotated' : ''}`} />
       </button>
@@ -86,8 +112,8 @@ export function MatchingSection({
         <div className="match-section-content">
           <div className="matching-stats" aria-label="Ringkasan seluruh field dalam kategori">
             <div>
-              <span>Kecocokan terbukti</span>
-              <strong>{stats.percentage.toFixed(1)}%</strong>
+              <span>Kecocokan data acuan ({stats.compared} field)</span>
+              <strong>{stats.compared ? `${stats.percentage.toFixed(1)}%` : '—'}</strong>
             </div>
             <div>
               <span>MATCH</span>
@@ -102,6 +128,7 @@ export function MatchingSection({
               <strong>{stats.mismatch}</strong>
             </div>
           </div>
+          <p className="matching-table-hint">Klik baris untuk melihat detail dan bukti sumber.</p>
           <div
             className="table-scroll matching-table-scroll"
             tabIndex={0}
@@ -119,36 +146,56 @@ export function MatchingSection({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row, i) => (
-                  <tr
-                    key={`${row.id}-${i}`}
-                    className={`matching-row-${row.status.toLowerCase()}`}
-                    onClick={() => onRowClick(row, section)}
-                  >
-                    <td className="field-column">
-                      <button
-                        type="button"
-                        className="field-detail-button"
-                        aria-label={`Lihat detail ${row.field}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onRowClick(row, section);
-                        }}
-                      >
-                        {row.field}
-                      </button>
-                    </td>
-                    <td>{row.expected}</td>
-                    <td className={row.observed === '—' ? 'empty-observed' : ''}>{row.observed}</td>
-                    <td className="score-column">{row.score === null ? '—' : `${row.score.toFixed(1)}%`}</td>
-                    <td>
-                      <span className={`matching-status status-text-${row.status.toLowerCase()}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                  </tr>
+                {comparisonRows.map((row, i) => (
+                  <Fragment key={row.id}>
+                    {isPerson(row) &&
+                      personLabels.get(row.id) !== personLabels.get(comparisonRows[i - 1]?.id) && (
+                        <tr className="matching-group-row">
+                          <th colSpan={5} scope="rowgroup">
+                            {personLabels.get(row.id)}
+                          </th>
+                        </tr>
+                      )}
+                    {!isPerson(row) && i > 0 && isPerson(comparisonRows[i - 1]) && (
+                      <tr className="matching-group-row">
+                        <th colSpan={5} scope="rowgroup">
+                          {row.detail?.group ?? 'Data acuan'}
+                        </th>
+                      </tr>
+                    )}
+                    <tr
+                      className={`matching-row-${row.status.toLowerCase()}`}
+                      onClick={() => onRowClick(row, section)}
+                    >
+                      <td className="field-column">
+                        <button
+                          type="button"
+                          className="field-detail-button"
+                          aria-label={`Lihat detail ${row.field}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onRowClick(row, section);
+                          }}
+                        >
+                          {isPerson(row)
+                            ? (row.detail?.field_label ?? row.field.split(': ').pop())
+                            : protectionFieldLabel(row)}
+                        </button>
+                      </td>
+                      <td>{row.expected}</td>
+                      <td className={row.observed === '—' ? 'empty-observed' : ''}>{row.observed}</td>
+                      <td className="score-column">
+                        {row.score === null ? '—' : `${row.score.toFixed(1)}%`}
+                      </td>
+                      <td>
+                        <span className={`matching-status status-text-${row.status.toLowerCase()}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))}
-                {!filtered.length && (
+                {!comparisonRows.length && (
                   <tr>
                     <td colSpan={5} className="empty-table">
                       Tidak ada field yang sesuai pencarian atau filter.
@@ -159,10 +206,24 @@ export function MatchingSection({
             </table>
           </div>
           <MatchingEvidence section={section} filter={filter} search={search} />
+          {readingNotes.map((row) => (
+            <ProtectionEvidence key={row.id} row={row} />
+          ))}
+          {informationRows.length > 0 && (
+            <section className="protection-information" aria-label="Informasi Program Proteksi">
+              <h3>Informasi Pendukung Program Proteksi</h3>
+              <p>
+                Bahan tinjauan evaluator; tidak memengaruhi skor kecocokan. Buka bukti untuk melihat kutipan
+                dan gambar sumber.
+              </p>
+              {informationRows.map((row) => (
+                <ProtectionEvidence key={row.id} row={row} compact />
+              ))}
+            </section>
+          )}
           <div className="table-footer">
-            <span>Pilih field untuk melihat detail dan sumber dokumen.</span>
             <span>
-              {filtered.length} dari {section.rows.length} field
+              {filtered.length} dari {scopedRows.length} field
             </span>
           </div>
         </div>

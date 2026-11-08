@@ -1,0 +1,87 @@
+.protection-information {
+  margin: 24px 0;
+}
+.protection-information > p,
+.protection-note {
+  color: var(--text-muted, #64748b);
+  font-size: 13px;
+}
+.protection-evidence {
+  border: 1px solid var(--border, #dce3e8);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 12px 0;
+  background: var(--surface, #fff);
+}
+.protection-evidence-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.protection-evidence h4 {
+  margin: 0;
+}
+.protection-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.protection-evidence summary {
+  cursor: pointer;
+  color: var(--accent);
+  padding: 8px 0;
+}
+.protection-source select {
+  padding: 6px;
+  max-width: 100%;
+}
+.protection-source blockquote {
+  margin: 12px 0;
+  border-left: 3px solid var(--accent);
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--accent-pale, #edf6f3);
+}
+.status-info {
+  color: var(--accent);
+}
+
+.matching-table .matching-group-row th {
+  background: var(--accent-pale, #edf6f3);
+  color: var(--accent);
+  padding: 10px 14px;
+  text-align: left;
+}
+.protection-evidence-compact {
+  padding: 12px 16px;
+  margin: 8px 0;
+}
+.protection-evidence-compact summary {
+  padding: 4px 0;
+}
+.protection-page-label {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+}
+.evidence-found {
+  color: #17604f;
+}
+.evidence-missing {
+  color: #8a5500;
+}
+
+.matching-table-hint {
+  margin: 14px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.field-source-evidence h4 {
+  margin: 0 0 12px;
+}
+.source-pdf-link {
+  margin-top: 12px;
+}

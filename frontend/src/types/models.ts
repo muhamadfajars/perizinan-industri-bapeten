@@ -1,4 +1,4 @@
-export type MatchStatus = 'MATCH' | 'REVIEW' | 'MISMATCH' | 'MISSING';
+export type MatchStatus = 'MATCH' | 'REVIEW' | 'MISMATCH' | 'MISSING' | 'INFO';
 
 export type CategoryId =
   | 'formulir'
@@ -51,7 +51,14 @@ export type MatchRow = {
   document_id?: string;
   quote?: string;
   detail?: {
-    type: 'approval' | 'maintenance';
+    type: 'approval' | 'maintenance' | 'protection';
+    group?: string;
+    person_id?: string;
+    person_name?: string;
+    field_label?: string;
+    required?: boolean;
+    images?: boolean;
+    evidence?: { page: number; quote: string; method?: string; has_visual?: boolean }[];
     pages?: number[];
     heading?: string;
     frequencies?: string[];
@@ -81,6 +88,8 @@ export type FormReference = {
   facility: string;
   address: string;
   applicationNumber?: string;
+  institution?: string;
+  protectionDocument?: { number?: string; date?: string };
   personnel: Person[];
   equipment: Equipment[];
 };

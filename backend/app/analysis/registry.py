@@ -6,6 +6,7 @@ from .equipment import _functional, _import, _specification, _suitability
 from .personnel import _personnel
 from .labels import _label
 from .constants import PROG, SUPP
+from ..protection.service import evaluate as evaluate_protection
 
 HANDLERS = {
     **{k: _program for k in PROG},
@@ -16,4 +17,5 @@ HANDLERS = {
     "spesifikasi": _specification,
     "impor": _import,
     "label": _label,
+    "proteksi": evaluate_protection,
 }

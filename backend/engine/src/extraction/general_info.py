@@ -62,6 +62,11 @@ def extract_general_info(text):
     ]
 
     result = {}
+    for label, key in (
+        ("Nomor Registrasi", "nomor_registrasi"),
+        ("Tanggal Registrasi", "tanggal_registrasi"),
+    ):
+        result[key] = extract_value(text, label, all_labels[all_labels.index(label) + 1 :])
 
     instansi_index = all_labels.index("Instansi")
 

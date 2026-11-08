@@ -29,6 +29,9 @@ def parse_application(pdf_path):
         "personnel": [],
         "equipment": [],
     }
+    from .extraction.form_administration import extract_administration, administration_from_table
+
+    result["administration"] = extract_administration(full_text)
 
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
@@ -37,6 +40,10 @@ def parse_application(pdf_path):
             for table in tables:
                 if not table:
                     continue
+
+                admin = administration_from_table(table)
+                if admin:
+                    result["administration"]["proteksi"] = admin
 
                 if is_personnel_table(table):
                     result["personnel"].extend(parse_personnel_table(table))

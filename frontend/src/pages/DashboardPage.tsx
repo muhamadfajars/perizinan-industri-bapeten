@@ -67,7 +67,7 @@ export function DashboardPage({
           icon={<CheckCircle2 size={25} />}
           label="Field MATCH"
           value={totals.match}
-          note={`${totals.percentage.toFixed(1)}% dari ${totals.total} field yang dianalisis`}
+          note={`${totals.percentage.toFixed(1)}% dari ${totals.compared} field dengan acuan formulir`}
           tone="green"
         />
         <SummaryCard

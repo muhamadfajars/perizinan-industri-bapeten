@@ -202,6 +202,8 @@ def code_digest():
 
 
 def cache_key(doc, reference_digest, source_digest):
+    from .protection.llm import digest as protection_digest
+
     payload = {
         "sha256": doc["sha256"],
         "category": doc["category"],
@@ -210,6 +212,7 @@ def cache_key(doc, reference_digest, source_digest):
         "source": source_digest,
         "ocr_profile": os.getenv("BAPETEN_OCR_PROFILE", "fast"),
         "engine": os.getenv("BAPETEN_OCR_ENGINE", "auto"),
+        "protection": protection_digest() if doc["category"] == "proteksi" else None,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -298,7 +301,11 @@ def process_support(doc, application, reference, key):
         if path_override:
             Path(path_override).unlink(missing_ok=True)
     duration = round(time.perf_counter() - start, 3)
-    if rows and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1":
+    if (
+        rows
+        and not any(r.get("field") == "Catatan pembacaan" for r in rows)
+        and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1"
+    ):
         try:
             _write_cache(path, rows)
         except OSError:

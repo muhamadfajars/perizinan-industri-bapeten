@@ -64,6 +64,8 @@ def _to_form(app):
         "facility": _facility_from_general(g),
         "address": _text(g.get("alamat_proyek")),
         "applicationNumber": _text(g.get("nomor_registrasi")) or None,
+        "institution": _text(g.get("instansi_asli") or g.get("instansi")),
+        "protectionDocument": (app.get("administration") or {}).get("proteksi", {}),
         "personnel": personnel,
         "equipment": equipment,
     }

@@ -75,14 +75,22 @@ export function MatchingPage({
                 />
               </label>
               <div className="filter-buttons" role="group" aria-label="Filter status">
-                {(['ALL', 'MATCH', 'REVIEW', 'MISMATCH'] as Filter[]).map((f) => (
+                {(['ALL', 'MATCH', 'REVIEW', 'MISMATCH', 'INFO'] as Filter[]).map((f) => (
                   <button
                     key={f}
                     className={filter === f ? 'active' : ''}
                     aria-pressed={filter === f}
                     onClick={() => setFilter(f)}
                   >
-                    {f === 'ALL' ? 'Semua' : f === 'MATCH' ? 'Match' : f === 'REVIEW' ? 'Review' : 'Mismatch'}{' '}
+                    {f === 'ALL'
+                      ? 'Semua'
+                      : f === 'MATCH'
+                        ? 'Match'
+                        : f === 'REVIEW'
+                          ? 'Review'
+                          : f === 'INFO'
+                            ? 'Informasi'
+                            : 'Mismatch'}{' '}
                     (
                     {f === 'ALL'
                       ? filterTotals.total
@@ -90,7 +98,9 @@ export function MatchingPage({
                         ? filterTotals.match
                         : f === 'REVIEW'
                           ? filterTotals.review
-                          : filterTotals.mismatch}
+                          : f === 'INFO'
+                            ? filterTotals.info
+                            : filterTotals.mismatch}
                     )
                   </button>
                 ))}

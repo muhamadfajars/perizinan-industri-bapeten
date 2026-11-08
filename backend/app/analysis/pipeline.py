@@ -54,6 +54,7 @@ def analyze_application(aid, progress):
         "personnel": application.get("personnel") or [],
         "equipment": application.get("equipment") or [],
         "general": application.get("general") or {},
+        "administration": application.get("administration") or {},
     }
     r_digest = hashlib.sha256(
         json.dumps(reference, sort_keys=True, ensure_ascii=False, default=str).encode()
@@ -141,17 +142,10 @@ def analyze_application(aid, progress):
             index, d, group = futures[fut]
             try:
                 detail = fut.result()
-                rows = _identity_postprocess(_postprocess_evidence(detail["rows"], d), d)
-                rows = _improve_rows(rows, storage.file_path(d))
-                rows = _guard_rows(rows)
-                rows = _finalize_identity(rows, storage.file_path(d))
-                rows = improve_evidence_cohesion(rows, storage.file_path(d))
-                rows = improve_field_evidence(
-                    rows,
-                    storage.file_path(d),
-                    d.get("category"),
-                    d.get("subtype"),
-                    d.get("filename"),
+                rows = (
+                    detail["rows"]
+                    if d["category"] == "proteksi"
+                    else finalize_legacy_rows(detail["rows"], d)
                 )
                 timings.append(
                     {
@@ -279,3 +273,16 @@ def analyze_application(aid, progress):
             "ocr_cpu_threads": performance.settings()[1],
         },
     }
+
+
+def finalize_legacy_rows(rows, doc):
+    """Legacy heuristics must not rewrite grounded protection or display-only rows."""
+    path = storage.file_path(doc)
+    rows = _identity_postprocess(_postprocess_evidence(rows, doc), doc)
+    rows = _improve_rows(rows, path)
+    rows = _guard_rows(rows)
+    rows = _finalize_identity(rows, path)
+    rows = improve_evidence_cohesion(rows, path)
+    return improve_field_evidence(
+        rows, path, doc.get("category"), doc.get("subtype"), doc.get("filename")
+    )

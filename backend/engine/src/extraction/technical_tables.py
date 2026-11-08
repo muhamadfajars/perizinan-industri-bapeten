@@ -167,23 +167,6 @@ def parse_type_serial(text):
     return {"tipe": tipe, "nomor_seri": nomor_seri, "raw_value": raw_value}
 
 
-def parse_max_condition(text):
-    if not text:
-        return {"tegangan_maksimum_kv": None, "arus_maksimum_ma": None}
-
-    normalized = clean_text(text)
-
-    kv_match = re.search(r"(\d+(?:[.,]\d+)?)\s*kV", normalized, flags=re.IGNORECASE)
-
-    ma_match = re.search(r"(\d+(?:[.,]\d+)?)\s*mA", normalized, flags=re.IGNORECASE)
-
-    kv = float(kv_match.group(1).replace(",", ".")) if kv_match else None
-
-    ma = float(ma_match.group(1).replace(",", ".")) if ma_match else None
-
-    return {"tegangan_maksimum_kv": kv, "arus_maksimum_ma": ma}
-
-
 def clean_brand(value):
     value = clean_text(value)
 
@@ -207,7 +190,6 @@ def parse_equipment_table(table):
     index_tipe_unit = None
     index_merk_tabung = None
     index_tipe_tabung = None
-    index_kondisi = None
 
     for index, column in enumerate(header):
         if "merk unit" in column:
@@ -221,9 +203,6 @@ def parse_equipment_table(table):
 
         elif "tipe" in column and "seri" in column and "tabung" in column:
             index_tipe_tabung = index
-
-        elif "kondisi maksimal" in column:
-            index_kondisi = index
 
     results = []
 
@@ -245,12 +224,6 @@ def parse_equipment_table(table):
             parse_type_serial(row[index_tipe_tabung])
             if index_tipe_tabung is not None
             else {"tipe": None, "nomor_seri": None, "raw_value": None}
-        )
-
-        kondisi = (
-            parse_max_condition(row[index_kondisi])
-            if index_kondisi is not None
-            else {"tegangan_maksimum_kv": None, "arus_maksimum_ma": None}
         )
 
         if not any(
@@ -275,8 +248,6 @@ def parse_equipment_table(table):
                 "tipe_tabung": tabung_data["tipe"],
                 "nomor_seri_tabung": tabung_data["nomor_seri"],
                 "raw_tipe_no_seri_tabung": tabung_data["raw_value"],
-                "tegangan_maksimum_kv": kondisi["tegangan_maksimum_kv"],
-                "arus_maksimum_ma": kondisi["arus_maksimum_ma"],
             }
         )
 
@@ -303,8 +274,6 @@ def parse_equipment_continuation_table(table):
 
         tabung_data = parse_type_serial(row[4])
 
-        kondisi = parse_max_condition(row[5])
-
         if not any(
             [
                 merk_unit,
@@ -327,8 +296,6 @@ def parse_equipment_continuation_table(table):
                 "tipe_tabung": tabung_data["tipe"],
                 "nomor_seri_tabung": tabung_data["nomor_seri"],
                 "raw_tipe_no_seri_tabung": tabung_data["raw_value"],
-                "tegangan_maksimum_kv": kondisi["tegangan_maksimum_kv"],
-                "arus_maksimum_ma": kondisi["arus_maksimum_ma"],
             }
         )
 

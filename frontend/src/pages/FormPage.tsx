@@ -57,8 +57,13 @@ export function FormPage({ active, displayForm, formNeedsReview, formOpen, toggl
           count={reviewBadge(formNeedsReview.facility)}
         >
           <div className="facility-info">
-            <DataPair label="Nama fasilitas" value={displayForm?.facility || 'Belum ada hasil formulir'} />
+            <DataPair label="Nama instansi" value={displayForm?.institution || '—'} />
             <DataPair label="Alamat proyek" value={displayForm?.address || '—'} />
+            <DataPair label="Nomor Program Proteksi" value={displayForm?.protectionDocument?.number || '—'} />
+            <DataPair
+              label="Tanggal pengesahan Program Proteksi"
+              value={displayForm?.protectionDocument?.date || '—'}
+            />
           </div>
         </Accordion>
         <Accordion

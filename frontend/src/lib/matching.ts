@@ -32,12 +32,16 @@ export function matchingTotals(sections: MatchSection[]) {
   const review = rows.filter((x) => x.status === 'REVIEW').length;
   const mismatch = rows.filter((x) => x.status === 'MISMATCH').length;
   const missing = rows.filter((x) => x.status === 'MISSING').length;
+  const info = rows.filter((x) => x.status === 'INFO').length;
+  const compared = rows.length - info;
   return {
     match,
     review,
     mismatch,
     missing,
+    info,
+    compared,
     total: rows.length,
-    percentage: rows.length ? Math.round((match / rows.length) * 1000) / 10 : 0,
+    percentage: compared ? Math.round((match / compared) * 1000) / 10 : 0,
   };
 }
