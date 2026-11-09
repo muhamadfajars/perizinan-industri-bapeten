@@ -62,7 +62,11 @@ class ProtectionTests(unittest.TestCase):
 
     def test_mandatory_laws_always_displayed_without_matching(self):
         rows = information(
-            [page("Undang-Undang Nomor 10 Tahun 1997. PP No. 2 Tahun 2020.")],
+            [
+                page(
+                    "1.6 Dasar Hukum / Referensi\nUndang-Undang Nomor 10 Tahun 1997. PP No. 2 Tahun 2020."
+                )
+            ],
             lambda *args, **kwargs: make_row("d", *args, **kwargs),
         )
         laws = [r for r in rows if r["field"].startswith("Dasar hukum")]
@@ -72,6 +76,66 @@ class ProtectionTests(unittest.TestCase):
             all(r["status"] == "INFO" and r["score"] is None and r["expected"] == "—" for r in laws)
         )
         self.assertIn("Belum ditemukan", laws[1]["observed"])
+
+    def test_legal_references_are_scoped_and_only_include_regulations(self):
+        rows = information(
+            [
+                page("DAFTAR ISI\n1.6 Dasar Hukum / Referensi ..... 8\nPP 28 Tahun 2025", 2),
+                page("PP 28 Tahun 2025\n1.6 Dasar Hukum / Referensi\n1. UU 10 Tahun 1997", 8),
+                page(
+                    "2. PP 45 Tahun 2023\n3. Manual Book Portable XRF\nAcuan pengoperasian alat.\n4. PP 2 Tahun 2020",
+                    9,
+                ),
+                page("1.7 Ketentuan lain\nPP 28 Tahun 2025", 10),
+            ],
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+        )
+        laws = [r for r in rows if r["detail"]["group"] == "Dasar hukum"]
+        self.assertEqual(laws[0]["detail"]["pages"], [8])
+        self.assertEqual(laws[1]["detail"]["pages"], [9])
+        self.assertFalse(laws[2]["detail"]["pages"])
+        self.assertFalse(laws[-1]["detail"]["required"])
+        self.assertIn("Nomor 2 Tahun 2020", laws[-1]["field"])
+        self.assertFalse(any("Manual Book" in r["field"] for r in laws))
+
+    def test_legal_section_numbers_can_vary(self):
+        for heading in [
+            "2.4 Dasar Hukum / Referensi",
+            "3.2 Landasan Hukum",
+            "Dasar Hukum",
+            "B. Referensi",
+        ]:
+            rows = information(
+                [page(heading + "\nUU 10 Tahun 1997\n3.3 Ketentuan lain\nPP 28 Tahun 2025")],
+                lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            )
+            self.assertEqual(rows[0]["detail"]["pages"], [1], heading)
+            self.assertFalse(rows[2]["detail"]["pages"], heading)
+            self.assertIn("tentang Ketenaganukliran", rows[0]["field"])
+
+    def test_zone_sources_only_use_diagrams_and_approval_prefers_sheet(self):
+        rows = information(
+            [
+                page("Penjelasan Daerah Pengendalian dan Daerah Supervisi", 12),
+                page("Gambar 6. Pembagian Daerah Kerja", 44),
+                page("Gambar 7. Pembagian Daerah Kerja", 45),
+                page("LEMBAR PENGESAHAN\nDisetujui Oleh Direktur", 2),
+                page("Petugas wajib memberikan tanda tangan pada formulir", 18),
+            ],
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+        )
+        zones = [r for r in rows if r["field"].startswith("Daerah")]
+        self.assertTrue(all(r["detail"]["pages"] == [44, 45] for r in zones))
+        self.assertEqual(rows[-1]["detail"]["pages"], [2])
+
+    def test_missing_legal_section_does_not_use_mentions_elsewhere(self):
+        rows = information(
+            [page("UU 10 Tahun 1997\nPP 45 Tahun 2023")],
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+        )
+        laws = [r for r in rows if r["detail"]["group"] == "Dasar hukum"]
+        self.assertEqual(len(laws), 5)
+        self.assertTrue(all(not r["detail"]["pages"] for r in laws))
 
     def test_approval_heading_does_not_certify_signature(self):
         rows = information(

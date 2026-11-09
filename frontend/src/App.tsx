@@ -2,7 +2,6 @@ import { AlertCircle, Check, ChevronRight, Info, Menu, X } from 'lucide-react';
 import { DetailPanel } from './components/DetailPanel';
 import { Sidebar } from './components/Layout';
 import { WorkspaceDialogs } from './components/WorkspaceDialogs';
-import { categoryById } from './data/categories';
 import { useEvaluationWorkspace } from './hooks/useEvaluationWorkspace';
 import { DashboardPage } from './pages/DashboardPage';
 import { DocumentsPage } from './pages/DocumentsPage';
@@ -23,7 +22,6 @@ export default function App() {
     selectedDetail,
     setSelectedDetail,
     openEvidence,
-    announce,
     toast,
     setToast,
   } = workspace;
@@ -82,13 +80,7 @@ export default function App() {
         selected={selectedDetail}
         close={() => setSelectedDetail(null)}
         openEvidence={openEvidence}
-        openRelated={(category) => {
-          goTo('dokumen');
-          announce(
-            'info',
-            `Cari dokumen kategori ${categoryById(category)?.name} pada daftar file yang diunggah.`,
-          );
-        }}
+        loadSourceDocument={workspace.loadSourceDocument}
       />
       {toast && (
         <div className={`toast toast-${toast.tone}`} role="status">

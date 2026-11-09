@@ -58,7 +58,7 @@ export function FormPage({ active, displayForm, formNeedsReview, formOpen, toggl
         >
           <div className="facility-info">
             <DataPair label="Nama instansi" value={displayForm?.institution || '—'} />
-            <DataPair label="Alamat proyek" value={displayForm?.address || '—'} />
+            <DataPair label="Alamat" value={displayForm?.address || '—'} />
             <DataPair label="Nomor Program Proteksi" value={displayForm?.protectionDocument?.number || '—'} />
             <DataPair
               label="Tanggal pengesahan Program Proteksi"

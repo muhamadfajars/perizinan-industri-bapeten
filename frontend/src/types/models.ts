@@ -51,7 +51,8 @@ export type MatchRow = {
   document_id?: string;
   quote?: string;
   detail?: {
-    type: 'approval' | 'maintenance' | 'protection';
+    type: 'approval' | 'maintenance' | 'protection' | 'management';
+    topics?: { label: string; found: boolean }[];
     group?: string;
     person_id?: string;
     person_name?: string;

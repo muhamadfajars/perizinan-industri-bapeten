@@ -23,6 +23,8 @@ type Props = Pick<
   | 'goTo'
   | 'visibleMatchingSections'
   | 'setSelectedDetail'
+  | 'openEvidence'
+  | 'loadSourceDocument'
 >;
 
 export function MatchingPage({
@@ -42,6 +44,8 @@ export function MatchingPage({
   goTo,
   visibleMatchingSections,
   setSelectedDetail,
+  openEvidence,
+  loadSourceDocument,
 }: Props) {
   return (
     <section className="page-section" id="matching" hidden={active !== 'matching'}>
@@ -177,6 +181,8 @@ export function MatchingPage({
         <div className="matching-sections">
           {visibleMatchingSections.map((s, i) => (
             <MatchingSection
+              openEvidence={openEvidence}
+              loadSourceDocument={loadSourceDocument}
               key={`${filter}:${s.id}`}
               section={s}
               search={query}

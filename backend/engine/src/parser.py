@@ -45,6 +45,10 @@ def parse_application(pdf_path):
                 if admin:
                     result["administration"]["proteksi"] = admin
 
+                management = administration_from_table(table, "manajemen")
+                if management:
+                    result["administration"]["manajemen"] = management
+
                 if is_personnel_table(table):
                     result["personnel"].extend(parse_personnel_table(table))
 

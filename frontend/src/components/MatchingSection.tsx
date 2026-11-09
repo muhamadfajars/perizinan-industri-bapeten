@@ -6,8 +6,9 @@ import { matchingSectionTitle, rowMatchesFilter } from '../lib/matchingDisplay';
 import type { MatchRow, MatchSection } from '../types/models';
 import { Filter } from '../types/workspace';
 import { ApprovalEvidence, MaintenanceEvidence } from './Evidence';
+import { ManagementInformation } from './ManagementInformation';
 import Glyph from './Glyph';
-import { ProtectionEvidence } from './ProtectionEvidence';
+import { ProtectionEvidence, ProtectionInformationSection } from './ProtectionEvidence';
 import {
   isAdditionalLocation,
   isSupportingInformation,
@@ -51,12 +52,16 @@ export function MatchingSection({
   search,
   filter,
   onRowClick,
+  openEvidence,
+  loadSourceDocument,
   expandedByDefault = false,
 }: {
   section: MatchSection;
   search: string;
   filter: Filter;
   onRowClick: (r: MatchRow, s: MatchSection) => void;
+  openEvidence: (documentId: string, page?: number) => void;
+  loadSourceDocument: (documentId: string) => Promise<Blob>;
   expandedByDefault?: boolean;
 }) {
   const [open, setOpen] = useState(expandedByDefault);
@@ -67,8 +72,12 @@ export function MatchingSection({
   const stats = useMemo(() => matchingTotals([{ ...section, rows: scopedRows }]), [section, scopedRows]);
   const filtered = scopedRows.filter((row) => rowMatchesFilter(row, filter, search));
   const isPerson = (row: MatchRow) => row.detail?.type === 'protection' && row.detail.group === 'Petugas';
+  const isManagementInfo = (row: MatchRow) =>
+    row.detail?.type === 'management' && ['Pengesahan', 'Budaya'].includes(row.detail.group ?? '');
+  const managementRows = filtered.filter(isManagementInfo);
   const comparisonRows = filtered.filter(
-    (row) => !isSupportingInformation(row) && row.detail?.group !== 'Catatan pembacaan',
+    (row) =>
+      !isSupportingInformation(row) && !isManagementInfo(row) && row.detail?.group !== 'Catatan pembacaan',
   );
   const personLabels = new Map(
     personnelGroups(scopedRows).flatMap((person, index) =>
@@ -207,25 +216,22 @@ export function MatchingSection({
           </div>
           <MatchingEvidence section={section} filter={filter} search={search} />
           {readingNotes.map((row) => (
-            <ProtectionEvidence key={row.id} row={row} />
+            <ProtectionEvidence key={row.id} row={row} openEvidence={openEvidence} />
           ))}
-          {informationRows.length > 0 && (
-            <section className="protection-information" aria-label="Informasi Program Proteksi">
-              <h3>Informasi Pendukung Program Proteksi</h3>
-              <p>
-                Bahan tinjauan evaluator; tidak memengaruhi skor kecocokan. Buka bukti untuk melihat kutipan
-                dan gambar sumber.
-              </p>
-              {informationRows.map((row) => (
-                <ProtectionEvidence key={row.id} row={row} compact />
-              ))}
-            </section>
+          {managementRows.length > 0 && (
+            <ManagementInformation
+              rows={managementRows}
+              openEvidence={openEvidence}
+              loadSourceDocument={loadSourceDocument}
+            />
           )}
-          <div className="table-footer">
-            <span>
-              {filtered.length} dari {scopedRows.length} field
-            </span>
-          </div>
+          {informationRows.length > 0 && (
+            <ProtectionInformationSection
+              rows={informationRows}
+              openEvidence={openEvidence}
+              loadSourceDocument={loadSourceDocument}
+            />
+          )}
         </div>
       )}
     </div>

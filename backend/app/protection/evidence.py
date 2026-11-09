@@ -9,8 +9,31 @@ REQUIRED_LAWS = [
     ("Perba", "4", "2024"),
     ("Perba", "5", "2025"),
 ]
+REQUIRED_LAW_TITLES = {
+    ("UU", "10", "1997"): "Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran",
+    (
+        "PP",
+        "45",
+        "2023",
+    ): "Peraturan Pemerintah Nomor 45 Tahun 2023 tentang Keselamatan Radiasi Pengion dan Keamanan Zat Radioaktif",
+    (
+        "PP",
+        "28",
+        "2025",
+    ): "Peraturan Pemerintah Nomor 28 Tahun 2025 tentang Penyelenggaraan Perizinan Berusaha Berbasis Risiko",
+    (
+        "Perba",
+        "4",
+        "2024",
+    ): "Peraturan Badan Pengawas Tenaga Nuklir Nomor 4 Tahun 2024 tentang Izin Bekerja Petugas pada Fasilitas Radiasi dan/atau Kegiatan Pemanfaatan Sumber Radiasi Pengion",
+    (
+        "Perba",
+        "5",
+        "2025",
+    ): "Peraturan Badan Pengawas Tenaga Nuklir Nomor 5 Tahun 2025 tentang Standar Kegiatan Usaha dan/atau Standar Produk/Jasa pada Penyelenggaraan Perizinan Berusaha Berbasis Risiko Sektor Ketenaganukliran",
+}
 LAW = re.compile(
-    r"\b(Undang[\s-]*Undang|UU|Peraturan\s+Pemerintah|PP|"
+    r"\b(Peraturan\s+Presiden|Perpres|Peraturan\s+Menteri(?:\s+[A-Za-z]+){0,6}?|Permen|Peraturan\s+Daerah|Perda|Undang[\s-]*Undang|UU|Peraturan\s+Pemerintah|PP|"
     r"Peraturan\s+(?:Kepala\s+)?(?:BAPETEN|Badan\s+Pengawas\s+Tenaga\s+Nuklir)|PERBA|PERKA)"
     r"\s*(?:Republik\s+Indonesia\s*)?(?:(?:Nomor|No\.?)\s*)*(\d{1,3})\s*(?:Tahun\s*|/\s*)(\d{4})\b",
     re.I,
@@ -42,11 +65,44 @@ def snippets(pages, pattern, *, numeric=False):
     return found
 
 
+def legal_section(pages):
+    """Find a legal-reference heading regardless of its section number."""
+    result = []
+    active = False
+    heading = re.compile(
+        r"(?m)^[ \t]*(?:(?:\d+(?:\s*\.\s*\d+)*[.)]?|[A-Z][.)])\s+)?(?:Dasar\s+Hukum(?:\s*/\s*Referensi)?|Landasan\s+Hukum|Referensi\s+Hukum|Referensi)[ \t]*$",
+        re.I,
+    )
+    end = re.compile(
+        r"(?m)^\s*(?:BAB\s+(?:[IVXLCDM]+|\d+)\b|\d+\s*\.\s*\d+(?:\s*\.\s*\d+)*\s+|[A-Z][.)]\s+)",
+        re.I,
+    )
+    for page in pages:
+        text = page["text"]
+        if toc(text):
+            continue
+        if not active:
+            start = heading.search(text)
+            if not start:
+                continue
+            active = True
+            text = text[start.end() :]
+        stop = end.search(text)
+        if stop:
+            text = text[: stop.start()]
+        if text.strip():
+            result.append({**page, "text": text})
+        if stop:
+            break
+    return result
+
+
 def information(pages, make_row):
     from .dose import dose_statements
 
     laws = {}
-    for page in pages:
+    reference_pages = legal_section(pages)
+    for page in reference_pages:
         if toc(page["text"]):
             continue
         text = compact(page["text"])
@@ -58,6 +114,8 @@ def information(pages, make_row):
                 else "PP"
                 if re.fullmatch(r"PP|Peraturan\s+Pemerintah", kind, re.I)
                 else "Perba"
+                if re.search(r"BAPETEN|Pengawas|PERBA|PERKA", kind, re.I)
+                else compact(kind)
             )
             laws.setdefault((kind, str(int(number)), year), []).append(
                 {"page": page["page"], "quote": text[match.start() : match.end() + 220]}
@@ -65,14 +123,19 @@ def information(pages, make_row):
     rows = []
     for key in [*REQUIRED_LAWS, *(k for k in laws if k not in REQUIRED_LAWS)]:
         found = laws.get(key, [])
-        title = f"{key[0]} No. {key[1]} Tahun {key[2]}"
+        title = REQUIRED_LAW_TITLES.get(key, f"{key[0]} Nomor {key[1]} Tahun {key[2]}")
+        note = (
+            "Tercantum pada bagian Dasar Hukum / Referensi."
+            if found
+            else "Belum ditemukan pada bagian Dasar Hukum / Referensi; periksa dokumen sumber."
+        )
         rows.append(
             make_row(
                 "Dasar hukum: " + title,
                 "",
                 title if found else "Belum ditemukan dalam teks terbaca",
                 found,
-                "Dasar hukum ditampilkan sesuai isi dokumen; tidak dibandingkan dengan formulir.",
+                note,
                 group="Dasar hukum",
                 required=key in REQUIRED_LAWS,
             )
@@ -93,11 +156,13 @@ def information(pages, make_row):
                 pages,
                 r"Gambar\s+\d+[.\s]+(?:Pembagian\s+Daerah\s+Kerja|Daerah\s+(?:Pengendalian|Supervisi|Pengawasan))",
             )
-            found = diagrams + [x for x in found if x["page"] not in {d["page"] for d in diagrams}]
-        # Prefer explanatory body over incidental mentions; keep all sources available.
-        note = "Informasi dokumen; tidak dinilai cocok/tidak cocok dengan formulir."
-        if visual:
-            note += " Gambar halaman sumber ditampilkan untuk memeriksa penjelasan dan denah; keberadaan gambar belum membuktikan cakupan wilayahnya."
+            found = [item for item in diagrams if item["has_visual"]]
+        if not visual:
+            found = found[:1]
+        if "dosis" in title.lower():
+            note = "Pastikan angka batas dosis tidak melebihi Nilai Batas Dosis (NBD) ketentuan BAPETEN."
+        else:
+            note = "Periksa uraian zonasi kerja radiasi dan lampiran denah ruangan pada gambar."
         rows.append(
             make_row(
                 title,
@@ -109,15 +174,7 @@ def information(pages, make_row):
                 images=visual,
             )
         )
-    approval = []
-    for page in pages:
-        text = compact(page["text"])
-        if toc(text):
-            continue
-        if re.search(
-            r"lembar\s+pengesahan|disetujui\s+oleh|mengesahkan|tanda\s+tangan", text, re.I
-        ):
-            approval.append({"page": page["page"], "quote": text[:1800]})
+    approval = approval_evidence(pages)
     rows.append(
         make_row(
             "Pengesahan — tanda tangan",
@@ -126,9 +183,31 @@ def information(pages, make_row):
             if approval
             else "Halaman pengesahan belum ditemukan otomatis",
             approval,
-            "Minimal tanda tangan; stempel tidak diwajibkan. Teks nama/jabatan tidak membuktikan adanya tanda tangan. Verifikasi pada gambar halaman.",
+            "Periksa keberadaan tanda tangan pimpinan atau penanggung jawab pada gambar (stempel tidak diwajibkan).",
             group="Pengesahan",
             images=True,
         )
     )
     return rows
+
+
+def approval_evidence(pages):
+    approval = []
+    for page in pages:
+        text = compact(page["text"])
+        if toc(text):
+            continue
+        if re.search(
+            r"lembar\s+pengesahan|(?:disetujui\s+oleh|mengesahkan).*?(?:nama|jabatan)|tanda\s+tangan.*?(?:nama|jabatan)",
+            text,
+            re.I,
+        ):
+            approval.append({"page": page["page"], "quote": text[:1800]})
+    approval.sort(
+        key=lambda item: (
+            not bool(re.search(r"lembar\s+pengesahan", item["quote"], re.I)),
+            item["page"],
+        )
+    )
+    approval = approval[:1]
+    return approval

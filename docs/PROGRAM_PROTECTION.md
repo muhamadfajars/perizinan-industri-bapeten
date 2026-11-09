@@ -57,20 +57,44 @@ acuan utama; nilainya tidak diganti dengan isi dokumen pendukung.
 Informasi Pendukung hanya berisi dasar hukum, daerah pengendalian/pengawasan,
 Pembatas Dosis, dan pengesahan. Catatan kegagalan pembacaan ditampilkan terpisah.
 Field acuan yang kosong pada formulir tetap INFO pada kelompok datanya sendiri.
-Tampilan ringkas menampilkan status ditemukan untuk dasar hukum, halaman sumber
-dan tombol gambar untuk daerah/pengesahan, serta kutipan pendek Pembatas Dosis.
+Dasar hukum diambil dari bagian Dasar Hukum / Referensi (termasuk Landasan Hukum),
+berdasarkan judul, tanpa mengunci nomor subbab. Lima peraturan wajib menggunakan
+nama singkat (UU/PP/Perba No.) beserta judul tentang dan selalu tampil. Ringkasan Lengkap/Belum lengkap menyebut jumlah
+dasar hukum yang ditemukan (misalnya “Lengkap — 5 dari 5 dasar hukum ditemukan”),
+bukan kesimpulan kepatuhan hukum. Peraturan tambahan
+ditampilkan terpisah; manual dan dokumen internal tidak termasuk. Kutipan isi tidak
+ditampilkan pada tab dasar hukum; evaluator membuka dokumen sumber.
+Nama peraturan wajib mengacu pada JDIH BAPETEN:
+- https://jdih.bapeten.go.id/id/dokumen/peraturan/jenis/pp
+- https://www.peraturan.go.id/files/peraturan-bapeten-no-4-tahun-2024.pdf
+- https://www.peraturan.go.id/files/peraturan-bapeten-no-5-tahun-2025.pdf
+Zonasi hanya menyediakan halaman berketerangan gambar pembagian daerah kerja yang
+memuat visual (Tuku: 44–45; CV Mulia: 41), bukan halaman penyebutan istilah saja.
+Halaman zonasi dipilih melalui dropdown; tombol Lihat dokumen sumber membuka
+pratinjau pada halaman terpilih.
+Pembatas Dosis memakai satu halaman utama tanpa dropdown, label pernyataan operasional,
+dan sorotan pada nilai mSv/tahun. Pengesahan memilih satu kandidat halaman pengesahan
+utama, bukan penyebutan tanda tangan di uraian tugas. Tanda tangan tetap diperiksa manual.
+Tab Dasar Hukum, Zonasi Kerja, Pembatas Dosis dan Lembar Pengesahan tidak memakai
+badge jumlah item. Tombol sumber membuka dialog PDF besar dengan navigasi halaman
+dan zoom dari penampil PDF browser. Dialog menyediakan Buka di tab baru,
+penutupan dengan tombol/Escape, dan pengembalian fokus ke tombol asal. Judul
+pratinjau menyebut nama informasi/field dan halaman sumber; nama panjang dibatasi
+satu baris agar ruang dokumen tetap luas. Status peraturan ditempatkan di bawah
+judul dengan ikon dan warna, tanpa mengulang label kelompok pada setiap item.
 Pembatas Dosis dipilih dari pernyataan eksplisit dengan angka dosis; pernyataan
 tentang operasi saat ini diprioritaskan atas tabel tahapan atau uraian umum.
 Halaman default mengikuti pernyataan tersebut, tanpa nomor halaman tetap
 (sampel Tuku: 48; CV Mulia: 45). Paragraf ditampilkan utuh satu kali. Uraian NBD
-umum saja tidak dianggap penetapan pembatas dosis. Pengesahan hanya menampilkan
-gambar dan kontrol halaman setelah dibuka, tanpa kutipan atau catatan berulang.
-Kutipan lengkap dan pilihan halaman tetap tersedia pada bukti lainnya.
-Petunjuk klik berada tepat di atas tabel. Panel detail Program Proteksi hanya
-memiliki satu area Bukti sumber (pilihan halaman, kutipan, gambar, dan tombol
-sekunder Buka PDF lengkap). Nilai dan catatan tidak diulang dalam area tersebut.
-Pembatas Dosis menggunakan komponen khusus: satu paragraf utuh, tanpa potongan
-ringkasan, catatan umum, atau kutipan lain ketika Lihat gambar dibuka.
+umum saja tidak dianggap penetapan pembatas dosis.
+Petunjuk klik berada tepat di atas tabel. Panel detail berisi nama field, status,
+acuan formulir, hasil pembacaan dokumen, skor, alasan hasil yang ringkas, keterangan
+halaman berupa teks (tanpa dropdown), dan tombol Lihat dokumen sumber yang
+membuka dialog PDF pada halaman pertama bukti, dengan opsi tab baru. Tombol sumber memakai latar sidebar
+dan teks putih. Preview serta navigasi kategori tidak diulang di panel.
+PDF diambil dengan autentikasi lalu dibuka sebagai blob URL dengan #page sesuai
+pilihan. PDF lengkap tetap dapat dinavigasi di penampil dokumen. Token tidak masuk URL.
+Browser yang memblokir pop-up menampilkan pesan untuk mengizinkannya.
 
 ## Pembacaan hybrid
 

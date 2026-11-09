@@ -212,7 +212,7 @@ def cache_key(doc, reference_digest, source_digest):
         "source": source_digest,
         "ocr_profile": os.getenv("BAPETEN_OCR_PROFILE", "fast"),
         "engine": os.getenv("BAPETEN_OCR_ENGINE", "auto"),
-        "protection": protection_digest() if doc["category"] == "proteksi" else None,
+        "protection": protection_digest() if doc["category"] in ("proteksi", "manajemen") else None,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 

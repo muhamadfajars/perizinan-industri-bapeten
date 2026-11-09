@@ -1,20 +1,19 @@
-import { ExternalLink, FolderOpen, Info, X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import { matchingSectionTitle } from '../lib/matchingDisplay';
-import type { CategoryId, MatchRow, MatchSection } from '../types/models';
-import { DataPair, ScoreBadge } from './Common';
-import { ApprovalEvidence } from './Evidence';
+import type { MatchRow, MatchSection } from '../types/models';
 import { FieldSourceEvidence } from './FieldSourceEvidence';
-import { protectionFieldLabel } from '../lib/protectionDisplay';
+import { DataPair, ScoreBadge } from './Common';
+import { protectionFieldLabel, fieldExplanation } from '../lib/protectionDisplay';
 
 export function DetailPanel({
   selected,
   close,
-  openRelated,
   openEvidence,
+  loadSourceDocument,
 }: {
   selected: { row: MatchRow; section: MatchSection } | null;
   close: () => void;
-  openRelated: (category: CategoryId) => void;
+  loadSourceDocument: (documentId: string) => Promise<Blob>;
   openEvidence: (documentId: string, page?: number) => void;
 }) {
   if (!selected) return null;
@@ -29,59 +28,30 @@ export function DetailPanel({
             <X size={20} />
           </button>
         </div>
-        <h3>{protectionFieldLabel(row)}</h3>
+        <h3>
+          {row.detail?.person_id
+            ? `Petugas ${row.detail.person_id} — ${row.detail.field_label}`
+            : protectionFieldLabel(row)}
+        </h3>
         <p className="detail-origin">{matchingSectionTitle(section)}</p>
         <ScoreBadge status={row.status} />
-        <div className="detail-divider" />
-        <DataPair label="Acuan dari formulir" value={row.expected} />
-        <DataPair label="Hasil pembacaan dokumen" value={row.observed} />
+        <DataPair label="Acuan dari formulir" value={row.expected || 'Tidak tersedia'} />
+        <DataPair label="Hasil pembacaan dokumen" value={row.observed || 'Tidak tersedia'} />
         <DataPair
           label="Kemiripan karakter / skor field"
-          value={row.score === null ? 'Tidak tersedia' : `${row.score.toFixed(1)}%`}
+          value={row.score == null ? 'Tidak tersedia' : `${row.score}%`}
         />
-        {row.detail?.type !== 'protection' && (
-          <DataPair
-            label="Halaman bukti"
-            value={row.page ? `Halaman ${row.page}` : 'Tidak dicatat pada hasil pemeriksaan'}
-          />
-        )}
-        {row.note && (
-          <div className="detail-note">
-            <Info size={17} />
-            {row.note.replaceAll(
-              'v43_address_components',
-              'Alamat dibandingkan berdasarkan komponen alamat yang terbaca pada dokumen.',
-            )}
-          </div>
-        )}
+        <div className="detail-note" aria-label="Alasan hasil">
+          <Info size={17} />
+          {fieldExplanation(row)}
+        </div>
         <div className="detail-divider" />
-        {row.detail?.type === 'protection' && (
-          <FieldSourceEvidence key={row.id} row={row} openDocument={openEvidence} />
-        )}
-        {row.document_id && row.detail?.type === 'approval' && <ApprovalEvidence row={row} />}
-        {row.document_id && row.detail?.type !== 'approval' && row.detail?.type !== 'protection' && (
-          <button
-            className="button button-soft button-full"
-            type="button"
-            onClick={() => openEvidence(row.document_id!, row.page)}
-          >
-            <ExternalLink size={16} /> Buka PDF sumber {row.page ? `· Halaman ${row.page}` : ''}
-          </button>
-        )}
-        <p className="detail-disclaimer">
-          Nilai dibaca dari dokumen yang diunggah. Status MATCH tidak menyatakan keabsahan izin atau tanda
-          tangan.
-        </p>
-        <button
-          className="button button-primary button-full"
-          type="button"
-          onClick={() => {
-            close();
-            openRelated(section.category);
-          }}
-        >
-          <FolderOpen size={17} /> Lihat dokumen kategori ini
-        </button>
+        <FieldSourceEvidence
+          key={row.id}
+          row={row}
+          openDocument={openEvidence}
+          loadDocument={loadSourceDocument}
+        />
       </aside>
     </>
   );

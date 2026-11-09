@@ -16,20 +16,31 @@ def extract_administration(text):
     date = re.search(
         r"Tanggal\s+(?:Pengesahan\s+)?Dokumen\s*:\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})", body, re.I
     )
+    management = re.search(
+        r"Dokumen\s+Sistem\s+Manajemen(.*?)(?=B\.\s*Kelengkapan|Dokumen\s+Program|$)", flat, re.I
+    )
+    management_number = (
+        re.search(r"No\.?\s*Dokumen\s*:\s*(.*?)\s*-?\s*Tanggal", management.group(1), re.I)
+        if management
+        else None
+    )
     return {
+        "manajemen": {"number": management_number.group(1).strip() if management_number else ""},
         "proteksi": {
             "number": number.group(1).strip() if number else "",
             "date": date.group(1) if date else "",
-        }
+        },
     }
 
 
-def administration_from_table(table):
+def administration_from_table(table, category="proteksi"):
     for row in table:
         if len(row) < 3:
             continue
         label = re.sub(r"\s+", " ", str(row[1] or ""))
-        if not re.search(r"Program\s+Proteksi", label, re.I):
+        pattern = r"Sistem\s+Manajemen" if category == "manajemen" else r"Program\s+Proteksi"
+        label = label.replace("\\n", " ")
+        if not re.search(pattern, label, re.I):
             continue
         body = re.sub(r"\s+", " ", str(row[2] or ""))
         number = re.search(r"No\.?\s*Dokumen\s*:\s*(.*?)\s*-\s*Tanggal", body, re.I)

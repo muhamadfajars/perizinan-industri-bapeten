@@ -420,14 +420,26 @@ export function useEvaluationWorkspace() {
     setResult(null);
     announce('info', 'File dihapus dari daftar. Analisis perlu dijalankan ulang.');
   };
+  const loadSourceDocument = useCallback(
+    (documentId: string) => {
+      if (!applicationId) return Promise.reject(new Error('Permohonan tidak tersedia.'));
+      return fetchPreviewFile(applicationId, documentId);
+    },
+    [applicationId],
+  );
   const openEvidence = (documentId: string, page?: number) => {
     if (!applicationId) return;
     const win = window.open('about:blank', '_blank');
+    if (!win) {
+      announce('warning', 'Tab bukti diblokir browser. Izinkan pop-up untuk aplikasi ini, lalu coba lagi.');
+      return;
+    }
+    win.opener = null;
     fetchPreviewFile(applicationId, documentId)
       .then((blob) => {
+        if (win.closed) return;
         const url = URL.createObjectURL(blob);
-        if (win) win.location.href = url + (page ? `#page=${page}` : '');
-        else window.open(url + (page ? `#page=${page}` : ''), '_blank');
+        win.location.href = url + (page ? `#page=${page}` : '');
         window.setTimeout(() => URL.revokeObjectURL(url), 120000);
       })
       .catch((e) => {
@@ -531,6 +543,7 @@ export function useEvaluationWorkspace() {
     resetApplication,
     selectedDetail,
     openEvidence,
+    loadSourceDocument,
     announce,
     toast,
     setToast,

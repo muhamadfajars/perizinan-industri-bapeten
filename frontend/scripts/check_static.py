@@ -3,10 +3,10 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[1]
-sources = "\n".join(p.read_text() for p in (root / "src").rglob("*.tsx"))
-api = (root / "src/api.ts").read_text()
-categories = (root / "src/data/categories.ts").read_text()
-css = "\n".join(p.read_text() for p in (root / "src/styles").glob("*.css"))
+sources = "\n".join(p.read_text(encoding="utf-8") for p in (root / "src").rglob("*.tsx"))
+api = (root / "src/api.ts").read_text(encoding="utf-8")
+categories = (root / "src/data/categories.ts").read_text(encoding="utf-8")
+css = "\n".join(p.read_text(encoding="utf-8") for p in (root / "src/styles").glob("*.css"))
 ids = re.findall(r"id:\s*['\"]([^'\"]+)['\"]", categories)
 assert len(ids) == 14 and len(set(ids)) == 14
 for page in ["ringkasan", "upload", "formulir", "matching", "dokumen"]:

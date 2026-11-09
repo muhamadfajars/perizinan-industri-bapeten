@@ -8,6 +8,8 @@ from .labels import _label
 from .constants import PROG, SUPP
 from ..protection.service import evaluate as evaluate_protection
 
+from ..management.service import evaluate as evaluate_management
+
 HANDLERS = {
     **{k: _program for k in PROG},
     **{k: _supp for k in SUPP},
@@ -18,4 +20,5 @@ HANDLERS = {
     "impor": _import,
     "label": _label,
     "proteksi": evaluate_protection,
+    "manajemen": evaluate_management,
 }
