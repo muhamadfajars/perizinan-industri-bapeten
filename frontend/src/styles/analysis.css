@@ -47,8 +47,8 @@
   justify-content: space-between;
   gap: 15px;
   padding: 18px;
-  background: linear-gradient(105deg, #f7fafe, #fff);
-  border: 1px solid #d7e1ef;
+  background: linear-gradient(105deg, var(--accent-pale, #f0f9ff), #fff);
+  border: 1px solid var(--accent-border, #9bdcf7);
   border-radius: 12px;
   margin: 17px 0 2px;
 }
@@ -59,7 +59,7 @@
 }
 
 .analysis-action-bar strong {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   font-size: 13px;
 }
 
@@ -73,7 +73,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
 }
 
 .analysis-readiness > svg {
@@ -146,7 +146,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   margin-bottom: 20px;
 }
 
@@ -175,7 +175,7 @@
 }
 
 .analysis-progress .progress-track > span {
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-text) 100%);
   transition: width 0.3s;
 }
 

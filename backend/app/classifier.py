@@ -1,39 +1,18 @@
-"""Two-layer document classifier for BAPETEN AI Evaluator.
-
-Layer 1: High-speed heuristic regex matching on filename patterns and personnel subtypes.
-Layer 2: Content inspection from the first few pages (digital text or fast OCR on page 1).
-"""
+"""Filename hints checked against bounded document content at upload time."""
 
 from __future__ import annotations
 
-import io
 import json
-import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Tuple, Optional
 
-import fitz  # PyMuPDF
-from PIL import Image
-
-try:
-    import pytesseract
-
-    _HAS_TESSERACT = True
-except ImportError:
-    _HAS_TESSERACT = False
-
-try:
-    import docx
-
-    _HAS_DOCX = True
-except ImportError:
-    _HAS_DOCX = False
+from .classification_reader import extract_document_text
 
 CATEGORIES = (
     "formulir",
     "proteksi",
-    "perawatan",
     "manajemen",
     "teknis",
     "personel",
@@ -59,6 +38,8 @@ NAME_PATTERNS: list[tuple[str, str, Optional[str]]] = [
 
 # Layer 2: Regex on extracted text content
 CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
+    (r"(?i)FOTO\s+(?:LABEL\s+)?(?:UNIT|TABUNG|GENERATOR)\b", "label", None),
+    (r"(?i)(?:[A-Z0-9-]+[ \t]+){0,2}RADIATION\s+SURVEY\s+CERTIFICATE", "paparan", None),
     # Formulir
     (
         r"(?i)FORMULIR\s+PERMOHONAN|BADAN\s+PENGAWAS\s+TENAGA\s+NUKLIR\s+.*PERMOHONAN",
@@ -69,12 +50,6 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     (
         r"(?i)PROGRAM\s+PROTEKSI\s+DAN\s+KESELAMATAN\s+RADIASI|PROGRAM\s+PROTEKSI\s+RADIASI",
         "proteksi",
-        None,
-    ),
-    # Perawatan
-    (
-        r"(?i)(?:DOKUMEN\s+)?PROGRAM\s+PERAWATAN\b|DOKUMEN\s+PERAWATAN\b",
-        "perawatan",
         None,
     ),
     # Manajemen
@@ -92,26 +67,26 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     # Personel
     (r"(?i)SURAT\s+KETERANGAN\s+KERJA", "personel", "Surat Keterangan Kerja"),
     (
-        r"(?i)SURAT\s+PENUNJUKAN\s+(?:TUGAS|(?:SEBAGAI\s+)?(?:PPR\b|PETUGAS\s+PROTEKSI(?:\s+RADIASI)?))|PENETAPAN\s+PEKERJA\s+RADIASI|PENUNJUKAN\s+(?:PPR\b|PETUGAS\s+PROTEKSI\s+RADIASI)|SURAT\s+KEPUTUSAN\s+PENUNJUKAN|PENGANGKATAN\s+PETUGAS\s+PROTEKSI",
+        r"(?i)SURAT\s+PENUNJUK{1,2}AN\s+(?:TUGAS|(?:SEBAGAI\s+)?(?:PPR\b|PETUGAS\s+PROTEKSI(?:\s+RADIASI)?))|PENETAPAN\s+PEKERJA\s+RADIASI|PENUNJUKAN\s+(?:PPR\b|PETUGAS\s+PROTEKSI\s+RADIASI)|SURAT\s+KEPUTUSAN\s+PENUNJUKAN|PENGANGKATAN\s+PETUGAS\s+PROTEKSI",
         "personel",
         "Surat Penunjukan Tugas",
     ),
     (r"(?i)SURAT\s+PERINTAH", "personel", "Surat Perintah"),
     (
-        r"(?i)SERTIFIKAT\s+KOMPETENSI|SERTIFIKAT\s+LULUS\s+UJI\s+KOMPETENSI",
+        r"(?i)SERTIFIKAT\s+PELATIHAN|TRAINING\s+CERTIFICATE|SAFETY\s+RADIATION\s+TRAINING",
         "personel",
-        "Sertifikat Kompetensi",
+        "Sertifikat Pelatihan",
+    ),
+    (
+        r"(?i)SERTIFIKAT\s+KOMPETENSI|SERTIFIKAT\s+LULUS\s+UJI\s+KOMPETENSI|COMPETENCY\s+CERTIFICATE",
+        "personel",
+        "Sertifikat Kompetensi PPR",
     ),
     (r"(?i)SURAT\s+IZIN\s+KERJA|SIKR\b", "personel", "Surat Izin Kerja"),
     (
-        r"(?i)SURAT\s+IZIN\s+BEKERJA\s+PETUGAS|SURAT\s+IZIN\s+BEKERJA\s+\(SIB\)|SIB\s+PPR",
+        r"(?i)(?:SURAT\s+)?IZIN\s+BEKERJA\s+PETUGAS|SURAT\s+IZIN\s+BEKERJA\s+\(SIB\)|SIB\s+PPR",
         "personel",
         "Surat Izin Bekerja (SIB)",
-    ),
-    (
-        r"(?i)SURAT\s+IZIN\s+PRAKTIK|SURAT\s+IZIN\s+PRAKTEK|DOKTER\s+SPESIALIS\s+RADIOLOGI",
-        "personel",
-        "Surat Izin Praktik (SIP)",
     ),
     (
         r"(?i)ZERO\s+CHECK|ZERO\s+CEK|(?:LAPORAN\s+)?(?:HASIL\s+)?(?:EVALUASI|PEMBACAAN)\s+DOSIS|LAPORAN\s+DOSIS|DOSIS\s+AWAL|DOSIS\s+RADIASI\s+TLD",
@@ -163,8 +138,8 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
 ]
 
 
-# Generic mentions must not outweigh an explicit document title (e.g. a program
-# filename mentioning SIP, or a zero-check report mentioning TLD).
+# Generic mentions must not outweigh an explicit document title (for example,
+# a protection program or a zero-check report mentioning TLD).
 WEAK_NAME_HINTS = set(_RULES["weakNameHints"])
 
 
@@ -197,41 +172,6 @@ def classify_by_filename(
     return None, None, None
 
 
-def extract_document_text(filename: str, file_bytes: bytes, max_pages: int = 3) -> str:
-    """Extract text from the first few pages of PDF, DOCX, or Image."""
-    ext = Path(filename).suffix.lower()
-    text = ""
-    if ext == ".pdf":
-        try:
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            for i in range(min(max_pages, len(doc))):
-                text += (doc[i].get_text() or "") + "\n"
-            # Fallback for scanned PDF: OCR page 1
-            if len(re.findall(r"[a-zA-Z]", text)) < 30 and len(doc) > 0 and _HAS_TESSERACT:
-                pix = doc[0].get_pixmap(dpi=130)
-                img = Image.open(io.BytesIO(pix.tobytes("png")))
-                tess_lang = os.environ.get("BAPETEN_TESS_LANG", "ind+eng")
-                ocr_text = pytesseract.image_to_string(img, lang=tess_lang)
-                text = (text + "\n" + ocr_text).strip()
-        except Exception:
-            pass
-    elif ext == ".docx" and _HAS_DOCX:
-        try:
-            d = docx.Document(io.BytesIO(file_bytes))
-            text = "\n".join([p.text for p in d.paragraphs[:40] if p.text.strip()])
-        except Exception:
-            pass
-    elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".webp") and _HAS_TESSERACT:
-        try:
-            img = Image.open(io.BytesIO(file_bytes))
-            tess_lang = os.environ.get("BAPETEN_TESS_LANG", "ind+eng")
-            text = pytesseract.image_to_string(img, lang=tess_lang)
-        except Exception:
-            pass
-
-    return text
-
-
 def classify_by_content(
     text: str,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
@@ -242,6 +182,59 @@ def classify_by_content(
     """
     if not text or len(text.strip()) < 10:
         return None, None, None
+    text = unicodedata.normalize("NFKC", text).replace("\u00ad", "")
+    # A real application form lists every supporting document. Those entries
+    # describe requirements, not additional document titles.
+    first = text.split("\f")[0]
+    if re.search(r"(?im)^\s*FORMULIR\s+PERMOHONAN", first[:1000]) and all(
+        re.search(pattern, first, re.I)
+        for pattern in (r"nomor\s+registrasi", r"lingkup\s+kegiatan", r"instansi")
+    ):
+        return "formulir", None, "Judul dan struktur Formulir Permohonan ditemukan"
+    # Prioritize the opening page, while retaining conflicts among personnel
+    # documents (e.g. SIB and certificate bundled in the same PDF).
+    page_results = []
+    if "\f" in text:
+        for page in text.split("\f"):
+            result = classify_by_content(page)
+            if result[0] or result[2]:
+                page_results.append(result)
+        if not page_results:
+            return None, None, None
+        first_result = page_results[0]
+        if first_result[0] == "personel" and any(
+            (r[0] == "personel" and r[1] != first_result[1]) or (not r[0] and r[2])
+            for r in page_results
+        ):
+            return (
+                None,
+                None,
+                "Beberapa jenis dokumen personel ditemukan dalam satu file. Perlu Pilih Kategori.",
+            )
+        return first_result
+    # Course syllabi list program/system titles; they are not those documents.
+    if re.search(
+        r"daftar\s+unit\s+kompetensi|mata\s+ajar|subjects\s+of\s+the\s+training", text[:1200], re.I
+    ):
+        return None, None, None
+    if (
+        re.search(
+            r"(?im)^\s*(?:SERTIFIKAT\s+PELATIHAN|TRAINING\s+CERTIFICATE|CERTIFICATE)\b", text[:1200]
+        )
+        and re.search(r"telah\s+mengikuti|has\s+participated|dengan\s+kualifikasi", text, re.I)
+        and re.search(r"radiasi|radiation|\bPPR\b|\boperator\b", text, re.I)
+    ):
+        if re.search(r"(?im)^\s*(?:SURAT\s+)?IZIN\s+BEKERJA\s+PETUGAS", text):
+            return (
+                None,
+                None,
+                "Sertifikat dan izin bekerja ditemukan bersama. Perlu Pilih Kategori.",
+            )
+        return (
+            "personel",
+            "Sertifikat Pelatihan",
+            "Judul sertifikat dan keterangan pelatihan personel ditemukan",
+        )
     candidates = {}
     # Require a heading at the start of a line. Mentions within narrative text
     # are not enough evidence to choose a document category.
@@ -249,6 +242,10 @@ def classify_by_content(
         for m in re.finditer(pattern, text):
             line_start = text.rfind("\n", 0, m.start()) + 1
             prefix = text[line_start : m.start()]
+            line_end = text.find("\n", m.end())
+            suffix = text[m.end() : line_end if line_end >= 0 else len(text)]
+            if re.search(r"\.{3,}|…|\s\d+\s*$", suffix):
+                continue
             if re.fullmatch(r"\s*(?:DOKUMEN\s+)?", prefix, re.IGNORECASE):
                 candidates[(cat, subtype)] = m.group(0)
     if len(candidates) == 1:
@@ -267,13 +264,13 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
     """Two-layer classification for a document.
 
     Layer 1: Filename heuristic analysis.
-    Layer 2: Content text extraction / OCR of first 3 pages.
+    Layer 2: Bounded content inspection of six opening pages, up to three OCR pages.
     """
     clean_name = Path(filename).name
 
-    # Layer 1
+    # Filename-only calls remain available, but uploaded bytes are always inspected.
     cat1, sub1, reason1 = classify_by_filename(clean_name)
-    if cat1:
+    if cat1 and file_bytes is None:
         return {
             "filename": clean_name,
             "category": cat1,
@@ -285,9 +282,33 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
 
     # Layer 2
     reason2 = None
-    if not reason1 and file_bytes and len(file_bytes) > 0:
-        text = extract_document_text(clean_name, file_bytes, max_pages=3)
+    if file_bytes:
+        try:
+            text = extract_document_text(clean_name, file_bytes, max_pages=6)
+        except Exception:
+            return {
+                "filename": clean_name,
+                "category": "unknown",
+                "subtype": None,
+                "layer": 0,
+                "confidence": 0.0,
+                "reason": "Isi dokumen belum dapat diperiksa (file rusak, terkunci, atau OCR gagal). Silakan pilih kategori.",
+            }
         cat2, sub2, reason2 = classify_by_content(text)
+        conflict = (
+            (reason1 and not cat1) or (reason2 and not cat2) or (cat1 and cat2 and cat1 != cat2)
+        )
+        if conflict:
+            return {
+                "filename": clean_name,
+                "category": "unknown",
+                "subtype": None,
+                "layer": 0,
+                "confidence": 0.0,
+                "reason": reason2
+                if reason2 and not cat2
+                else "Nama berkas dan/atau isi menunjukkan jenis dokumen berbeda. Perlu Pilih Kategori.",
+            }
         if cat2:
             return {
                 "filename": clean_name,
@@ -296,6 +317,15 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
                 "layer": 2,
                 "reason": reason2,
                 "confidence": 0.90,
+            }
+        if cat1:
+            return {
+                "filename": clean_name,
+                "category": cat1,
+                "subtype": sub1,
+                "layer": 1,
+                "confidence": 0.65,
+                "reason": f"{reason1}. Judul pada isi belum terkonfirmasi; periksa kategori.",
             }
 
     # Unknown

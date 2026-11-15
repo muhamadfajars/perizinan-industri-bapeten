@@ -32,7 +32,7 @@ test('late recognition success or failure cannot overwrite a manual choice', () 
 
 test('analysis requires exactly one reference form and at least one classified supporting document', () => {
   const form: UploadItem = { ...pending, id: 'form', category: 'formulir', isClassifying: false };
-  const support: UploadItem = { ...pending, category: 'perawatan', isClassifying: false };
+  const support: UploadItem = { ...pending, category: 'teknis', isClassifying: false };
   assert.match(analysisBlocker([])!, /Unggah/);
   assert.match(analysisBlocker([support])!, /Tambahkan 1 Formulir/);
   assert.match(analysisBlocker([form])!, /dokumen pendukung/);
@@ -40,4 +40,11 @@ test('analysis requires exactly one reference form and at least one classified s
   assert.equal(analysisBlocker([form, support]), null);
   assert.match(analysisBlocker([form, support, pending])!, /Sedang mengenali/);
   assert.match(analysisBlocker([form, support, { ...pending, isClassifying: false }])!, /Perlu Pilih Kategori/);
+});
+
+ test('obsolete personnel results require reclassification instead of creating duplicate options', () => {
+  const result = applyClassification(pending, { category: 'personel', subtype: 'Sertifikat Kompetensi', layer: 2, confidence: .9, reason: 'Old server' });
+  assert.equal(result.category, 'unknown');
+  assert.equal(result.subtype, undefined);
+  assert.match(classificationBlocker([{ ...pending, isClassifying: false, category: 'personel', subtype: 'Sertifikat Kompetensi' }])!, /Perlu Pilih Kategori/);
 });

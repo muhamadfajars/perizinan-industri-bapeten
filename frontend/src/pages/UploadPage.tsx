@@ -229,15 +229,10 @@ export function UploadPage({
                   </thead>
                   <tbody>
                     {reviewItems.map((item) => {
-                      const currentVal =
-                        item.category === 'personel'
-                          ? `personel:${item.subtype || PERSONNEL_TYPES[0]}`
-                          : item.category;
-
-                      const isCustomSubtype =
-                        item.category === 'personel' &&
-                        Boolean(item.subtype) &&
-                        !(PERSONNEL_TYPES as readonly string[]).includes(item.subtype!);
+                      const invalidSubtype = item.category === 'personel' &&
+                        !(PERSONNEL_TYPES as readonly string[]).includes(item.subtype ?? '');
+                      const currentVal = invalidSubtype ? 'unknown' :
+                        item.category === 'personel' ? `personel:${item.subtype}` : item.category;
 
                       return (
                         <tr
@@ -276,7 +271,7 @@ export function UploadPage({
                                 }
                               }}
                             >
-                              {item.category === 'unknown' && (
+                              {(item.category === 'unknown' || invalidSubtype) && (
                                 <option value="unknown" disabled>
                                   {item.isClassifying ? 'Mengenali…' : 'Perlu Pilih Kategori'}
                                 </option>
@@ -290,14 +285,7 @@ export function UploadPage({
                                           Personel: {t}
                                         </option>
                                       ))}
-                                      {isCustomSubtype && (
-                                        <option
-                                          key={`personel:${item.subtype}`}
-                                          value={`personel:${item.subtype}`}
-                                        >
-                                          Personel: {item.subtype}
-                                        </option>
-                                      )}
+
                                     </optgroup>
                                   );
                                 }

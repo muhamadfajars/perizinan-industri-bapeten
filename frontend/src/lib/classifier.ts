@@ -55,13 +55,7 @@ export function classifyByFilename(filename: string): ClassificationResult | nul
 }
 
 export async function classifyFile(file: File): Promise<ClassificationResult> {
-  // Layer 1: Instant client-side check
-  const layer1 = classifyByFilename(file.name);
-  if (layer1) {
-    return layer1;
-  }
-
-  // Layer 2: Send to backend for content inspection (digital text / OCR)
+  // Filename hints are provisional: verify every automatic upload against content.
   try {
     const res = await apiClassifyFile(file);
     return {

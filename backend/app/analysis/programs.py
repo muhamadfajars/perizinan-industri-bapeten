@@ -42,29 +42,6 @@ def _program(doc, app, ref):
             },
         )
     )
-    if doc["category"] == "perawatan":
-        maintenance = raw.get("maintenance") or {}
-        secs = maintenance.get("section") or []
-        sec = secs[0] if secs else {}
-        rows.append(
-            _row(
-                "Klausul Uji Kesesuaian",
-                "Subbab Uji Kesesuaian",
-                "Ditemukan" if sec else "",
-                "MATCH" if sec and sec.get("frequencies") and sec.get("parameters") else "REVIEW",
-                100 if sec and sec.get("frequencies") and sec.get("parameters") else None,
-                sec.get("page"),
-                "Subbab terbaca lintas halaman; periksa rincian di bawah tabel",
-                doc["id"],
-                detail={
-                    "type": "maintenance",
-                    "pages": sec.get("source_pages") or ([sec["page"]] if sec.get("page") else []),
-                    "heading": sec.get("heading") or "Uji Kesesuaian",
-                    "frequencies": sec.get("frequencies") or [],
-                    "parameters": sec.get("parameters") or [],
-                },
-            )
-        )
     if doc["category"] == "proteksi":
         for p in raw.get("personnel") or []:
             rows.append(

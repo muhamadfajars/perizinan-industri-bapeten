@@ -108,7 +108,7 @@ def _format_personnel_rows(parsed, validation, app, doc):
     from ..personnel_results import _unified_personnel_table
 
     dtype = _text(validation.get("document_type") or parsed.get("document_type")).upper()
-    if dtype in ("SIP", "SIB", "SPRINT"):
+    if dtype in ("SIB", "SPRINT"):
         original = _unified_personnel_table(validation, dtype, parsed.get("text") or "")
         rows = []
         for x in original:
@@ -180,10 +180,11 @@ def _personnel(doc, app, ref):
     )
     parsed = parse_personnel_documents(pages)
     kinds = {
-        "Surat Izin Praktik (SIP)": "SIP",
         "Surat Izin Bekerja (SIB)": "SIB",
         "Surat Perintah": "SPRINT",
         "Sertifikat Kompetensi": "COMPETENCE",
+        "Sertifikat Kompetensi PPR": "COMPETENCE",
+        "Sertifikat Pelatihan": "TRAINING",
         "Surat Izin Kerja": "WORK_PERMIT",
         "Surat Keterangan Kerja": "WORK_LETTER",
         "Surat Penunjukan Tugas": "ASSIGNMENT",
@@ -196,12 +197,17 @@ def _personnel(doc, app, ref):
             source["document_type"] = kinds[subtype]
     matches = validate_personnel_documents(parsed, app)
     results = []
+    from ..personnel_policy import conditional_rows
+    from ..personnel_semantic import enrich
+
     for source, match in zip(parsed, matches):
-        results.extend(_format_personnel_rows(source, match.get("validation") or {}, app, doc))
+        original = _format_personnel_rows(source, match.get("validation") or {}, app, doc)
+        rows = conditional_rows(source, original, app, doc)
+        results.extend(enrich(source, rows, app, doc))
     return results or [
         _row(
-            "Dokumen Personel",
-            "Bukti identitas/masa berlaku",
+            "Nama",
+            "Nama petugas pada formulir",
             "",
             "REVIEW",
             note="Tidak ada bukti terbaca",

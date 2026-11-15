@@ -44,6 +44,19 @@ def compact(text):
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 
+def law_key(kind, number, year):
+    kind = (
+        "UU"
+        if re.match(r"UU|Undang", kind, re.I)
+        else "PP"
+        if re.fullmatch(r"PP|Peraturan\s+Pemerintah", kind, re.I)
+        else "Perba"
+        if re.search(r"BAPETEN|Pengawas|PERBA|PERKA", kind, re.I)
+        else compact(kind)
+    )
+    return kind, str(int(number)), year
+
+
 def toc(text):
     return bool(
         re.search(r"daftar\s+isi", text[:1000], re.I) or len(re.findall(r"\.{4,}", text)) > 6
@@ -97,28 +110,23 @@ def legal_section(pages):
     return result
 
 
-def information(pages, make_row):
+def information(pages, make_row, *, semantic=None):
     from .dose import dose_statements
 
+    semantic = semantic or {}
     laws = {}
-    reference_pages = legal_section(pages)
+    reference_pages = semantic.get("legal_sections", legal_section(pages))
     for page in reference_pages:
         if toc(page["text"]):
             continue
         text = compact(page["text"])
         for match in LAW.finditer(text):
-            kind, number, year = match.groups()
-            kind = (
-                "UU"
-                if re.match(r"UU|Undang", kind, re.I)
-                else "PP"
-                if re.fullmatch(r"PP|Peraturan\s+Pemerintah", kind, re.I)
-                else "Perba"
-                if re.search(r"BAPETEN|Pengawas|PERBA|PERKA", kind, re.I)
-                else compact(kind)
-            )
-            laws.setdefault((kind, str(int(number)), year), []).append(
-                {"page": page["page"], "quote": text[match.start() : match.end() + 220]}
+            laws.setdefault(law_key(*match.groups()), []).append(
+                {
+                    "page": page["page"],
+                    "quote": text[match.start() : match.end() + 220],
+                    "method": page.get("method", "text"),
+                }
             )
     rows = []
     for key in [*REQUIRED_LAWS, *(k for k in laws if k not in REQUIRED_LAWS)]:
@@ -140,6 +148,11 @@ def information(pages, make_row):
                 required=key in REQUIRED_LAWS,
             )
         )
+        if not found and semantic.get("laws_review"):
+            rows[-1]["detail"].update(
+                review_required=True,
+                review_reason="Bagian referensi belum terbaca lengkap; periksa dokumen sumber.",
+            )
     topics = [
         ("Daerah Pengendalian", r"daerah\s+pengendalian|area\s+pengendalian", True),
         (
@@ -150,14 +163,17 @@ def information(pages, make_row):
         ("Pembatas Dosis", r"pembatas\s+dosis|nilai\s+batas\s+dosis|batas\s+dosis|\bNBD\b", False),
     ]
     for title, pattern, visual in topics:
-        found = snippets(pages, pattern) if visual else dose_statements(pages)
+        found = snippets(pages, pattern) if visual else semantic.get("dose", dose_statements(pages))
         if visual:
             diagrams = snippets(
                 pages,
-                r"Gambar\s+\d+[.\s]+(?:Pembagian\s+Daerah\s+Kerja|Daerah\s+(?:Pengendalian|Supervisi|Pengawasan))",
+                r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:Pembagian\s+Daerah\s+Kerja|(?:Daerah|Area|Zonasi)\s+(?:Pengendalian|Supervisi|Pengawasan|Kerja|Radiasi))|\b(?:Denah|Layout)\s+Ruang(?:an)?\b",
             )
-            found = [item for item in diagrams if item["has_visual"]]
-        if not visual:
+            candidates = [item for item in diagrams if item["has_visual"]]
+            # A generic floor plan is a candidate, not proof of both zone types.
+            confirmed = [item for item in candidates if re.search(pattern, item["quote"], re.I)]
+            found = confirmed or candidates
+        if not visual and not semantic.get("dose_review"):
             found = found[:1]
         if "dosis" in title.lower():
             note = "Pastikan angka batas dosis tidak melebihi Nilai Batas Dosis (NBD) ketentuan BAPETEN."
@@ -174,6 +190,17 @@ def information(pages, make_row):
                 images=visual,
             )
         )
+        if visual and found and not confirmed:
+            rows[-1]["observed"] = "Denah kandidat ditemukan; jenis daerah belum terkonfirmasi"
+            rows[-1]["detail"].update(
+                review_required=True,
+                review_reason="Periksa apakah gambar sumber memuat " + title.lower() + ".",
+            )
+        if not visual and semantic.get("dose_review"):
+            rows[-1]["detail"].update(
+                review_required=True,
+                review_reason="Pembatas dosis untuk operasi saat ini belum dapat dipastikan; periksa dokumen sumber.",
+            )
     approval = approval_evidence(pages)
     rows.append(
         make_row(
@@ -198,7 +225,7 @@ def approval_evidence(pages):
         if toc(text):
             continue
         if re.search(
-            r"lembar\s+pengesahan|(?:disetujui\s+oleh|mengesahkan).*?(?:nama|jabatan)|tanda\s+tangan.*?(?:nama|jabatan)",
+            r"lembar\s+pengesahan|(?:(?:disetujui|disahkan|mengetahui|ditetapkan)\s+oleh|mengesahkan).*?(?:nama|jabatan|direktur|pimpinan|kepala|manajer)|tanda\s+tangan.*?(?:nama|jabatan)",
             text,
             re.I,
         ):

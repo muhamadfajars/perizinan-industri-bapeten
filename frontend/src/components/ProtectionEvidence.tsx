@@ -61,6 +61,7 @@ export function ProtectionInformationSection({
 
   const requiredLaws = (rowsByTab.get('dasar-hukum') ?? []).filter((row) => row.detail?.required);
   const missingLaws = requiredLaws.filter((row) => !row.detail?.pages?.length);
+  const reviewLaws = requiredLaws.some((row) => row.detail?.review_required);
   const activeRows = rowsByTab.get(effectiveActiveTab) ?? [];
 
   return (
@@ -94,10 +95,14 @@ export function ProtectionInformationSection({
             role="status"
           >
             <strong>
-              {`${missingLaws.length ? 'Belum lengkap' : 'Lengkap'} — ${requiredLaws.length - missingLaws.length} dari 5 dasar hukum ditemukan`}
+              {`${reviewLaws ? 'Perlu diperiksa' : missingLaws.length ? 'Belum lengkap' : 'Lengkap'} — ${requiredLaws.length - missingLaws.length} dari 5 dasar hukum ditemukan`}
             </strong>
             {missingLaws.length > 0 && (
-              <p>Periksa peraturan berlabel “Belum ditemukan” pada dokumen sumber.</p>
+              <p>
+                {reviewLaws
+                  ? 'Pembacaan referensi belum lengkap; periksa dokumen sumber.'
+                  : 'Periksa peraturan berlabel “Belum ditemukan” pada dokumen sumber.'}
+              </p>
             )}
           </div>
         )}
@@ -202,9 +207,18 @@ export function ProtectionEvidence({
       <div className="protection-evidence-heading">
         <h4>{compact && law ? regulationDisplayTitle(row.field) : protectionFieldLabel(row)}</h4>
       </div>
-      {compact && <EvidenceStatus found={pages.length > 0} />}
+      {compact && (
+        <EvidenceStatus
+          found={pages.length > 0}
+          review={row.detail?.review_required}
+          foundLabel={row.detail?.group === 'Pengesahan' ? 'Halaman pengesahan ditemukan' : 'Ditemukan'}
+        />
+      )}
+      {compact && row.detail?.review_required && (
+        <p className="protection-note">{row.detail.review_reason}</p>
+      )}
       {compact && row.detail?.group === 'Pengesahan' && (
-        <p className="protection-note">Periksa tanda tangan pada gambar sumber.</p>
+        <p className="protection-note">Periksa keberadaan tanda tangan pada dokumen sumber.</p>
       )}
       {!compact && (
         <>

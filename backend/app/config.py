@@ -17,7 +17,6 @@ if _ENV_FILE.is_file():
 CATEGORIES = {
     "formulir",
     "proteksi",
-    "perawatan",
     "manajemen",
     "teknis",
     "personel",

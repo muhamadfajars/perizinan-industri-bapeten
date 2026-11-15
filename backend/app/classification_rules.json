@@ -8,18 +8,13 @@
       "subtype": null
     },
     {
-      "pattern": "surat[\\s_-]*penunjukan[\\s_-]*(?:tugas|(?:sebagai[\\s_-]*)?(?:ppr|petugas[\\s_-]*proteksi(?:[\\s_-]*radiasi)?))(?![a-z0-9])|(?:sk[\\s_-]*)?penetapan[\\s_-]*pekerja[\\s_-]*radiasi|penunjukan[\\s_-]*(?:ppr(?![a-z0-9])|petugas[\\s_-]*proteksi[\\s_-]*radiasi)|sk[\\s_-]*penunjukan|pengangkatan.*ppr",
+      "pattern": "surat[\\s_-]*penunjuk{1,2}an[\\s_-]*(?:tugas|(?:sebagai[\\s_-]*)?(?:ppr|petugas[\\s_-]*proteksi(?:[\\s_-]*radiasi)?))(?![a-z0-9])|(?:sk[\\s_-]*)?penetapan[\\s_-]*pekerja[\\s_-]*radiasi|penunjuk{1,2}an[\\s_-]*(?:ppr(?![a-z0-9])|petugas[\\s_-]*proteksi[\\s_-]*radiasi)|sk[\\s_-]*penunjuk{1,2}an|pengangkatan.*ppr",
       "category": "personel",
       "subtype": "Surat Penunjukan Tugas"
     },
     {
       "pattern": "program[\\s_-]*proteksi|proteksi[\\s_-]*radiasi|ppkr|keselamatan[\\s_-]*radiasi",
       "category": "proteksi",
-      "subtype": null
-    },
-    {
-      "pattern": "(?:program|dokumen)[\\s_-]*perawatan|perawatan[\\s_-]*(?:pesawat|fasilitas)|maintenance[\\s_-]*program|pemeliharaan",
-      "category": "perawatan",
       "subtype": null
     },
     {
@@ -43,9 +38,14 @@
       "subtype": "Surat Perintah"
     },
     {
-      "pattern": "sertifikat.*(?:kompetensi|ppr|lulus)",
+      "pattern": "sertifikat.*(?:pelatihan|training)|sertifikat[\\s_-]*pekerja(?:\\.|[\\s_-]|$)",
       "category": "personel",
-      "subtype": "Sertifikat Kompetensi"
+      "subtype": "Sertifikat Pelatihan"
+    },
+    {
+      "pattern": "sertifikat.*(?:kompetensi|lulus)",
+      "category": "personel",
+      "subtype": "Sertifikat Kompetensi PPR"
     },
     {
       "pattern": "sikr\\b|surat[\\s_-]*izin[\\s_-]*kerja",
@@ -56,11 +56,6 @@
       "pattern": "data[\\s_-]*sib|kartu[\\s_-]*sib|sib\\b|izin[\\s_-]*bekerja",
       "category": "personel",
       "subtype": "Surat Izin Bekerja (SIB)"
-    },
-    {
-      "pattern": "sipr?\\b|dr\\.?[\\s_-]*[a-z]+[\\s_-]*sp\\.?rad|surat[\\s_-]*izin[\\s_-]*prakt?ik",
-      "category": "personel",
-      "subtype": "Surat Izin Praktik (SIP)"
     },
     {
       "pattern": "evaluasi[\\s_-]*dosis|pembacaan[\\s_-]*dosis|laporan[\\s_-]*dosis|dosis[\\s_-]*awal|zero[\\s_-]*check|zerocheck|zero[\\s_-]*cek",
@@ -109,14 +104,11 @@
     }
   ],
   "weakNameHints": [
-    "sip",
-    "sipr",
     "sib",
     "tld",
     "osl",
     "dosimeter",
     "proteksi radiasi",
-    "keselamatan radiasi",
-    "pemeliharaan"
+    "keselamatan radiasi"
   ]
 }

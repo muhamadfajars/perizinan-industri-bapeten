@@ -14,6 +14,8 @@ import os
 import re
 import tempfile
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from threading import Lock
@@ -30,18 +32,18 @@ def settings():
     available = (
         len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
     )
-    # 80 logical CPUs: 20 workers x 4 model threads by default.
-    threads = max(1, int(os.getenv("BAPETEN_OCR_CPU_THREADS", "4")))
+    # Shared development nodes must not claim every CPU by default.
+    threads = min(available, max(1, int(os.getenv("BAPETEN_OCR_CPU_THREADS", "2"))))
     target = max(
         1,
         int(
             os.getenv(
                 "BAPETEN_OCR_PROCESSES",
-                str(max(1, (available + threads - 1) // threads)),
+                str(min(4, max(1, available // threads))),
             )
         ),
     )
-    workers = min(target, available)
+    workers = min(target, max(1, available // threads))
     return workers, threads, available
 
 
@@ -212,7 +214,12 @@ def cache_key(doc, reference_digest, source_digest):
         "source": source_digest,
         "ocr_profile": os.getenv("BAPETEN_OCR_PROFILE", "fast"),
         "engine": os.getenv("BAPETEN_OCR_ENGINE", "auto"),
-        "protection": protection_digest() if doc["category"] in ("proteksi", "manajemen") else None,
+        "protection": protection_digest()
+        if doc["category"] in ("proteksi", "manajemen", "personel")
+        else None,
+        "personnel_date": datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat()
+        if doc["category"] == "personel"
+        else None,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -281,7 +288,7 @@ def process_support(doc, application, reference, key):
                 "seconds": round(time.perf_counter() - start, 3),
             }
     path_override = None
-    effective_doc = doc
+    effective_doc = {**doc}
     try:
         if Path(doc["filename"]).suffix.lower() == ".docx":
             from src.extraction.office_conversion import (
@@ -303,6 +310,7 @@ def process_support(doc, application, reference, key):
     duration = round(time.perf_counter() - start, 3)
     if (
         rows
+        and not effective_doc.get("_uncacheable")
         and not any(r.get("field") == "Catatan pembacaan" for r in rows)
         and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1"
     ):

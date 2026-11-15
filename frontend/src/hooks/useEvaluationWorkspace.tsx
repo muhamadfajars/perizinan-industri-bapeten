@@ -17,6 +17,7 @@ import { categoryById } from '../data/categories';
 import { monitorAnalysis, retryRead } from '../lib/analysisMonitor';
 import { matchingTotals, sortMatchingSections } from '../lib/matching';
 import { rowMatchesFilter } from '../lib/matchingDisplay';
+import { administrationDocuments } from '../lib/presentation';
 import { analysisBlocker } from '../lib/uploadState';
 import type { CategoryId, MatchRow, MatchSection, UploadItem } from '../types/models';
 import { PERSONNEL_TYPES } from '../types/models';
@@ -44,7 +45,16 @@ export function useEvaluationWorkspace() {
   );
   const [backendError, setBackendError] = useState('');
   const displayForm = result?.form_reference ?? null;
-  const displaySections = useMemo(() => sortMatchingSections(result?.matching_sections ?? []), [result]);
+  const displaySections = useMemo(
+    () =>
+      sortMatchingSections(result?.matching_sections ?? []).map((section) => ({
+        ...section,
+        rows: section.rows.filter(
+          (row) => row.detail?.group !== 'Catatan pembacaan' && row.field !== 'Catatan pembacaan',
+        ),
+      })),
+    [result],
+  );
   const [mobileNav, setMobileNav] = useState(false);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [showUnclassified, setShowUnclassified] = useState(false);
@@ -56,11 +66,21 @@ export function useEvaluationWorkspace() {
   const [filter, setFilter] = useState<Filter>('ALL');
   const [selectedDetail, setSelectedDetail] = useState<{ row: MatchRow; section: MatchSection } | null>(null);
   const [docSearch, setDocSearch] = useState('');
-  const [formOpen, setFormOpen] = useState({ facility: true, personnel: true, equipment: true });
+  const [formOpen, setFormOpen] = useState({
+    facility: true,
+    administration: true,
+    personnel: true,
+    equipment: true,
+  });
   const formNeedsReview = useMemo(() => {
     const missing = (value?: string) => !value?.trim() || ['—', '-'].includes(value.trim());
+    const adminDocs = administrationDocuments(displayForm);
     return {
       facility: Boolean(displayForm && (missing(displayForm.facility) || missing(displayForm.address))),
+      administration: Boolean(
+        displayForm &&
+        (!adminDocs.length || adminDocs.some((doc) => missing(doc.number) || missing(doc.date))),
+      ),
       personnel: Boolean(
         displayForm &&
         (!displayForm.personnel.length ||
@@ -83,7 +103,7 @@ export function useEvaluationWorkspace() {
     };
   }, [displayForm]);
   useEffect(() => {
-    setFormOpen({ facility: true, personnel: true, equipment: true });
+    setFormOpen({ facility: true, administration: true, personnel: true, equipment: true });
   }, [formNeedsReview]);
   const toggleForm = (section: keyof typeof formOpen) =>
     setFormOpen((previous) => ({ ...previous, [section]: !previous[section] }));

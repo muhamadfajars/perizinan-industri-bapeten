@@ -8,13 +8,24 @@ import ts from 'typescript';
 const source = readFileSync(new URL('../src/lib/classifier.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } });
 const sharedRules = JSON.parse(readFileSync(new URL('../../backend/app/classification_rules.json', import.meta.url), 'utf8'));
+let apiCalls = 0;
 const sandbox = { exports: {}, require: name => {
   if (name === '../../../backend/app/classification_rules.json') return { default: sharedRules };
-  if (name === '../api') return { classifyFile: () => { throw new Error('Unexpected API call'); } };
+  if (name === '../api') return { classifyFile: async () => {
+    apiCalls++;
+    return { category: 'unknown', layer: 0, confidence: 0, reason: 'Nama dan isi berbeda' };
+  } };
   throw new Error(`Unexpected import: ${name}`);
 } };
 vm.runInNewContext(compiled.outputText, sandbox);
 const classify = sandbox.exports.classifyByFilename;
+
+test('recognized filenames still require content verification', async () => {
+  const before = apiCalls;
+  const result = await sandbox.exports.classifyFile({ name: 'Program Proteksi.pdf' });
+  assert.equal(apiCalls, before + 1);
+  assert.equal(result.category, 'unknown');
+});
 
 test('shared rules match the filename regression baseline', () => {
   const baseline = JSON.parse(readFileSync(new URL('../../backend/tests/fixtures/classification_filename_baseline.json', import.meta.url), 'utf8'));
@@ -59,21 +70,20 @@ test('unrelated names still need a category', () => {
   }
 });
 
-test('worker appointment and facility maintenance variants are recognized', () => {
+test('worker appointment variants are recognized and removed categories stay unclassified', () => {
   for (const name of ['20260818155148-SK PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN PPR.pdf',
     'SK_PENETAPAN_PEKERJA_RADIASI.pdf', 'Penunjukan Petugas Proteksi Radiasi.pdf']) {
     assert.equal(classify(name)?.category, 'personel', name);
     assert.equal(classify(name)?.subtype, 'Surat Penunjukan Tugas', name);
   }
-  for (const name of ['20261005140905-dokumen perawatan Fasilitas Radiodiagnostik MABA mobile.pdf',
-    'DOKUMEN_PERAWATAN_MOBILE.pdf', 'perawatan fasilitas.pdf']) {
-    assert.equal(classify(name)?.category, 'perawatan', name);
+  for (const name of ['DOKUMEN_PERAWATAN_MOBILE.pdf', 'perawatan fasilitas.pdf', 'SIP dokter.pdf']) {
+    assert.equal(classify(name), null, name);
   }
 });
 
 test('conflicting categories or personnel subtypes require manual selection', () => {
-  for (const name of ['PROGRAM PROTEKSI DAN PROGRAM PERAWATAN.pdf',
-    'SIP dan SIB.pdf', 'dokumen perawatan dan spesifikasi alat.pdf']) {
+  for (const name of ['PROGRAM PROTEKSI DAN SPESIFIKASI ALAT.pdf',
+    'Sertifikat Pelatihan dan Surat Keterangan Kerja.pdf']) {
     assert.equal(classify(name)?.category, 'unknown', name);
     assert.equal(classify(name)?.confidence, 0, name);
   }

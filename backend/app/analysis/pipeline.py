@@ -144,7 +144,7 @@ def analyze_application(aid, progress):
                 detail = fut.result()
                 rows = (
                     detail["rows"]
-                    if d["category"] in ("proteksi", "manajemen")
+                    if d["category"] in ("proteksi", "manajemen", "personel")
                     else finalize_legacy_rows(detail["rows"], d)
                 )
                 timings.append(
@@ -252,6 +252,9 @@ def analyze_application(aid, progress):
     if label_coordinator is not None:
         label_coordinator.shutdown(wait=True)
     sections = [completed[i] for i in sorted(completed)]
+    from ..personnel_policy import group_sections
+
+    sections = group_sections(sections)
     duration = round(time.perf_counter() - started, 3)
     return {
         "application_id": aid,

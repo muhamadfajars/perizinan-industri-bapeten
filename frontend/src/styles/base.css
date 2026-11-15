@@ -37,7 +37,7 @@ button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 [tabindex='0']:focus-visible {
-  outline: 3px solid #529988;
+  outline: 3px solid var(--accent, #87ceeb);
   outline-offset: 3px;
 }
 

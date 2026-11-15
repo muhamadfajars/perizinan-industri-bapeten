@@ -3,7 +3,6 @@ export type MatchStatus = 'MATCH' | 'REVIEW' | 'MISMATCH' | 'MISSING' | 'INFO';
 export type CategoryId =
   | 'formulir'
   | 'proteksi'
-  | 'perawatan'
   | 'manajemen'
   | 'teknis'
   | 'personel'
@@ -51,8 +50,12 @@ export type MatchRow = {
   document_id?: string;
   quote?: string;
   detail?: {
-    type: 'approval' | 'maintenance' | 'protection' | 'management';
+    type: 'approval' | 'maintenance' | 'protection' | 'management' | 'personnel';
+    source_label?: string;
+    source_filename?: string;
     topics?: { label: string; found: boolean }[];
+    review_required?: boolean;
+    review_reason?: string;
     group?: string;
     person_id?: string;
     person_name?: string;
@@ -64,6 +67,8 @@ export type MatchRow = {
     heading?: string;
     frequencies?: string[];
     parameters?: string[];
+    shared_document?: boolean;
+    co_owners?: string[];
   } | null;
 };
 
@@ -85,21 +90,26 @@ export type Equipment = {
   tipe_tabung: string;
   nomor_seri_tabung: string;
 };
+export type AdministrationDocument = { document: string; number?: string; date?: string };
+
 export type FormReference = {
   facility: string;
   address: string;
   applicationNumber?: string;
+  activityScope?: string;
   institution?: string;
   protectionDocument?: { number?: string; date?: string };
+  managementDocument?: { number?: string; date?: string };
+  administrationDocuments?: AdministrationDocument[];
   personnel: Person[];
   equipment: Equipment[];
 };
 
 export const PERSONNEL_TYPES = [
-  'Surat Izin Praktik (SIP)',
   'Surat Izin Bekerja (SIB)',
   'Surat Perintah',
-  'Sertifikat Kompetensi',
+  'Sertifikat Kompetensi PPR',
+  'Sertifikat Pelatihan',
   'Surat Izin Kerja',
   'Surat Keterangan Kerja',
   'Surat Penunjukan Tugas',

@@ -44,10 +44,16 @@ function ManagementCard({ row, open }: { row: MatchRow; open: (page: number) => 
   return (
     <article className="protection-evidence protection-evidence-compact">
       <h4>{row.field}</h4>
-      <EvidenceStatus found={found} partial={partial} />
+      <EvidenceStatus
+        found={found}
+        partial={partial}
+        review={row.detail?.review_required}
+        foundLabel={row.detail?.group === 'Pengesahan' ? 'Halaman pengesahan ditemukan' : 'Ditemukan'}
+      />
+      {row.detail?.review_required && <p className="protection-note">{row.detail.review_reason}</p>}
       <p className="protection-note">
         {row.detail?.group === 'Pengesahan'
-          ? 'Periksa tanda tangan pada gambar sumber.'
+          ? 'Periksa keberadaan tanda tangan pada dokumen sumber.'
           : 'Status menunjukkan keberadaan penjelasan, bukan penilaian penerapannya.'}
       </p>
       {pages.length > 0 && (

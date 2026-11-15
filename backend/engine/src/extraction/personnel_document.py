@@ -158,7 +158,8 @@ def ocr_personnel_document(
 
             with pymupdf.open(file_path) as document:
                 for index, page in enumerate(document):
-                    native = page.get_text("text", sort=True)
+                    # Stream order preserves multi-column certificate/permit blocks without interleaving signers.
+                    native = page.get_text("text", sort=False)
                     if len(native.strip()) >= 25:
                         native_by_page[index + 1] = native
         except (OSError, ValueError, RuntimeError):
@@ -168,6 +169,11 @@ def ocr_personnel_document(
 
     for page_data in pages:
         ocr_result = extract_ocr(page_data["image"])
+        recipient_unreadable = False
+        if page_data['page'] <= 2 and not native_by_page.get(page_data['page']):
+            from src.extraction.personnel_ocr_retry import retry_recipient
+
+            ocr_result, recipient_unreadable = retry_recipient(page_data['image'], ocr_result)
 
         results.append(
             {
@@ -177,6 +183,7 @@ def ocr_personnel_document(
                 "page": page_data["page"],
                 "image": page_data["image"],
                 "ocr": ocr_result,
+                "recipient_unreadable": recipient_unreadable,
                 "native_text": native_by_page.get(page_data["page"], ""),
             }
         )

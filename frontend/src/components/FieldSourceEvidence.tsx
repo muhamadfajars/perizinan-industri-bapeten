@@ -34,9 +34,11 @@ export function FieldSourceEvidence({
           documentId={row.document_id}
           page={page}
           title={
-            row.detail?.person_id
-              ? `Petugas ${row.detail.person_id} — ${row.detail.field_label}`
-              : protectionFieldLabel(row)
+            row.detail?.type === 'personnel'
+              ? `${row.detail.person_name ?? 'Petugas belum teridentifikasi'} — ${row.field}`
+              : row.detail?.person_id
+                ? `Petugas ${row.detail.person_id} — ${row.detail.field_label}`
+                : protectionFieldLabel(row)
           }
           loadDocument={loadDocument}
           openExternal={openDocument}

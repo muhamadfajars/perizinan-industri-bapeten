@@ -179,7 +179,7 @@ def _unified_personnel_table(validation, document_type, document_text=""):
 
     person = validation.get("employee") or {}
     best = person.get("best") or {}
-    if document_type in ("SIP", "SIB"):
+    if document_type == "SIB":
         expected_name = best.get("name")
         from src.matching.personnel_comparison import compact_person_quote
 
@@ -221,20 +221,6 @@ def _unified_personnel_table(validation, document_type, document_text=""):
             _personnel_field_status(es, observed_expertise, person.get("status"), threshold=85),
         )
 
-        if document_type == "SIP":
-            place = validation.get("practice_place") or {}
-            expected = place.get("expected")
-            from src.matching.personnel_evidence import find_address
-
-            observed, score = find_address(document_text, expected)
-            add(
-                "Tempat Praktik / Alamat Proyek",
-                expected,
-                observed,
-                score,
-                "MATCH" if score is not None and score >= 85 else "REVIEW",
-            )
-
         validity = validation.get("validity") or {}
         exp = validity.get("expiry_date")
         add(
@@ -248,17 +234,6 @@ def _unified_personnel_table(validation, document_type, document_text=""):
             if validity.get("expiry_status") == "EXPIRED"
             else "REVIEW",
         )
-        if document_type == "SIP":
-            approval = validation.get("approval") or {}
-            detected = approval.get("status") == "DETECTED"
-            add(
-                "Pengesahan",
-                "Bukti pengesahan",
-                "Indikasi pengesahan ditemukan" if detected else "—",
-                100 if detected else None,
-                "MATCH" if detected else "REVIEW",
-            )
-
     elif document_type == "SPRINT":
         assigned = validation.get("assigned_person") or {}
         expected = assigned.get("name")

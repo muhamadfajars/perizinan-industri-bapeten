@@ -14,12 +14,6 @@ export const CATEGORIES: DocumentCategory[] = [
     description: 'Identitas fasilitas, personel, alat, pengesahan',
   },
   {
-    id: 'perawatan',
-    name: 'Dokumen Program Perawatan',
-    icon: 'wrench',
-    description: 'Fasilitas, pengesahan, klausul uji kesesuaian',
-  },
-  {
     id: 'manajemen',
     name: 'Dokumen Sistem Manajemen',
     icon: 'settings',
@@ -35,7 +29,7 @@ export const CATEGORIES: DocumentCategory[] = [
     id: 'personel',
     name: 'Dokumen Personel',
     icon: 'users',
-    description: 'SIP, SIB, surat perintah, kompetensi, dll.',
+    description: 'SIB, sertifikat kompetensi PPR, pelatihan, dan penugasan',
     requiresSubtype: true,
   },
   {

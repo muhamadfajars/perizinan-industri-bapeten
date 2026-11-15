@@ -109,7 +109,11 @@ export type ClassifyResponse = {
 export function classifyFile(file: File) {
   const data = new FormData();
   data.append('file', file);
-  return request<ClassifyResponse>('/api/v1/classify', { method: 'POST', body: data });
+  return request<ClassifyResponse>('/api/v1/classify', {
+    method: 'POST',
+    body: data,
+    signal: AbortSignal.timeout(90000),
+  });
 }
 export function deleteFile(aid: string, did: string) {
   return request<{ deleted: boolean }>(`/api/v1/applications/${aid}/documents/${did}`, { method: 'DELETE' });

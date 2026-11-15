@@ -7,7 +7,7 @@
 }
 
 .eyebrow {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   letter-spacing: 1px;
   font-size: 11px;
   font-weight: 700;
@@ -31,7 +31,7 @@ h1 {
 }
 
 h1 span {
-  color: var(--accent);
+  color: var(--accent-strong, #0369a1);
 }
 
 .page-hero h1,
@@ -46,7 +46,7 @@ h1 span {
 }
 
 .hero-scope-subtitle {
-  color: var(--accent);
+  color: var(--accent-strong, #0369a1);
   font-size: clamp(18px, 1.5vw, 22px);
   line-height: 1.35;
   margin: 0 0 22px;
@@ -78,18 +78,21 @@ h1 span {
 
 .button-primary {
   background: linear-gradient(115deg, var(--accent-light) 0%, var(--accent) 100%);
-  color: #fff;
-  box-shadow: 0 5px 13px rgba(var(--accent-rgb), 0.2);
+  color: var(--accent-contrast, #0c2b3a);
+  border-color: rgba(3, 105, 161, 0.2);
+  font-weight: 700;
+  box-shadow: 0 5px 13px rgba(var(--accent-rgb), 0.28);
 }
 
 .button-primary:hover {
-  filter: brightness(0.97);
+  background: linear-gradient(115deg, var(--accent) 0%, var(--accent-pressed) 100%);
+  border-color: rgba(3, 105, 161, 0.32);
   transform: translateY(-1px);
-  box-shadow: 0 7px 16px rgba(var(--accent-rgb), 0.28);
+  box-shadow: 0 7px 16px rgba(var(--accent-rgb), 0.36);
 }
 
 .button-soft {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   background: var(--accent-soft);
   border-color: var(--accent-border);
 }
@@ -99,7 +102,7 @@ h1 span {
 }
 
 .button-new-evaluation {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   background: #fff;
   border: 1.5px solid var(--accent);
   font-weight: 700;

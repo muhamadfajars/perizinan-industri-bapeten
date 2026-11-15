@@ -1,4 +1,14 @@
-import type { CategoryId, MatchSection } from '../types/models';
+import type { CategoryId, MatchRow, MatchSection } from '../types/models';
+
+export function isPersonnelInformation(row: MatchRow): boolean {
+  return (
+    row.field !== 'Nama' &&
+    (['Masa Berlaku', 'Pengesahan', 'Jenis Dokumen'].includes(row.field) ||
+      !row.expected?.trim() ||
+      ['—', '-'].includes(row.expected.trim()) ||
+      row.status === 'INFO')
+  );
+}
 
 const MATCHING_CATEGORY_ORDER: readonly CategoryId[] = [
   'proteksi',
@@ -9,7 +19,6 @@ const MATCHING_CATEGORY_ORDER: readonly CategoryId[] = [
   'spesifikasi',
   'label',
   'impor',
-  'perawatan',
   'kesesuaian',
   'fungsi',
   'paparan',
@@ -27,13 +36,18 @@ export function sortMatchingSections(sections: readonly MatchSection[]): MatchSe
 }
 
 export function matchingTotals(sections: MatchSection[]) {
-  const rows = sections.flatMap((x) => x.rows);
+  const allRows = sections.flatMap((x) =>
+    x.rows.filter((r) => x.category !== 'personel' || r.field !== 'Jenis Dokumen'),
+  );
+  const rows = sections.flatMap((x) =>
+    x.rows.filter((r) => x.category !== 'personel' || !isPersonnelInformation(r)),
+  );
   const match = rows.filter((x) => x.status === 'MATCH').length;
   const review = rows.filter((x) => x.status === 'REVIEW').length;
   const mismatch = rows.filter((x) => x.status === 'MISMATCH').length;
   const missing = rows.filter((x) => x.status === 'MISSING').length;
-  const info = rows.filter((x) => x.status === 'INFO').length;
-  const compared = rows.length - info;
+  const info = allRows.length - rows.filter((x) => x.status !== 'INFO').length;
+  const compared = rows.filter((x) => x.status !== 'INFO').length;
   return {
     match,
     review,
@@ -41,7 +55,24 @@ export function matchingTotals(sections: MatchSection[]) {
     missing,
     info,
     compared,
-    total: rows.length,
+    total: allRows.length,
     percentage: compared ? Math.round((match / compared) * 1000) / 10 : 0,
   };
+}
+
+export function isSectionExpanded(
+  openMap: Record<string, boolean>,
+  sectionId: string,
+  index: number,
+): boolean {
+  return openMap[sectionId] ?? index === 0;
+}
+
+export function nextToggleAllSections(
+  sections: readonly Pick<MatchSection, 'id'>[],
+  openMap: Record<string, boolean>,
+): Record<string, boolean> {
+  const allOpen = sections.length > 0 && sections.every((s, i) => isSectionExpanded(openMap, s.id, i));
+  const target = !allOpen;
+  return Object.fromEntries(sections.map((s) => [s.id, target]));
 }

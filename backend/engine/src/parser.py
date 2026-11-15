@@ -29,9 +29,14 @@ def parse_application(pdf_path):
         "personnel": [],
         "equipment": [],
     }
-    from .extraction.form_administration import extract_administration, administration_from_table
+    from .extraction.form_administration import (
+        extract_administration,
+        administration_from_table,
+        administration_documents_from_table,
+    )
 
     result["administration"] = extract_administration(full_text)
+    admin_table_documents = []
 
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
@@ -40,6 +45,10 @@ def parse_application(pdf_path):
             for table in tables:
                 if not table:
                     continue
+
+                table_docs = administration_documents_from_table(table)
+                if table_docs:
+                    admin_table_documents.extend(table_docs)
 
                 admin = administration_from_table(table)
                 if admin:
@@ -63,6 +72,9 @@ def parse_application(pdf_path):
                     result["equipment"].extend(parse_equipment_continuation_table(table))
 
                     continue
+
+    if admin_table_documents:
+        result["administration"]["documents"] = admin_table_documents
 
     if not result["equipment"]:
         # A scanned table requires an independently validated OCR-table parser.

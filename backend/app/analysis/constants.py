@@ -3,7 +3,6 @@ from __future__ import annotations
 
 NAMES = {
     "proteksi": "Program Proteksi Radiasi",
-    "perawatan": "Program Perawatan",
     "manajemen": "Sistem Manajemen",
     "teknis": "Dokumen Teknis",
     "personel": "Dokumen Personel",
@@ -20,7 +19,6 @@ NAMES = {
 
 PROG = {
     "proteksi": "program_protection_upload",
-    "perawatan": "program_maintenance_upload",
     "manajemen": "management_system_upload",
     "teknis": "technical_documents_upload",
 }

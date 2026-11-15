@@ -1,6 +1,7 @@
-import { Home, Info, Layers3, UsersRound } from 'lucide-react';
+import { FileText, Home, Info, Layers3, UsersRound } from 'lucide-react';
 import { Accordion, DataPair, SectionHeading } from '../components/Common';
 import type { EvaluationWorkspace } from '../hooks/useEvaluationWorkspace';
+import { administrationDocuments } from '../lib/presentation';
 
 type Props = Pick<
   EvaluationWorkspace,
@@ -8,6 +9,7 @@ type Props = Pick<
 >;
 
 export function FormPage({ active, displayForm, formNeedsReview, formOpen, toggleForm, reviewBadge }: Props) {
+  const adminDocuments = administrationDocuments(displayForm);
   return (
     <section className="page-section" id="formulir" hidden={active !== 'formulir'}>
       <SectionHeading
@@ -58,13 +60,48 @@ export function FormPage({ active, displayForm, formNeedsReview, formOpen, toggl
         >
           <div className="facility-info">
             <DataPair label="Nama instansi" value={displayForm?.institution || '—'} />
+            <DataPair label="Lingkup kegiatan" value={displayForm?.activityScope || '—'} />
             <DataPair label="Alamat" value={displayForm?.address || '—'} />
-            <DataPair label="Nomor Program Proteksi" value={displayForm?.protectionDocument?.number || '—'} />
-            <DataPair
-              label="Tanggal pengesahan Program Proteksi"
-              value={displayForm?.protectionDocument?.date || '—'}
-            />
+            {displayForm?.applicationNumber && (
+              <DataPair label="Nomor registrasi" value={displayForm.applicationNumber} />
+            )}
           </div>
+        </Accordion>
+        <Accordion
+          title="Kelengkapan Administrasi"
+          icon={<FileText size={20} />}
+          open={formOpen.administration}
+          onToggle={() => toggleForm('administration')}
+          count={reviewBadge(formNeedsReview.administration)}
+        >
+          {!adminDocuments.length ? (
+            <p>
+              {displayForm
+                ? 'Data dokumen administrasi belum terbaca. Periksa dokumen formulir.'
+                : 'Belum ada hasil analisis formulir.'}
+            </p>
+          ) : (
+            <div className="table-scroll">
+              <table className="form-docs-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Dokumen</th>
+                    <th scope="col">Nomor Dokumen</th>
+                    <th scope="col">Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminDocuments.map((doc, idx) => (
+                    <tr key={`${doc.document}-${idx}`}>
+                      <td>{doc.document}</td>
+                      <td className={doc.number?.trim() ? '' : 'empty-observed'}>{doc.number || '—'}</td>
+                      <td className={doc.date?.trim() ? '' : 'empty-observed'}>{doc.date || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Accordion>
         <Accordion
           title="Data Personel"

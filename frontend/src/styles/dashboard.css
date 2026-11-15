@@ -26,7 +26,7 @@
 
 .tone-rose {
   background: var(--accent-pale);
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
 }
 
 .tone-green {
@@ -86,7 +86,7 @@
 }
 
 .overview-banner-icon {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   flex: 0 0 auto;
 }
 
@@ -106,11 +106,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   border: none;
   background: transparent;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -142,6 +142,10 @@
 }
 
 .section-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   padding-bottom: 5px;
 }
 

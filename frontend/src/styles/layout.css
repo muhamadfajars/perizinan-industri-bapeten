@@ -5,11 +5,17 @@
   left: 0;
   width: 261px;
   padding: 27px 19px 23px;
-  background: linear-gradient(160deg, var(--accent-light) 0%, var(--accent) 46%, var(--accent-strong) 100%);
+  background: linear-gradient(
+    175deg,
+    var(--accent-strong) 0%,
+    var(--accent-text) 20%,
+    var(--accent) 58%,
+    var(--accent-light) 100%
+  );
   z-index: 60;
   display: flex;
   flex-direction: column;
-  box-shadow: 6px 0 28px rgba(var(--accent-rgb), 0.08);
+  box-shadow: 6px 0 28px rgba(3, 105, 161, 0.14);
 }
 
 .sidebar::before {
@@ -108,7 +114,7 @@
 }
 
 .brand-name {
-  color: #17233b;
+  color: var(--accent-contrast, #0c2b3a);
   font-family:
     'Plus Jakarta Sans',
     system-ui,
@@ -120,7 +126,7 @@
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.5px;
-  -webkit-text-stroke: 0.35px #17233b;
+  -webkit-text-stroke: 0.35px var(--accent-contrast, #0c2b3a);
 }
 
 .brand-description {
@@ -136,7 +142,7 @@
 .sidebar-label {
   font-size: 11px;
   letter-spacing: 1px;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 700;
   margin: 24px 14px 14px;
 }
@@ -156,10 +162,10 @@
   height: 52px;
   padding: 0 15px;
   width: 100%;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.105);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-contrast, #0c2b3a);
   font-size: 13px;
   font-weight: 600;
   transition:
@@ -169,22 +175,23 @@
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.21);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--accent-contrast, #0c2b3a);
   transform: translateX(2px);
 }
 
 .nav-link.active {
-  color: var(--accent);
-  background: linear-gradient(105deg, var(--accent-surface), var(--accent-selected));
-  box-shadow: 0 7px 14px rgba(var(--accent-rgb), 0.11);
-  border-color: rgba(255, 255, 255, 0.36);
+  color: var(--accent-strong, #0369a1);
+  background: #ffffff;
+  box-shadow: 0 7px 14px rgba(12, 43, 58, 0.14);
+  border-color: rgba(255, 255, 255, 0.9);
   font-weight: 700;
 }
 
 .active-marker {
   position: absolute;
   width: 4px;
-  background: var(--accent);
+  background: var(--accent-strong, #0369a1);
   top: 5px;
   bottom: 5px;
   border-radius: 5px;
@@ -194,14 +201,14 @@
 .sidebar-foot {
   margin-top: auto;
   padding: 14px 2px 2px;
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-  color: #fff;
+  border-top: 1px solid rgba(12, 43, 58, 0.18);
+  color: var(--accent-contrast, #0c2b3a);
 }
 
 .sidebar-copyright {
   font-size: 9.5px;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--accent-contrast, #0c2b3a);
   font-weight: 500;
   white-space: nowrap;
   letter-spacing: -0.2px;
@@ -253,9 +260,9 @@
 }
 
 .demo-indicator {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   background: var(--accent-pale);
-  border: 1px solid #d2e7df;
+  border: 1px solid var(--accent-border, #bae6fd);
   padding: 6px 11px;
   font-size: 11px;
   border-radius: 99px;
@@ -268,7 +275,7 @@
 .demo-indicator span {
   width: 7px;
   height: 7px;
-  background: var(--accent);
+  background: var(--accent-strong, #0369a1);
   border-radius: 100%;
 }
 

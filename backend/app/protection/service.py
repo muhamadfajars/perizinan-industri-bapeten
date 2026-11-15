@@ -2,7 +2,7 @@
 
 from functools import partial
 import uuid
-from difflib import SequenceMatcher
+from .identity import person_similarity, person_key
 from .. import storage
 from ..analysis.constants import FIELDS
 from .reader import read_document
@@ -57,29 +57,41 @@ def make_row(
 def evaluate(doc, application, reference):
     path = storage.file_path(doc)
     pages, warnings = read_document(path)
-    records, extraction_warnings = extract_records(path, pages)
+    reading_incomplete = bool(warnings)
+    records, extraction_warnings = extract_records(path, pages, application)
     warnings.extend(extraction_warnings)
-    rows = build_rows(doc["id"], application, pages, records)
+    from .semantic import protection_fallback
+
+    semantic, semantic_warnings = protection_fallback(pages)
+    warnings.extend(semantic_warnings)
+    rows = build_rows(doc["id"], application, pages, records, semantic=semantic)
+    if reading_incomplete:
+        mark_unread_information(rows)
     if warnings:
-        rows.append(
-            make_row(
-                doc["id"],
-                "Catatan pembacaan",
-                "",
-                "\n".join(warnings),
-                [],
-                group="Catatan pembacaan",
-            )
-        )
+        doc["_uncacheable"] = True
     return rows
 
 
-def build_rows(document_id, application, pages, records):
+def mark_unread_information(rows):
+    """Unreadable pages cannot establish that supporting information is absent."""
+    for item in rows:
+        if item["status"] == "INFO" and not item["detail"]["pages"]:
+            item["detail"].update(
+                review_required=True,
+                review_reason="Sebagian halaman belum terbaca; periksa informasi ini pada dokumen sumber.",
+            )
+
+
+def build_rows(document_id, application, pages, records, *, semantic=None):
     row = partial(make_row, document_id)
     rows = []
     general = application.get("general") or {}
     administration = (application.get("administration") or {}).get("proteksi") or {}
-    meta = metadata(pages)
+    meta = metadata(
+        pages,
+        expected_number=administration.get("number") or "",
+        expected_date=administration.get("date") or "",
+    )
     for key, title in (("number", "Nomor Dokumen"), ("date", "Tanggal Dokumen")):
         values = meta[key]
         unique = {}
@@ -150,20 +162,23 @@ def build_rows(document_id, application, pages, records):
     for person_index, person in enumerate(application.get("personnel") or [], 1):
         name = person.get("nama") or ""
         best = choose(people, "name", name)
-        if best and SequenceMatcher(None, norm(name), norm(best["name"])).ratio() < 0.72:
+        if best and person_similarity(name, best["name"]) < 0.72:
             best = None
-        found = [p for p in people if best and norm(p.get("name")) == norm(best["name"])]
+        found = [
+            p for p in people if best and person_key(p.get("name")) == person_key(best["name"])
+        ]
         for field, key, expected, kind in (
             ("Nama", "name", name, "text"),
             ("Profesi / Keahlian", "role", person.get("keahlian_klasifikasi"), "role"),
         ):
-            observed = best.get(key, "") if best else ""
+            field_sources = [p for p in found if p.get(key)]
+            observed = field_sources[0][key] if field_sources else ""
             rows.append(
                 row(
                     f"Petugas {name}: {field}",
                     expected,
                     observed,
-                    found,
+                    field_sources,
                     group="Petugas",
                     kind=kind,
                     conflict=len({norm(p.get(key)) for p in found if p.get(key)}) > 1,
@@ -190,19 +205,19 @@ def build_rows(document_id, application, pages, records):
         # With multiple unidentified rows, never combine arbitrary field matches.
         if not found and len(equipment) == 1 and len(application.get("equipment", [])) == 1:
             found = equipment[:1]
-        best = found[0] if found else {}
         for key, label in FIELDS.items():
+            field_sources = [item for item in found if item.get(key)]
             rows.append(
                 row(
                     f"Alat {i}: {label}",
                     tool.get(key),
-                    best.get(key, ""),
-                    found,
+                    field_sources[0][key] if field_sources else "",
+                    field_sources,
                     group="Pesawat Sinar-X",
                     kind="serial" if "seri" in key else "text",
                     conflict=len({norm(x.get(key)) for x in found if x.get(key)}) > 1,
                 )
             )
-    rows.extend(information(pages, row))
+    rows.extend(information(pages, row, semantic=semantic))
     priority = {"Nama Instansi": 0, "Alamat": 1, "Nomor Dokumen": 2, "Tanggal Dokumen": 3}
     return sorted(rows, key=lambda item: priority.get(item["field"], 4))

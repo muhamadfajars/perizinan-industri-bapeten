@@ -1,6 +1,18 @@
 import type { MatchRow } from '../types/models';
 
 export function fieldExplanation(row: MatchRow): string {
+  const rawNote = row.note ?? '';
+  if (row.detail?.type === 'personnel' && row.status === 'REVIEW') {
+    if (/nama penerima.*belum terbaca/i.test(rawNote)) {
+      return 'Nama petugas pada dokumen belum terbaca dengan jelas. Periksa nama pada dokumen sumber dan bandingkan dengan formulir.';
+    }
+    if (/blok penugasan/i.test(rawNote)) {
+      return 'Nama penerima tugas sudah terbaca. Periksa kembali kesesuaiannya dengan petugas pada formulir.';
+    }
+    if (/LLM|pemilik tunggal.*belum terverifikasi/i.test(rawNote)) {
+      return 'Pemilik dokumen belum dapat dipastikan. Periksa nama penerima atau pemegang dokumen pada sumber, lalu bandingkan dengan formulir.';
+    }
+  }
   if (row.status === 'MATCH' && row.score === 100) return 'Nilai sesuai dengan formulir.';
   if (row.status === 'REVIEW' && row.detail?.field_label === 'Nama' && row.observed !== 'Belum terbaca') {
     return `Nama pada formulir “${row.expected}”, sedangkan dokumen tertulis “${row.observed}”.`;

@@ -1,3 +1,5 @@
+import type { AdministrationDocument, FormReference } from '../types/models';
+
 export const ID = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 export const MAX_FILE = 40 * 1024 * 1024;
@@ -26,3 +28,24 @@ export const analysisDateLabel = (timestamp: number) => {
   const date = new Date(timestamp * 1000);
   return `${date.toLocaleDateString('id-ID')}, ${date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
 };
+
+export function administrationDocuments(form?: FormReference | null): AdministrationDocument[] {
+  if (!form) return [];
+  if (form.administrationDocuments?.length) return form.administrationDocuments;
+  const items: AdministrationDocument[] = [];
+  if (form.protectionDocument?.number || form.protectionDocument?.date) {
+    items.push({
+      document: 'Dokumen Program Proteksi dan Keselamatan Radiasi',
+      number: form.protectionDocument.number,
+      date: form.protectionDocument.date,
+    });
+  }
+  if (form.managementDocument?.number || form.managementDocument?.date) {
+    items.push({
+      document: 'Dokumen Sistem Manajemen',
+      number: form.managementDocument.number,
+      date: form.managementDocument.date,
+    });
+  }
+  return items;
+}

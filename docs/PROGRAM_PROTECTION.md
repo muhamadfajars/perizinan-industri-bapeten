@@ -1,8 +1,19 @@
 # Program Proteksi dan Keselamatan Radiasi
 
-Kategori `proteksi` memakai evaluator di `backend/app/protection/`. Kategori
-lain masih memakai evaluator sebelumnya. Formulir permohonan tetap menjadi
+Kategori `proteksi` memakai evaluator di `backend/app/protection/`; Sistem Manajemen
+memakai `backend/app/management/`. Formulir permohonan tetap menjadi
 acuan utama; nilainya tidak diganti dengan isi dokumen pendukung.
+
+Alamat di bawah label kantor (termasuk label pada baris sebelumnya) tidak dipakai
+sebagai alamat proyek, baik dari pembacaan teks maupun keluaran LLM. Label lokasi
+pemanfaatan/proyek memulai blok alamat tersendiri. Nomor dan tanggal dokumen dicari
+pada seluruh halaman terbaca dengan pola metadata yang sama; daftar isi dilewati.
+Nilai berbeda tetap diteruskan sebagai konflik untuk diperiksa evaluator.
+
+Denah umum tetap tersedia sebagai kandidat sumber zonasi. Status jenis daerah
+hanya terkonfirmasi bila kutipan diagram menyebut daerah yang bersangkutan.
+Tanpa keterangan tersebut, status menjadi **Perlu diperiksa**, bukan otomatis
+menyatakan Daerah Pengendalian dan Daerah Pengawasan sama-sama ditemukan.
 
 ## Perilaku hasil
 
@@ -98,9 +109,55 @@ Browser yang memblokir pop-up menampilkan pesan untuk mengizinkannya.
 
 ## Pembacaan hybrid
 
+Pembaca OCR menggunakan `BAPETEN_TESS_LANG` (default `ind+eng`), executable
+`BAPETEN_TESSERACT_CMD` bila diatur, dan segmentasi halaman otomatis PSM 3.
+Halaman dengan gambar berukuran signifikan diperiksa pada semua nomor halaman,
+termasuk scan dengan kop native panjang. Hasil OCR digunakan oleh ekstraksi identitas;
+teks native kosong tidak lagi menutupi teks OCR. Bahasa yang tidak tersedia atau
+kegagalan OCR menghasilkan catatan pembacaan, tanpa diam-diam mengganti bahasa.
+
+Seleksi konteks mengutamakan judul bagian dan menyediakan kandidat untuk kedua
+aspek budaya. Halaman lanjutan dapat disertakan selama total tidak melampaui 12.000
+karakter. Kutipan tetap divalidasi per halaman; satu record yang nilainya tersebar
+tanpa kutipan pendukung dalam satu halaman masih dapat membutuhkan pemeriksaan manual.
+Normalisasi gelar membantu pemasangan orang, sementara nama asli dan skor perbedaan
+tetap ditampilkan. Negasi/status profesi seperti “bukan”, “belum”, dan “mantan”
+memicu REVIEW sebelum aturan kesetaraan profesi dijalankan.
+
+Status pengesahan menyatakan “Halaman pengesahan ditemukan”; evaluator tetap
+memeriksa keberadaan tanda tangan pada sumber. Tidak ada klaim verifikasi visual
+atau keaslian tanda tangan.
+
+Fallback LLM diperluas melalui `app/protection/semantic.py`:
+
+- Kelengkapan diperiksa per field. Instansi yang sudah ditemukan tidak menghentikan
+  pencarian alamat. Profesi dan kolom alat dilengkapi hanya pada identitas orang atau
+  nomor seri yang berkaitan; tiap nilai mempertahankan halaman/kutipannya sendiri.
+- Nilai formulir hanya memicu pencarian kandidat yang belum tercakup, tidak dikirim
+  ke model sebagai fakta dokumen. Perbedaan nilai sumber tetap memicu REVIEW.
+- Bagian referensi dengan judul alternatif dicari secara semantik bila hasil aturan
+  belum lengkap. Nomor, tahun, dan jenis peraturan tetap dibaca dari kutipan literal,
+  bukan dari pengetahuan model. Manual dan dokumen internal tetap tidak dihitung.
+- Pembatas dosis memakai jalur aturan jika pernyataan operasi saat ini jelas.
+  Untuk kandidat ambigu, Qwen memilih pernyataan operasional dengan angka/satuan
+  yang ada pada sumber. Konflik eksplisit tetap perlu pemeriksaan evaluator.
+- Bantuan semantik budaya keselamatan/keamanan digunakan juga oleh Sistem Manajemen.
+
+Semua panggilan memakai antrean lokal yang sama, maksimal tiga halaman per tugas,
+12.000 karakter per panggilan, dan timeout. Halaman terlalu panjang tidak dipotong
+diam-diam. Kegagalan dan cakupan terbatas masuk Catatan pembacaan. Informasi yang
+belum dapat dipastikan diberi **Perlu diperiksa**, tetap INFO dan tidak memengaruhi
+persentase matching. Model tetap dikonfigurasi lewat `BAPETEN_LLM_MODEL`; tidak ada
+perubahan model Ollama bersama. Versi prompt mengubah cache analisis; jalankan
+analisis ulang agar hasil tersimpan diperbarui.
+
+Pengujian sintetis memeriksa variasi format, bukti yang dikarang, asosiasi orang/alat,
+konflik dosis dan timeout. Ini tidak menjamin semua format dokumen baru dapat
+dibaca; batch baru tetap perlu evaluasi dengan anotasi evaluator.
+
 Teks dan tabel PDF dibaca dahulu. OCR Tesseract digunakan untuk halaman minim
 teks serta halaman awal dengan gambar yang mungkin memuat pengesahan hasil scan.
-Jika suatu kelompok data belum menghasilkan record terstruktur, halaman kandidat
+Jika field belum lengkap atau petugas/alat acuan belum tercakup, halaman kandidat
 diproses melalui Ollama lokal. Keluaran Qwen harus memiliki halaman dan kutipan
 yang terdapat dalam teks sumber; nilai yang tidak ada dalam kutipan dibuang.
 Pencocokan akhir menggunakan aturan aplikasi, bukan keputusan LLM.
@@ -115,12 +172,21 @@ BAPETEN_LLM_THREADS=8
 BAPETEN_LLM_TIMEOUT=180
 ```
 
-Thinking dimatikan, konteks dibatasi 8192 token, maksimal 6 halaman kandidat
-per kelompok, satu halaman per panggilan. File lock membatasi satu panggilan
+Thinking dimatikan, konteks dibatasi 8192 token, maksimal 3 halaman kandidat
+per kelompok, dengan halaman lanjutan jika muat dalam konteks. File lock membatasi satu panggilan
 Qwen pada satu direktori data aplikasi; ini tidak membatasi pengguna Ollama
 lain atau aplikasi dengan direktori data berbeda. Kegagalan pembacaan muncul
 sebagai catatan; hasil dengan catatan tidak disimpan dalam cache ekstraksi.
 `BAPETEN_PROTECTION_LLM=0` menonaktifkan fallback, bukan pembacaan teks/tabel/OCR.
+
+Default pool OCR untuk node bersama adalah maksimal 4 pekerja × 2 thread;
+`BAPETEN_OCR_PROCESSES` dan `BAPETEN_OCR_CPU_THREADS` tetap dapat diatur.
+Jumlah pekerja dikurangi bila anggaran thread melebihi CPU affinity proses.
+LLM memakai default 8 thread dan satu panggilan aktif per direktori data.
+Ini anggaran proses aplikasi, bukan reservasi CPU melalui scheduler HPC atau
+batas global aplikasi RDI/Industri. Empat job analisis tidak berarti empat LLM
+berjalan bersamaan. Waktu tunggu lock dan timeout permintaan merupakan batas
+terpisah. Uji kapasitas 15–20 pengguna tetap diperlukan sebelum deployment.
 
 ## Batasan tahap ini
 
@@ -132,8 +198,8 @@ dan bukti yang bertentangan memerlukan REVIEW.
 
 Kecocokan nilai tanggal tidak membuktikan bahwa tanggal dibuat merupakan tanggal
 pengesahan. Label tanggal yang belum jelas perlu diperiksa pada sumber.
-Fallback berjalan per kelompok data; record tabel yang terbaca tidak menjamin
-semua uraian bebas atau semua kolom kelompok tersebut sudah tertangkap.
+Fallback memeriksa kelengkapan field dan cakupan data acuan; pencarian kandidat
+yang dibatasi tidak menjamin semua uraian bebas sudah tertangkap.
 Pratinjau halaman bukti saat ini tersedia untuk PDF.
 
 ## Verifikasi

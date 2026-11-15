@@ -3,7 +3,12 @@
 import unittest
 from app.management.service import build_rows
 from app.management.extraction import culture_evidence
-from src.extraction.form_administration import administration_from_table, extract_administration
+from app.analysis.reference import _to_form
+from src.extraction.form_administration import (
+    administration_documents_from_table,
+    administration_from_table,
+    extract_administration,
+)
 
 
 def page(text, number=1):
@@ -18,8 +23,33 @@ class ManagementTests(unittest.TestCase):
         ]
         self.assertEqual(administration_from_table(table)["number"], "PPR-001")
         self.assertEqual(administration_from_table(table, "manajemen")["number"], "SM-002")
+        table_with_header = [
+            ["No", "Persyaratan", "Keterangan"],
+            *table,
+        ]
+        docs = administration_documents_from_table(table_with_header)
+        self.assertEqual(
+            docs,
+            [
+                {
+                    "document": "Dokumen Program Proteksi",
+                    "number": "PPR-001",
+                    "date": "19/07/2026",
+                },
+                {
+                    "document": "Dokumen Sistem Manajemen",
+                    "number": "SM-002",
+                    "date": "19/07/2026",
+                },
+            ],
+        )
         text = "Dokumen Program Proteksi No. Dokumen : PPR-001 Tanggal Dokumen : 19/07/2026 Dokumen Sistem Manajemen No. Dokumen : SM-002 Tanggal : 19/07/2026"
-        self.assertEqual(extract_administration(text)["manajemen"]["number"], "SM-002")
+        extracted = extract_administration(text)
+        self.assertEqual(extracted["manajemen"]["number"], "SM-002")
+        self.assertEqual(extracted["manajemen"]["date"], "19/07/2026")
+        form = _to_form({"general": {"instansi": "PT Contoh"}, "administration": extracted})
+        self.assertEqual(form["managementDocument"], {"number": "SM-002", "date": "19/07/2026"})
+        self.assertEqual(len(form["administrationDocuments"]), 2)
 
     def test_only_three_comparison_fields_and_missing_address_is_not_invented(self):
         rows = build_rows(

@@ -80,14 +80,15 @@
 
 .filter-buttons button.active {
   background: #fff;
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
+  font-weight: 700;
   box-shadow: 0 1px 4px rgba(34, 45, 65, 0.08);
 }
 
 .matching-sections {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 28px;
 }
 
 .matching-section {
@@ -98,8 +99,8 @@
 }
 
 .match-section-header {
-  background: #fff;
-  padding: 13px 16px;
+  background: var(--accent-pale);
+  padding: 16px 18px;
   border: 0;
   width: 100%;
   display: flex;
@@ -109,7 +110,7 @@
 }
 
 .match-section-header:hover {
-  background: #fcfcfd;
+  background: var(--accent-hover);
 }
 
 .match-heading-group {
@@ -122,9 +123,10 @@
 
 .match-heading-group strong {
   display: block;
-  font-size: 13px;
+  font-size: 18px;
+  line-height: 1.4;
   font-weight: 700;
-  color: #24324d;
+  color: var(--accent-strong);
 }
 
 .match-heading-group small {
@@ -397,4 +399,172 @@
 
 .matching-footer strong {
   color: #58677f;
+}
+
+@media (max-width: 640px) {
+  .match-heading-group strong {
+    font-size: 16px;
+  }
+}
+/* Tab Navigasi Dokumen Personel */
+.personnel-doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-bottom: 18px;
+}
+
+.personnel-doc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.personnel-doc-tab:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+.personnel-doc-tab.active {
+  background: #fff;
+  color: var(--accent-text, #0284c7);
+  border-color: var(--accent, #0284c7);
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.12);
+  font-weight: 700;
+}
+
+.doc-tab-label {
+  white-space: nowrap;
+}
+
+.doc-tab-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.doc-tab-status-dot.status-dot-match {
+  background: #199755;
+}
+
+.doc-tab-status-dot.status-dot-review {
+  background: #d99b16;
+}
+
+.doc-tab-status-dot.status-dot-mismatch {
+  background: #ce5360;
+}
+
+.doc-tab-status-dot.status-dot-info {
+  background: #0284c7;
+}
+
+.doc-tab-badge-status {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.doc-tab-badge-shared {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #e0f2fe;
+  color: #0369a1;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Header Dokumen yang Dipilih */
+.personnel-doc-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.personnel-doc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.personnel-doc-title-group h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.personnel-doc-filename {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #64748b;
+  word-break: break-word;
+}
+
+.personnel-shared-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #0369a1;
+  margin-top: 6px;
+}
+
+.personnel-shared-notice svg {
+  flex-shrink: 0;
+  color: #0284c7;
+}
+
+.personnel-information-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.personnel-information-section .protection-evidence {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.personnel-information-section .protection-evidence:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 640px) {
+  .personnel-doc-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .personnel-doc-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 10px;
+  }
 }

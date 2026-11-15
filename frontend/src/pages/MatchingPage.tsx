@@ -1,7 +1,9 @@
-import { Activity, AlertCircle, CircleHelp, FileCheck2, LoaderCircle, Search } from 'lucide-react';
+import { Activity, AlertCircle, CircleHelp, FileCheck2, LoaderCircle, RotateCcw, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { SectionHeading } from '../components/Common';
 import { MatchingSection } from '../components/MatchingSection';
 import type { EvaluationWorkspace } from '../hooks/useEvaluationWorkspace';
+import { isSectionExpanded } from '../lib/matching';
 import { analysisDateLabel } from '../lib/presentation';
 import { Filter } from '../types/workspace';
 
@@ -15,6 +17,8 @@ type Props = Pick<
   | 'setFilter'
   | 'filterTotals'
   | 'working'
+  | 'savingCategory'
+  | 'resetDialog'
   | 'progressTitle'
   | 'progressMessage'
   | 'analysisProgress'
@@ -36,6 +40,8 @@ export function MatchingPage({
   setFilter,
   filterTotals,
   working,
+  savingCategory,
+  resetDialog,
   progressTitle,
   progressMessage,
   analysisProgress,
@@ -47,6 +53,15 @@ export function MatchingPage({
   openEvidence,
   loadSourceDocument,
 }: Props) {
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setOpenSections({});
+  }, [result?.finished_at]);
+  const toggleSection = (sectionId: string, index: number) =>
+    setOpenSections((prev) => ({
+      ...prev,
+      [sectionId]: !isSectionExpanded(prev, sectionId, index),
+    }));
   return (
     <section className="page-section" id="matching" hidden={active !== 'matching'}>
       <SectionHeading
@@ -54,10 +69,23 @@ export function MatchingPage({
         title="Hasil Matching"
         description="Perbandingan data Formulir dan Dokumen, dengan status MATCH, REVIEW, atau MISMATCH per field."
         action={
-          result ? (
-            <span className="outline-label">
-              <FileCheck2 size={14} /> {result.analyzed_documents} dokumen dianalisis
-            </span>
+          result || backendError ? (
+            <>
+              {result && (
+                <span className="outline-label">
+                  <FileCheck2 size={14} /> {result.analyzed_documents} dokumen dianalisis
+                </span>
+              )}
+              <button
+                type="button"
+                className="button button-new-evaluation button-sm"
+                disabled={working || savingCategory}
+                onClick={() => resetDialog.current?.showModal()}
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+                Mulai Evaluasi Baru
+              </button>
+            </>
           ) : undefined
         }
       />
@@ -188,7 +216,8 @@ export function MatchingPage({
               search={query}
               filter={filter}
               onRowClick={(row, section) => setSelectedDetail({ row, section })}
-              expandedByDefault={i === 0}
+              open={isSectionExpanded(openSections, s.id, i)}
+              onToggle={() => toggleSection(s.id, i)}
             />
           ))}
           {result && visibleMatchingSections.length === 0 && (

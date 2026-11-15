@@ -22,7 +22,6 @@ export function DocumentsPage({
   return (
     <section className="page-section documents-section" id="dokumen" hidden={active !== 'dokumen'}>
       <SectionHeading
-        eyebrow="LANGKAH 04"
         title="Dokumen yang Diunggah"
         description="Daftar berkas untuk permohonan aktif; berkas yang terkirim disimpan di server secara privat."
         action={<span className="tiny-counter">{items.length} file</span>}

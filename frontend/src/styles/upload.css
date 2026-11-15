@@ -28,7 +28,7 @@
   border-radius: 18px;
   display: grid;
   place-items: center;
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   margin-bottom: 13px;
 }
 
@@ -220,7 +220,7 @@
 .classification-disclaimer svg {
   flex-shrink: 0;
   margin-top: 1px;
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
 }
 
 .classification-disclaimer strong {
@@ -304,7 +304,8 @@
 .upload-filters button[aria-pressed='true'] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast, #0c2b3a);
+  font-weight: 700;
 }
 
 .upload-filters .unclassified-filter {
@@ -504,7 +505,6 @@
   color: #22a663;
 }
 
-.category-perawatan,
 .category-kesesuaian,
 .category-fungsi {
   background: #fff4dc;
@@ -610,7 +610,7 @@
 }
 
 .category-file > svg {
-  color: var(--accent);
+  color: var(--accent-text, #0284c7);
   flex: 0 0 auto;
 }
 

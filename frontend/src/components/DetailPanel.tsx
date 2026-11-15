@@ -4,6 +4,7 @@ import type { MatchRow, MatchSection } from '../types/models';
 import { FieldSourceEvidence } from './FieldSourceEvidence';
 import { DataPair, ScoreBadge } from './Common';
 import { protectionFieldLabel, fieldExplanation } from '../lib/protectionDisplay';
+import { isPersonnelInformation } from '../lib/matching';
 
 export function DetailPanel({
   selected,
@@ -18,6 +19,12 @@ export function DetailPanel({
 }) {
   if (!selected) return null;
   const { row, section } = selected;
+  const personnelInformation = row.detail?.type === 'personnel' && isPersonnelInformation(row);
+  const personName =
+    row.detail?.person_name ??
+    (section.name.startsWith('Dokumen Personel — ')
+      ? section.name.replace('Dokumen Personel — ', '')
+      : 'Petugas belum teridentifikasi');
   return (
     <>
       <button className="detail-backdrop" type="button" aria-label="Tutup detail" onClick={close} />
@@ -29,18 +36,29 @@ export function DetailPanel({
           </button>
         </div>
         <h3>
-          {row.detail?.person_id
-            ? `Petugas ${row.detail.person_id} — ${row.detail.field_label}`
-            : protectionFieldLabel(row)}
+          {row.detail?.type === 'personnel'
+            ? `${personName} — ${row.field}`
+            : row.detail?.person_id
+              ? `Petugas ${row.detail.person_id} — ${row.detail.field_label}`
+              : protectionFieldLabel(row)}
         </h3>
-        <p className="detail-origin">{matchingSectionTitle(section)}</p>
+        <p className="detail-origin">
+          {[row.detail?.source_label, row.detail?.source_filename].filter(Boolean).join(' · ') ||
+            matchingSectionTitle(section)}
+        </p>
         <ScoreBadge status={row.status} />
-        <DataPair label="Acuan dari formulir" value={row.expected || 'Tidak tersedia'} />
-        <DataPair label="Hasil pembacaan dokumen" value={row.observed || 'Tidak tersedia'} />
-        <DataPair
-          label="Kemiripan karakter / skor field"
-          value={row.score == null ? 'Tidak tersedia' : `${row.score}%`}
-        />
+        {personnelInformation ? (
+          <DataPair label="Informasi dokumen" value={row.observed || 'Tidak tersedia'} />
+        ) : (
+          <>
+            <DataPair label="Acuan dari formulir" value={row.expected || 'Tidak tersedia'} />
+            <DataPair label="Hasil pembacaan dokumen" value={row.observed || 'Tidak tersedia'} />
+            <DataPair
+              label="Kemiripan karakter / skor field"
+              value={row.score == null ? 'Tidak tersedia' : `${row.score}%`}
+            />
+          </>
+        )}
         <div className="detail-note" aria-label="Alasan hasil">
           <Info size={17} />
           {fieldExplanation(row)}

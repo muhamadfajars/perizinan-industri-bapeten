@@ -5,6 +5,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from .extraction import norm
 from .evidence import compact
+from .identity import person_similarity
 
 MONTHS = {
     m: i
@@ -40,15 +41,35 @@ def compare(expected, observed, kind="text"):
             return "REVIEW", None, "Tanggal belum dapat dinormalisasi."
     elif kind == "institution":
         a, b = [
-            norm(re.sub(r"^(?:PT|CV)\.?\s+", "", value, flags=re.I))
+            norm(
+                re.sub(
+                    r"\brs\.?\b",
+                    "rumahsakit",
+                    re.sub(r"^(?:PT|CV)\.?\s+", "", value, flags=re.I),
+                    flags=re.I,
+                )
+            )
             for value in (expected, observed)
         ]
     elif kind == "role":
+        if any(
+            re.search(
+                r"\b(?:bukan|tidak|belum|non|nonaktif|mantan|eks|calon|pensiun|not|former)\b",
+                value,
+                re.I,
+            )
+            for value in (expected, observed)
+        ):
+            return (
+                "REVIEW",
+                similarity(expected, observed),
+                "Ada negasi atau keterangan status profesi; periksa konteks pada sumber.",
+            )
 
         def role(value):
             if re.search(r"\bPPR\b|petugas\s*proteksi\s*radiasi", value, re.I):
                 return "ppr"
-            if re.search(r"operator", value, re.I):
+            if re.search(r"\boperator\b", value, re.I):
                 return "operator"
             return norm(value)
 
@@ -107,6 +128,11 @@ def address_tokens(value):
         ("kel", "kelurahan"),
         ("prov", "provinsi"),
         ("no", "nomor"),
+        (r"komp(?:leks)?", "komplek"),
+        ("gg", "gang"),
+        ("kav", "kavling"),
+        ("lt", "lantai"),
+        (r"gdg|gd", "gedung"),
     ):
         text = re.sub(rf"\b{short}\b\.?", full + " ", text)
     return set(re.findall(r"[a-z]+|\d+[a-z]?", text))
@@ -116,16 +142,28 @@ def compare_address(expected, observed):
     left, right = address_tokens(expected), address_tokens(observed)
     score = round(200 * len(left & right) / max(1, len(left) + len(right)), 1)
 
-    # Street and numeric components must agree: high overlap alone can hide another outlet.
+    # Street/landmark and numeric components must agree: high overlap alone can hide another outlet.
     def street(value):
-        hit = re.search(r"\b(?:jl[n]?\.?|jalan)\s+(.+?)(?=,|\bno(?:mor)?\.?\s*\d|$)", value, re.I)
-        return norm(hit.group(1)) if hit else ""
+        normalized = re.sub(r"\bkomp(?:lek[s]?)?\b\.?", "komplek", value, flags=re.I)
+        normalized = re.sub(r"\b(?:gdg|gd)\b\.?", "gedung", normalized, flags=re.I)
+        hit = re.search(
+            r"\b(?:jl[n]?\.?|jalan)\s+(.+?)(?=,|\bno(?:mor)?\.?\s*\d|$)", normalized, re.I
+        )
+        if hit:
+            return ("street", norm(hit.group(1)))
+        landmark = re.search(
+            r"\b(?:komplek|kawasan|gedung|ruko|blok)\s+(.+?)(?=,|\bno(?:mor)?\.?\s*\d|$)",
+            normalized,
+            re.I,
+        )
+        return ("landmark", norm(landmark.group(1))) if landmark else ("", "")
 
-    a, b = street(expected), street(observed)
+    a_kind, a = street(expected)
+    b_kind, b = street(observed)
     numbers_a = {s for s in left if s[0].isdigit()}
     numbers_b = {s for s in right if s[0].isdigit()}
     conflict = bool(numbers_a and numbers_b and numbers_a != numbers_b)
-    if score >= 85 and a and b and a == b and not conflict:
+    if score >= 85 and a and b and a_kind == b_kind and a == b and not conflict:
         # Retain a less-than-perfect score for variations beyond punctuation alone.
         return (
             "MATCH",
@@ -143,6 +181,10 @@ def choose(records, key, expected):
     choices = [r for r in records if r.get(key)]
     return max(
         choices,
-        key=lambda r: SequenceMatcher(None, norm(expected), norm(r[key])).ratio(),
+        key=lambda r: (
+            person_similarity(expected, r[key])
+            if key == "name"
+            else SequenceMatcher(None, norm(expected), norm(r[key])).ratio()
+        ),
         default=None,
     )

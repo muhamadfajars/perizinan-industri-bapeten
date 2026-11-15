@@ -8,7 +8,7 @@ export function SectionHeading({
   description,
   action,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
   action?: ReactNode;
@@ -16,7 +16,7 @@ export function SectionHeading({
   return (
     <div className="section-header">
       <div>
-        <span className="eyebrow">{eyebrow}</span>
+        {eyebrow && <span className="eyebrow">{eyebrow}</span>}
         <h2>{title}</h2>
         <p>{description}</p>
       </div>
@@ -51,10 +51,11 @@ export function SummaryCard({
 }
 
 export function ScoreBadge({ status }: { status: MatchStatus }) {
+  const normalized = (status || 'REVIEW').toLowerCase();
   return (
-    <span className={`status-chip status-${status.toLowerCase()}`}>
+    <span className={`status-chip status-${normalized}`}>
       <span className="status-dot" />
-      {status}
+      {status || 'REVIEW'}
     </span>
   );
 }

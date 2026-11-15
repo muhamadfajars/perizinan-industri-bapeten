@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { AnalysisResult } from '../api';
 import { categoryById } from '../data/categories';
-import { classifyByFilename, classifyFile } from '../lib/classifier';
+import { classifyFile } from '../lib/classifier';
 import { ID, MAX_FILE, SUPPORTED_EXTENSIONS } from '../lib/presentation';
 import { applyClassification } from '../lib/uploadState';
 import type { CategoryId, UploadItem } from '../types/models';
@@ -97,35 +97,19 @@ export function useUploadIntake({
         );
         if (duplicate) continue;
 
-        const l1 = classifyByFilename(file.name);
-        if (l1 && l1.category !== 'unknown') {
-          newItems.push({
-            id: ID(),
-            name: file.name,
-            size: file.size,
-            category: l1.category,
-            subtype: l1.subtype,
-            detectedLayer: 1,
-            detectionReason: l1.reason,
-            isClassifying: false,
-            addedAt: new Date().toISOString(),
-            file,
-          });
-        } else {
-          const item: UploadItem = {
-            id: ID(),
-            name: file.name,
-            size: file.size,
-            category: 'unknown',
-            detectedLayer: 0,
-            detectionReason: 'Sedang mengenali dokumen…',
-            isClassifying: true,
-            addedAt: new Date().toISOString(),
-            file,
-          };
-          newItems.push(item);
-          pendingLayer2.push({ item, file });
-        }
+        const item: UploadItem = {
+          id: ID(),
+          name: file.name,
+          size: file.size,
+          category: 'unknown',
+          detectedLayer: 0,
+          detectionReason: 'Sedang memeriksa nama dan isi dokumen…',
+          isClassifying: true,
+          addedAt: new Date().toISOString(),
+          file,
+        };
+        newItems.push(item);
+        pendingLayer2.push({ item, file });
       }
 
       if (!newItems.length) {
@@ -140,32 +124,16 @@ export function useUploadIntake({
         `${newItems.length} berkas ditambahkan.${invalid ? ` ${invalid} file ditolak karena format atau ukuran tidak sesuai.` : ''}${pendingLayer2.length ? ' Pengenalan isi dokumen sedang berjalan.' : ''}`,
       );
 
-      // Trigger Layer 2 for pending items in background
-      for (const { item, file } of pendingLayer2) {
-        classifyFile(file)
-          .then((res) => {
-            setItems((current) =>
-              current.map((it) => {
-                if (it.id !== item.id) return it;
-                return applyClassification(it, res);
-              }),
-            );
-          })
-          .catch(() => {
-            setItems((current) =>
-              current.map((it) =>
-                it.id === item.id
-                  ? applyClassification(it, {
-                      category: 'unknown',
-                      layer: 0,
-                      confidence: 0,
-                      reason: 'Pengenalan gagal. Silakan pilih kategori secara manual.',
-                    })
-                  : it,
-              ),
-            );
-          });
-      }
+      // Two workers bound upload/OCR pressure on the shared development node.
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < pendingLayer2.length) {
+          const { item, file } = pendingLayer2[cursor++];
+          const res = await classifyFile(file);
+          setItems((current) => current.map((it) => (it.id === item.id ? applyClassification(it, res) : it)));
+        }
+      };
+      await Promise.all([worker(), worker()]);
     },
     [items, announce, working],
   );

@@ -54,14 +54,8 @@ class TestClassifier(unittest.TestCase):
         tests = [
             ("Formulir_Permohonan-116843.26.pdf", "formulir", None),
             ("PROGRAM PROTEKSI RADIASI RSH kepanjen FIX SIP.pdf", "proteksi", None),
-            ("Program perawatan RSH KEPANJEN.pdf", "perawatan", None),
             ("Dok Sistem manajemen fasilitas rs hermina.pdf", "manajemen", None),
             ("DOKUMEN TEKNIS RSH KEPANJEN.pdf", "teknis", None),
-            (
-                "SIP RSH KEPANJEN SITI AZIZAH.pdf",
-                "personel",
-                "Surat Izin Praktik (SIP)",
-            ),
             ("SIB New zi.pdf", "personel", "Surat Izin Bekerja (SIB)"),
             (
                 "SK Penunjukan dan Pengangkatan Siti Azizah PPR.pdf",
@@ -72,8 +66,9 @@ class TestClassifier(unittest.TestCase):
             (
                 "Sertifikat Lulus Kompetensi PPR.pdf",
                 "personel",
-                "Sertifikat Kompetensi",
+                "Sertifikat Kompetensi PPR",
             ),
+            ("Sertifikat pelatihan PPR.pdf", "personel", "Sertifikat Pelatihan"),
             ("SIKR Junaidi.pdf", "personel", "Surat Izin Kerja"),
             (
                 "surat keterangan kerja Radiografer isra new.docx",
@@ -113,11 +108,8 @@ class TestClassifier(unittest.TestCase):
                 "personel",
                 "Surat Penunjukan Tugas",
             ),
-            ("dokumen perawatan Fasilitas Radiodiagnostik.pdf", "perawatan", None),
-            ("DOKUMEN_PERAWATAN_MOBILE.pdf", "perawatan", None),
-            ("PROGRAM PROTEKSI DAN PROGRAM PERAWATAN.pdf", "unknown", None),
-            ("SIP dan SIB.pdf", "unknown", None),
-            ("dokumen perawatan dan spesifikasi alat.pdf", "unknown", None),
+            ("dokumen perawatan Fasilitas Radiodiagnostik.pdf", "unknown", None),
+            ("SIP dokter.pdf", "unknown", None),
         ]
         for name, category, subtype in cases:
             with self.subTest(name=name):
@@ -126,18 +118,11 @@ class TestClassifier(unittest.TestCase):
         for text in (
             "Untuk melaksanakan program proteksi dan keselamatan radiasi, petugas ditunjuk.",
             "Memastikan seluruh fungsi alat bekerja sesuai spesifikasi pabrikan.",
-            "PROGRAM PROTEKSI RADIASI\nPROGRAM PERAWATAN FASILITAS",
-            "SURAT IZIN PRAKTIK\nSURAT IZIN BEKERJA (SIB)",
+            "DOKUMEN PROGRAM PERAWATAN FASILITAS RADIOLOGI",
+            "SURAT IZIN PRAKTIK",
         ):
             with self.subTest(text=text):
                 self.assertIsNone(classify_by_content(text)[0])
-        self.assertEqual(
-            classify_by_content(
-                "DOKUMEN PROGRAM PERAWATAN FASILITAS RADIOLOGI\n"
-                "Alat bekerja sesuai spesifikasi pabrikan."
-            )[:2],
-            ("perawatan", None),
-        )
         self.assertEqual(
             classify_by_content(
                 "PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN\nPETUGAS PROTEKSI RADIASI (PPR)\n"
@@ -151,12 +136,12 @@ class TestClassifier(unittest.TestCase):
 
         with patch(
             "app.classifier.extract_document_text",
-            return_value="PROGRAM PERAWATAN FASILITAS",
+            return_value="PROGRAM PROTEKSI RADIASI",
         ) as extract:
-            result = classify_document("program proteksi dan program perawatan.pdf", b"content")
+            result = classify_document("program proteksi dan spesifikasi alat.pdf", b"content")
             self.assertEqual(result["category"], "unknown")
             self.assertEqual(result["confidence"], 0)
-            extract.assert_not_called()
+            extract.assert_called_once()
 
     def test_known_sample_categories(self):
         # Measure correctness against labeled examples, not the percentage of
@@ -176,13 +161,6 @@ class TestClassifier(unittest.TestCase):
                 "20260818155148-SK PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN PPR.pdf",
                 "personel",
                 "Surat Penunjukan Tugas",
-                True,
-            ),
-            (
-                "124143.26",
-                "20261005140905-dokumen perawatan Fasilitas Radiodiagnostik MABA mobile.pdf",
-                "perawatan",
-                None,
                 True,
             ),
         ]

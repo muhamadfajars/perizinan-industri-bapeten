@@ -114,10 +114,11 @@ def _personnel_title(doc):
         return NAMES.get(doc.get("category"), "Dokumen")
     subtype = _text(doc.get("subtype"))
     titles = {
-        "Surat Izin Praktik (SIP)": "SIP",
         "Surat Izin Bekerja (SIB)": "SIB",
         "Surat Perintah": "Surat Perintah",
-        "Sertifikat Kompetensi": "Sertifikat Kompetensi",
+        "Sertifikat Kompetensi": "Sertifikat Kompetensi PPR",
+        "Sertifikat Kompetensi PPR": "Sertifikat Kompetensi PPR",
+        "Sertifikat Pelatihan": "Sertifikat Pelatihan",
         "Surat Izin Kerja": "Surat Izin Kerja",
         "Surat Keterangan Kerja": "Surat Keterangan Kerja",
         "Surat Penunjukan Tugas": "Surat Penunjukan Tugas",

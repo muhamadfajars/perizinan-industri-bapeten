@@ -115,7 +115,7 @@ class TestBapetenApi(unittest.TestCase):
         ]
         self.assertEqual(persisted, corrected)
         self.assertEqual(self.client.get(base + "/results", headers=self.headers).status_code, 404)
-        response = self.client.patch(url, headers=self.headers, json={"category": "perawatan"})
+        response = self.client.patch(url, headers=self.headers, json={"category": "teknis"})
         self.assertIsNone(response.json()["document"]["subtype"])
 
     def test_category_correction_validation_and_active_analysis(self):
@@ -292,7 +292,7 @@ class TestBapetenApi(unittest.TestCase):
         maint_bytes = _make_synthetic_support_pdf()
         res_maint = self.client.post(
             f"/api/v1/applications/{aid}/documents",
-            data={"category": "perawatan"},
+            data={"category": "teknis"},
             files={"file": ("perawatan.pdf", maint_bytes, "application/pdf")},
             headers=self.headers,
         )
@@ -364,7 +364,7 @@ class TestBapetenApi(unittest.TestCase):
         maint_bytes = _make_synthetic_support_pdf()
         self.client.post(
             f"/api/v1/applications/{aid}/documents",
-            data={"category": "perawatan"},
+            data={"category": "teknis"},
             files={"file": ("perawatan.pdf", maint_bytes, "application/pdf")},
             headers=self.headers,
         )
@@ -396,6 +396,10 @@ class TestBapetenApi(unittest.TestCase):
         result_data = res_res.json()
         self.assertIn("matching_sections", result_data)
         self.assertIn("form_reference", result_data)
+        self.assertEqual(
+            result_data["form_reference"].get("activityScope"),
+            "Radiologi Diagnostik dan Intervensional",
+        )
         self.assertEqual(result_data.get("analyzed_documents"), 1)
         self.assertEqual(result_data.get("errors"), [])
         self.assertTrue(result_data["matching_sections"])
