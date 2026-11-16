@@ -35,7 +35,7 @@ export function ManagementInformation({
   );
 }
 
-function ManagementCard({ row, open }: { row: MatchRow; open: (page: number) => void }) {
+export function ManagementCard({ row, open }: { row: MatchRow; open: (page: number) => void }) {
   const pages = [...new Set(row.detail?.pages ?? [])];
   const [index, setIndex] = useState(0);
   const topics = row.detail?.topics;

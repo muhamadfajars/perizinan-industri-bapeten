@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildSectionTopicTabs,
   isAdditionalLocation,
+  isManagementInformation,
   isSupportingInformation,
   personnelGroups,
 } from '../src/lib/protectionDisplay.ts';
@@ -74,6 +76,88 @@ test('administrationDocuments resolves explicit entries and falls back to protec
         date: '19/07/2026',
       },
       { document: 'Dokumen Sistem Manajemen', number: 'SM-02', date: '20/07/2026' },
+    ],
+  );
+});
+
+test('buildSectionTopicTabs organizes protection and management views for split navigation', () => {
+  const protComparison = [
+    row('Nama Instansi', 'Data acuan'),
+    { ...row('Nomor Dokumen', 'Data acuan'), status: 'REVIEW' as const },
+  ];
+  const protInfo = [
+    {
+      ...row('Dasar hukum: UU No. 10', 'Dasar hukum', { required: true, pages: [2] }),
+      status: 'INFO' as const,
+    },
+    {
+      ...row('Dasar hukum: PP No. 45', 'Dasar hukum', { required: true, pages: [] }),
+      status: 'INFO' as const,
+    },
+    { ...row('Daerah Pengendalian', 'Isi program', { pages: [5] }), status: 'INFO' as const },
+    { ...row('Pembatas Dosis', 'Isi program', { pages: [7] }), status: 'INFO' as const },
+    { ...row('Lembar Pengesahan', 'Pengesahan', { pages: [1] }), status: 'INFO' as const },
+  ];
+  const protTabs = buildSectionTopicTabs('proteksi', protComparison, protInfo);
+  assert.deepEqual(
+    protTabs.map((t) => [t.key, t.label, t.status, t.subtitle]),
+    [
+      ['perbandingan', 'Perbandingan Field', 'REVIEW', '1/2 sesuai formulir'],
+      ['dasar-hukum', 'Dasar Hukum', 'REVIEW', '1/2 dasar hukum wajib'],
+      ['zonasi', 'Zonasi Kerja', 'INFO', 'Ditemukan'],
+      ['pembatas-dosis', 'Pembatas Dosis', 'INFO', 'Ditemukan'],
+      ['pengesahan', 'Lembar Pengesahan', 'INFO', 'Halaman ditemukan'],
+    ],
+  );
+
+  const mgmtComparison: MatchRow[] = [
+    {
+      id: 'm1',
+      field: 'Nama Instansi',
+      expected: 'PT X',
+      observed: 'PT X',
+      score: 100,
+      status: 'MATCH',
+      detail: { type: 'management', group: 'Data acuan' },
+    },
+  ];
+  const mgmtInfo: MatchRow[] = [
+    {
+      id: 'm2',
+      field: 'Budaya Keselamatan dan Keamanan',
+      expected: '—',
+      observed: 'Ditemukan',
+      score: null,
+      status: 'INFO',
+      detail: {
+        type: 'management',
+        group: 'Budaya',
+        pages: [4],
+        topics: [
+          { label: 'Budaya Keselamatan', found: true },
+          { label: 'Budaya Keamanan', found: false },
+        ],
+      },
+    },
+    {
+      id: 'm3',
+      field: 'Lembar Pengesahan',
+      expected: '—',
+      observed: 'Halaman ditemukan',
+      score: null,
+      status: 'INFO',
+      detail: { type: 'management', group: 'Pengesahan', pages: [1] },
+    },
+  ];
+  assert.equal(isManagementInformation(mgmtInfo[0]), true);
+  assert.equal(isManagementInformation(mgmtComparison[0]), false);
+  const mgmtTabs = buildSectionTopicTabs('manajemen', mgmtComparison, mgmtInfo);
+  assert.deepEqual(
+    mgmtTabs.map((t) => [t.key, t.label, t.status, t.subtitle]),
+    [
+      ['perbandingan', 'Perbandingan Field', 'MATCH', '1/1 sesuai formulir'],
+      ['budaya', 'Budaya Keselamatan', 'REVIEW', '1/2 pokok bahasan'],
+      ['pengesahan', 'Lembar Pengesahan', 'INFO', 'Halaman ditemukan'],
     ],
   );
 });

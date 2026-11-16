@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { MatchRow } from '../types/models';
-import { protectionFieldLabel, regulationDisplayTitle } from '../lib/protectionDisplay';
+import {
+  getProtectionTabKey,
+  protectionFieldLabel,
+  regulationDisplayTitle,
+  type ProtectionTabKey,
+} from '../lib/protectionDisplay';
 import { SourceDocumentViewer } from './SourceDocumentViewer';
 import { EvidenceStatus } from './EvidenceStatus';
 import { DoseEvidence } from './DoseEvidence';
-
-type ProtectionTabKey = 'dasar-hukum' | 'zonasi' | 'pembatas-dosis' | 'pengesahan';
 
 interface ProtectionTab {
   key: ProtectionTabKey;
@@ -20,11 +23,68 @@ const PROTECTION_TABS: ProtectionTab[] = [
   { key: 'pengesahan', label: 'Lembar Pengesahan' },
 ];
 
-export function getProtectionTabKey(row: MatchRow): ProtectionTabKey {
-  if (row.detail?.group === 'Dasar hukum') return 'dasar-hukum';
-  if (row.detail?.group === 'Pengesahan' || row.field.includes('Pengesahan')) return 'pengesahan';
-  if (row.field === 'Pembatas Dosis' || row.field.includes('Dosis')) return 'pembatas-dosis';
-  return 'zonasi';
+export function ProtectionInformationCards({
+  tabKey,
+  rows,
+  openEvidence,
+}: {
+  tabKey: ProtectionTabKey;
+  rows: MatchRow[];
+  openEvidence: (documentId: string, page: number | undefined, title: string) => void;
+}) {
+  const requiredLaws = rows.filter((row) => row.detail?.required);
+  const missingLaws = requiredLaws.filter((row) => !row.detail?.pages?.length);
+  const reviewLaws = requiredLaws.some((row) => row.detail?.review_required);
+  const openRow = (row: MatchRow) => (documentId: string, page?: number) =>
+    openEvidence(
+      documentId,
+      page,
+      row.detail?.group === 'Dasar hukum' ? regulationDisplayTitle(row.field) : protectionFieldLabel(row),
+    );
+
+  if (tabKey === 'dasar-hukum') {
+    return (
+      <>
+        <div
+          className={missingLaws.length ? 'protection-law-warning' : 'protection-law-complete'}
+          role="status"
+        >
+          <strong>
+            {`${reviewLaws ? 'Perlu diperiksa' : missingLaws.length ? 'Belum lengkap' : 'Lengkap'} — ${requiredLaws.length - missingLaws.length} dari 5 dasar hukum ditemukan`}
+          </strong>
+          {missingLaws.length > 0 && (
+            <p>
+              {reviewLaws
+                ? 'Pembacaan referensi belum lengkap; periksa dokumen sumber.'
+                : 'Periksa peraturan berlabel “Belum ditemukan” pada dokumen sumber.'}
+            </p>
+          )}
+        </div>
+        <h4 className="protection-law-group">Dasar hukum wajib</h4>
+        {requiredLaws.map((row) => (
+          <ProtectionEvidence key={row.id} row={row} compact openEvidence={openRow(row)} />
+        ))}
+        <h4 className="protection-law-group">Peraturan tambahan</h4>
+        {rows.filter((row) => !row.detail?.required).length ? (
+          rows
+            .filter((row) => !row.detail?.required)
+            .map((row) => <ProtectionEvidence key={row.id} row={row} compact openEvidence={openRow(row)} />)
+        ) : (
+          <p className="protection-note">Tidak ada peraturan tambahan yang ditemukan.</p>
+        )}
+      </>
+    );
+  }
+
+  return rows.length > 0 ? (
+    <>
+      {rows.map((row) => (
+        <ProtectionEvidence key={row.id} row={row} compact openEvidence={openRow(row)} />
+      ))}
+    </>
+  ) : (
+    <p className="protection-tab-empty">Tidak ada item pada kategori ini.</p>
+  );
 }
 
 export function ProtectionInformationSection({
@@ -59,9 +119,6 @@ export function ProtectionInformationSection({
     return firstNonEmpty ? firstNonEmpty.key : activeTab;
   }, [activeTab, rowsByTab]);
 
-  const requiredLaws = (rowsByTab.get('dasar-hukum') ?? []).filter((row) => row.detail?.required);
-  const missingLaws = requiredLaws.filter((row) => !row.detail?.pages?.length);
-  const reviewLaws = requiredLaws.some((row) => row.detail?.review_required);
   const activeRows = rowsByTab.get(effectiveActiveTab) ?? [];
 
   return (
@@ -89,89 +146,11 @@ export function ProtectionInformationSection({
       </div>
 
       <div className="protection-tab-panel" role="tabpanel">
-        {effectiveActiveTab === 'dasar-hukum' && (
-          <div
-            className={missingLaws.length ? 'protection-law-warning' : 'protection-law-complete'}
-            role="status"
-          >
-            <strong>
-              {`${reviewLaws ? 'Perlu diperiksa' : missingLaws.length ? 'Belum lengkap' : 'Lengkap'} — ${requiredLaws.length - missingLaws.length} dari 5 dasar hukum ditemukan`}
-            </strong>
-            {missingLaws.length > 0 && (
-              <p>
-                {reviewLaws
-                  ? 'Pembacaan referensi belum lengkap; periksa dokumen sumber.'
-                  : 'Periksa peraturan berlabel “Belum ditemukan” pada dokumen sumber.'}
-              </p>
-            )}
-          </div>
-        )}
-        {effectiveActiveTab === 'dasar-hukum' ? (
-          <>
-            <h4 className="protection-law-group">Dasar hukum wajib</h4>
-            {requiredLaws.map((row) => (
-              <ProtectionEvidence
-                key={row.id}
-                row={row}
-                compact
-                openEvidence={(documentId, page) =>
-                  setSource({
-                    documentId,
-                    page,
-                    title:
-                      row.detail?.group === 'Dasar hukum'
-                        ? regulationDisplayTitle(row.field)
-                        : protectionFieldLabel(row),
-                  })
-                }
-              />
-            ))}
-            <h4 className="protection-law-group">Peraturan tambahan</h4>
-            {activeRows.filter((row) => !row.detail?.required).length ? (
-              activeRows
-                .filter((row) => !row.detail?.required)
-                .map((row) => (
-                  <ProtectionEvidence
-                    key={row.id}
-                    row={row}
-                    compact
-                    openEvidence={(documentId, page) =>
-                      setSource({
-                        documentId,
-                        page,
-                        title:
-                          row.detail?.group === 'Dasar hukum'
-                            ? regulationDisplayTitle(row.field)
-                            : protectionFieldLabel(row),
-                      })
-                    }
-                  />
-                ))
-            ) : (
-              <p className="protection-note">Tidak ada peraturan tambahan yang ditemukan.</p>
-            )}
-          </>
-        ) : activeRows.length > 0 ? (
-          activeRows.map((row) => (
-            <ProtectionEvidence
-              key={row.id}
-              row={row}
-              compact
-              openEvidence={(documentId, page) =>
-                setSource({
-                  documentId,
-                  page,
-                  title:
-                    row.detail?.group === 'Dasar hukum'
-                      ? regulationDisplayTitle(row.field)
-                      : protectionFieldLabel(row),
-                })
-              }
-            />
-          ))
-        ) : (
-          <p className="protection-tab-empty">Tidak ada item pada kategori ini.</p>
-        )}
+        <ProtectionInformationCards
+          tabKey={effectiveActiveTab}
+          rows={activeRows}
+          openEvidence={(documentId, page, title) => setSource({ documentId, page, title })}
+        />
       </div>
       {source && (
         <SourceDocumentViewer
