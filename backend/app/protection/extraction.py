@@ -467,25 +467,25 @@ def metadata(pages, *, expected_number="", expected_date=""):
         if toc(text):
             continue
         for match in re.finditer(
-            r"\b(?P<label>Nomor\s+Dokumen|No\.?\s*Dokumen|Kode\s+Dokumen|Nomor|No\.?)\s*"
-            r"(?::|\||–|-)?\s*(?P<value>[A-Za-z0-9]+(?:\s*[/–—.-]\s*[A-Za-z0-9]+)+)",
+            r"\b(?:(?P<label_doc>(?:Nomor|No\.?|Kode)\s+Dokumen)\b\s*(?::|\||–|-)?|"
+            r"(?P<label_short>Nomor|No)\b\.?\s*(?::|\||–|-))\s*"
+            r"(?P<value>[A-Za-z0-9]+(?:\s*[/–—-]\s*[A-Za-z0-9]+|\.[A-Za-z0-9]+)+)",
             text,
             re.I,
         ):
             value = re.split(
-                r"\b(?:Revision|Revisi|Tanggal|PROGRAM|Departemen)\b",
+                r"\b(?:Revision|Revisi|Tanggal|Date|Page|Halaman|PROGRAM|DOKUMEN|SISTEM|Departemen)\b",
                 match.group("value"),
                 flags=re.I,
-            )[0].strip()
-            if not re.search(r"[A-Za-z]", value):
+            )[0].strip(" -–—/:.")
+            if not (re.search(r"[A-Za-z]", value) and re.search(r"\d", value)):
                 continue
-            label = match.group("label")
             number.append(
                 {
                     "value": value,
                     "page": page["page"],
                     "quote": match.group(0),
-                    "label_score": 100 if re.search(r"dokumen|kode", label, re.I) else 70,
+                    "label_score": 100 if match.group("label_doc") else 70,
                 }
             )
         pattern = (

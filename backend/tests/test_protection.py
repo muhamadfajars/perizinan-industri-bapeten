@@ -369,6 +369,34 @@ class ProtectionTests(unittest.TestCase):
         self.assertFalse(records["identity"])
         self.assertTrue(warnings)
 
+    def test_document_number_ignores_prose_no_prefixes_and_word_slashes(self):
+        pages = [
+            page("No : 03/MG/X/2026\nNo. Komitmen/Kebijakan\nDalam kondisi normal. Karena itu\nnormal. 5", 1),
+            page("Nomor: TEI – HO – QM – PPR - 001\nNon- Destructive test dan non-condensing\nnomor kontak. 6.2", 2),
+        ]
+        self.assertEqual([item["value"] for item in metadata([pages[0]])["number"]], ["03/MG/X/2026"])
+        self.assertEqual(
+            [item["value"] for item in metadata([pages[1]])["number"]],
+            ["TEI – HO – QM – PPR - 001"],
+        )
+
+    def test_zone_diagram_confirmed_when_zone_described_earlier_on_same_or_previous_page(self):
+        pages = [
+            page(
+                "Pembagian area meliputi Daerah Pengendalian di sekitar unit dan Daerah Supervisi "
+                + ("yang dikendalikan selama pengoperasian alat XRF. " * 4)
+                + "Gambar 3. Pembagian Daerah Kerja",
+                44,
+            ),
+            page("Gambar 4. Pembagian Daerah Kerja Cabang B", 45),
+        ]
+        rows = information(pages, lambda *args, **kwargs: make_row("d", *args, **kwargs))
+        zones = [r for r in rows if r["field"].startswith("Daerah")]
+        self.assertEqual(len(zones), 2)
+        for row in zones:
+            self.assertFalse(row["detail"].get("review_required", False))
+            self.assertEqual(row["detail"]["pages"], [44, 45])
+
 
 if __name__ == "__main__":
     unittest.main()

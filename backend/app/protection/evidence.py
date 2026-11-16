@@ -165,13 +165,31 @@ def information(pages, make_row, *, semantic=None):
     for title, pattern, visual in topics:
         found = snippets(pages, pattern) if visual else semantic.get("dose", dose_statements(pages))
         if visual:
+            zone_by_page = {item["page"]: item["quote"] for item in found}
             diagrams = snippets(
                 pages,
                 r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:Pembagian\s+Daerah\s+Kerja|(?:Daerah|Area|Zonasi)\s+(?:Pengendalian|Supervisi|Pengawasan|Kerja|Radiasi))|\b(?:Denah|Layout)\s+Ruang(?:an)?\b",
             )
             candidates = [item for item in diagrams if item["has_visual"]]
-            # A generic floor plan is a candidate, not proof of both zone types.
-            confirmed = [item for item in candidates if re.search(pattern, item["quote"], re.I)]
+            # A generic floor plan is a candidate, unless the diagram page or immediate context confirms this zone.
+            confirmed = []
+            confirmed_pages = set()
+            for item in candidates:
+                if re.search(pattern, item["quote"], re.I):
+                    confirmed.append(item)
+                    confirmed_pages.add(item["page"])
+                    continue
+                zone_quote = zone_by_page.get(item["page"]) or zone_by_page.get(item["page"] - 1)
+                if zone_quote:
+                    confirmed.append(
+                        {**item, "quote": compact(f"{zone_quote} {item['quote']}")[:900]}
+                    )
+                    confirmed_pages.add(item["page"])
+            if confirmed:
+                for item in candidates:
+                    if item["page"] not in confirmed_pages and (item["page"] - 1) in confirmed_pages:
+                        confirmed.append(item)
+                        confirmed_pages.add(item["page"])
             found = confirmed or candidates
         if not visual and not semantic.get("dose_review"):
             found = found[:1]
