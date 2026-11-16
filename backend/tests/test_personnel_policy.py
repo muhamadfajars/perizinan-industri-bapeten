@@ -86,11 +86,54 @@ class PersonnelPolicyTests(unittest.TestCase):
                 "Belum ditemukan dalam teks terbaca",
             ),
             ("Periode pemakaian: 31/02/2026 - 01/03/2026", "Belum ditemukan dalam teks terbaca"),
+            (
+                "Tanggal Pelayanan\n23 April - 05 Mei 2026\nPeriode pemakaian :\nDivisi : -",
+                "Belum ditemukan dalam teks terbaca",
+            ),
         ):
             rows = self.evaluate(text, kind="DOSE")
             row = next(r for r in rows if r["field"] == "Periode Pemakaian")
             self.assertEqual(row["observed"], expected)
             self.assertEqual(row["status"], "REVIEW" if expected.startswith("Belum") else "INFO")
+
+    def test_multi_page_dose_period_handles_skewed_line_above_label(self):
+        parsed = {
+            "text": "",
+            "document_type": "DOSE",
+            "pages": [
+                {
+                    "page": 1,
+                    "native_text": "Nama Pekerja Radiasi\nShafira Rafa Maulida\nPeriode pemakaian :\nMei - Juli 2026\nDivisi : -",
+                    "ocr": [],
+                },
+                {
+                    "page": 2,
+                    "native_text": "Nama Pekerja Radiasi\nHp(0,07)\nAgustus - Oktober 2026\nPeriode pemakaian :\nDivisi : -\nShafira Rafa Maulida",
+                    "ocr": [],
+                },
+            ],
+        }
+        original = [
+            {
+                "field": "Nama Petugas",
+                "expected": "Shafira Rafa Maulida",
+                "observed": "Shafira Rafa Maulida",
+                "status": "MATCH",
+                "score": 100,
+            }
+        ]
+        doc = {"id": "doc_dose", "filename": "evaluasi_dosis.pdf", "subtype": "Evaluasi Dosis / Zero Check"}
+        rows = conditional_rows(
+            parsed,
+            original,
+            {"personnel": [{"nama": "Shafira Rafa Maulida", "keahlian": "PPR"}]},
+            doc,
+            today=date(2026, 11, 16),
+        )
+        period = next(r for r in rows if r["field"] == "Periode Pemakaian")
+        self.assertEqual(period["observed"], "Mei - Juli 2026; Agustus - Oktober 2026")
+        self.assertEqual(period["status"], "INFO")
+        self.assertEqual(period["detail"]["pages"], [1, 2])
 
     def test_name_without_actual_source_cannot_match_or_group(self):
         rows = self.evaluate("Sertifikat milik orang lain")
@@ -177,7 +220,7 @@ class PersonnelPolicyTests(unittest.TestCase):
         groups = group_sections(sections)
         self.assertEqual([g["category"] for g in groups], ["proteksi", "personel", "label"])
         personel = groups[1]
-        self.assertEqual(personel["name"], "Dokumen Personel · 3 file")
+        self.assertEqual(personel["name"], "Dokumen Personel · 3 Dokumen")
         self.assertEqual({r["document_id"] for r in personel["rows"]}, {"doc1", "doc2", "doc3"})
         self.assertEqual(
             [d["id"] for d in personel["source_documents"]],
@@ -233,7 +276,7 @@ class PersonnelPolicyTests(unittest.TestCase):
         ]
         groups = group_sections(sections)
         self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0]["name"], "Dokumen Personel · 3 file")
+        self.assertEqual(groups[0]["name"], "Dokumen Personel · 3 Dokumen")
         self.assertEqual(
             {r["document_id"] for r in groups[0]["rows"]},
             {"doc_budi", "doc_shared", "doc_rama"},

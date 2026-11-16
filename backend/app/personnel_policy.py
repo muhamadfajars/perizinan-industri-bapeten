@@ -324,7 +324,7 @@ def group_sections(sections):
     merged_section = {
         "id": first.get("id"),
         "category": "personel",
-        "name": f"Dokumen Personel · {doc_count} file",
+        "name": f"Dokumen Personel · {doc_count} Dokumen",
         "document_id": first.get("document_id") or first.get("id"),
         "source_documents": merged_source_docs,
         "rows": merged_rows,

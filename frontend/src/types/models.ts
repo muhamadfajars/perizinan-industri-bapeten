@@ -62,7 +62,7 @@ export type MatchRow = {
     field_label?: string;
     required?: boolean;
     images?: boolean;
-    evidence?: { page: number; quote: string; method?: string; has_visual?: boolean }[];
+    evidence?: { page: number; quote: string; value?: string; method?: string; has_visual?: boolean }[];
     pages?: number[];
     heading?: string;
     frequencies?: string[];

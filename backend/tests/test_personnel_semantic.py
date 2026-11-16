@@ -317,3 +317,203 @@ class PersonnelSemanticTests(unittest.TestCase):
             result = {r["field"]: r for r in enrich(parsed, rows, app, doc)}
         self.assertEqual(result["Nama"]["status"], "MATCH")
         self.assertEqual(result["Nama"]["observed"], "Budi Santos0")
+
+    def test_certificate_holder_accepted_without_explicit_nama_label_and_signer_rejected(self):
+        text = "\n".join(
+            [
+                "SERTIFIKAT PELATIHAN",
+                "No. 001/2026",
+                "Dengan ini menyatakan bahwa,",
+                "This is to certify that,",
+                "SHAFIRA RAFA MAULIDA",
+                "Telah mengikuti training",
+                "has participated in the training :",
+                "Bogor, 21 April 2026",
+                "Atas nama (on behalf of) PT Contoh",
+                "Andi Wijaya",
+                "Direktur PT Contoh",
+            ]
+        )
+        parsed = {
+            "document_type": "TRAINING",
+            "text": text,
+            "pages": [{"page": 1, "native_text": text, "ocr": []}],
+        }
+        doc = {
+            "id": "doc_cert",
+            "filename": "sertifikat.pdf",
+            "category": "personel",
+            "subtype": "Sertifikat Pelatihan",
+        }
+        app = {"personnel": [{"nama": "Shafira Rafa Maulida", "keahlian": "PPR"}]}
+        records = [
+            {
+                "page": 1,
+                "person": "SHAFIRA RAFA MAULIDA",
+                "role": "",
+                "expiry": "",
+                "start_line": 5,
+                "end_line": 7,
+            },
+            {
+                "page": 1,
+                "person": "Andi Wijaya",
+                "role": "",
+                "expiry": "",
+                "start_line": 9,
+                "end_line": 11,
+            },
+        ]
+        with patch("app.personnel_semantic.llm.request_records", return_value=records):
+            result = {r["field"]: r for r in enrich(parsed, [], app, doc)}
+        self.assertEqual(result["Nama"]["status"], "MATCH")
+        self.assertEqual(result["Nama"]["observed"], "SHAFIRA RAFA MAULIDA")
+        self.assertIn("Dengan ini menyatakan bahwa", result["Nama"]["quote"])
+        self.assertNotIn("_uncacheable", doc)
+
+    def test_unlabelled_certificate_single_line_uses_adjacent_predicate_not_atas_nama(self):
+        text = "\n".join(
+            [
+                "SERTIFIKAT",
+                "Rudi Hartono",
+                "Telah mengikuti pelatihan Proteksi Radiasi",
+                "Atas nama PT Contoh",
+                "Budi Santoso",
+                "Direktur",
+            ]
+        )
+        records = [
+            {
+                "page": 1,
+                "person": "Rudi Hartono",
+                "role": "",
+                "expiry": "",
+                "start_line": 2,
+                "end_line": 2,
+            },
+            {
+                "page": 1,
+                "person": "Budi Santoso",
+                "role": "",
+                "expiry": "",
+                "start_line": 4,
+                "end_line": 6,
+            },
+        ]
+        with patch("app.personnel_semantic.llm.request_records", return_value=records):
+            evidence, warnings = recover([{"page": 1, "text": text}])
+        holders = [e for e in evidence if e["kind"] == "holder"]
+        self.assertEqual([h["person"] for h in holders], ["Rudi Hartono"])
+        self.assertIn("Telah mengikuti", holders[0]["quote"])
+        self.assertFalse(warnings)
+
+    def test_dose_table_holder_row_expands_to_table_header_and_keeps_period_clean(self):
+        def page_text(period_line, worker_line):
+            return "\n".join(
+                [
+                    "LAPORAN HASIL UJI",
+                    "ZERO CHECK",
+                    "Nama Pekerja Radiasi",
+                    "Kurva Kalibrasi",
+                    "Dosis Efektif ( mSv )",
+                    "Hp(10)",
+                    "Hp(0,07)",
+                    "Periode pemakaian :",
+                    period_line,
+                    "Divisi : -",
+                    "1",
+                    "001",
+                    worker_line,
+                    "Metode Uji",
+                    "Catatan",
+                    "Kepala, NuklindoLab",
+                    "Dr. Eko Pudjadi",
+                ]
+            )
+
+        p1 = page_text("September - November 2026", "Rama Chandra")
+        p2 = "\n".join(
+            [
+                "LAPORAN HASIL UJI",
+                "ZERO CHECK",
+                "Nama Pekerja Radiasi",
+                "Kurva Kalibrasi",
+                "Dosis Efektif ( mSv )",
+                "Hp(10)",
+                "Hp(0,07)",
+                "Desember 2026 - Februari 2027",
+                "Periode pemakaian :",
+                "Divisi : -",
+                "1",
+                "001",
+                "[Rama Chandra",
+                "Metode Uji",
+                "Catatan",
+                "Kepala, NuklindoLab",
+                "Dr. Eko Pudjadi",
+            ]
+        )
+        parsed = {
+            "document_type": "DOSE",
+            "text": p1 + "\n" + p2,
+            "pages": [
+                {"page": 1, "native_text": p1, "ocr": []},
+                {"page": 2, "native_text": p2, "ocr": []},
+            ],
+        }
+        doc = {
+            "id": "doc_zc",
+            "filename": "zero_check.pdf",
+            "category": "personel",
+            "subtype": "Evaluasi Dosis / Zero Check",
+        }
+        app = {"personnel": [{"nama": "Rama Chandra", "keahlian": "Operator"}]}
+        original = [
+            {
+                "field": "Nama Petugas",
+                "expected": "Rama Chandra",
+                "observed": "Rama Chandra",
+                "status": "MATCH",
+                "score": 100,
+            }
+        ]
+        rows = conditional_rows(parsed, original, app, doc, today=date(2026, 11, 16))
+        records = [
+            {
+                "page": 1,
+                "person": "Rama Chandra",
+                "role": "Pekerja Radiasi",
+                "expiry": "September - November 2026",
+                "start_line": 13,
+                "end_line": 13,
+            },
+            {
+                "page": 2,
+                "person": "Rama Chandra",
+                "role": "Pekerja Radiasi",
+                "expiry": "Desember 2026 - Februari 2027",
+                "start_line": 13,
+                "end_line": 13,
+            },
+            {
+                "page": 1,
+                "person": "Dr. Eko Pudjadi",
+                "role": "Kepala, NuklindoLab",
+                "expiry": "",
+                "start_line": 17,
+                "end_line": 17,
+            },
+        ]
+        with patch("app.personnel_semantic.llm.request_records", return_value=records):
+            result = {r["field"]: r for r in enrich(parsed, rows, app, doc, today=date(2026, 11, 16))}
+        self.assertEqual(result["Nama"]["status"], "MATCH")
+        self.assertEqual(result["Nama"]["observed"], "Rama Chandra")
+        self.assertEqual(result["Nama"]["detail"]["pages"], [1, 2])
+        self.assertEqual(
+            result["Periode Pemakaian"]["observed"],
+            "September - November 2026; Desember 2026 - Februari 2027",
+        )
+        self.assertEqual(result["Periode Pemakaian"]["status"], "INFO")
+        self.assertFalse(result["Periode Pemakaian"]["detail"].get("review_required"))
+        self.assertEqual(result["Periode Pemakaian"]["detail"]["pages"], [1, 2])
+        self.assertNotIn("_uncacheable", doc)

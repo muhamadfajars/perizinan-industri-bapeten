@@ -2,6 +2,11 @@ import { Fragment, useState } from 'react';
 import { ExternalLink, Users } from 'lucide-react';
 import type { MatchRow, MatchSection, MatchStatus } from '../types/models';
 import { isPersonnelInformation } from '../lib/matching';
+import {
+  extractUsagePeriods,
+  findDuplicatePersonnelTabIds,
+  stripUploadTimestamp,
+} from '../lib/matchingDisplay';
 import { EvidenceStatus } from './EvidenceStatus';
 import { SourceDocumentViewer } from './SourceDocumentViewer';
 
@@ -10,7 +15,8 @@ interface DocGroup {
   documentId?: string;
   docType: string;
   filename?: string;
-  label: string;
+  shortFilename?: string;
+  headerTitle: string;
   owners: string[];
   isShared: boolean;
   coOwners: string[];
@@ -18,26 +24,17 @@ interface DocGroup {
   rows: MatchRow[];
 }
 
-function cleanFilenameLabel(filename?: string): string {
-  if (!filename) return '';
-  return filename
-    .replace(/^\d{8,14}[-_]\s*/, '')
-    .replace(/\.[^.]+$/, '')
-    .trim();
+function formatOwnerSummary(owners: string[]): string {
+  if (owners.length <= 2) return owners.join(', ');
+  return `${owners[0]}, ${owners[1]} (+${owners.length - 2} lainnya)`;
 }
 
 function extractOwners(docRows: MatchRow[]): string[] {
   const seen = new Set<string>();
   const owners: string[] = [];
   for (const r of docRows) {
-    const candidate = (
-      r.detail?.person_name || (r.field === 'Nama' ? r.observed : '')
-    )?.trim();
-    if (
-      !candidate ||
-      ['—', '-', 'Belum terbaca'].includes(candidate) ||
-      candidate.startsWith('Belum')
-    ) {
+    const candidate = (r.detail?.person_name || (r.field === 'Nama' ? r.observed : ''))?.trim();
+    if (!candidate || ['—', '-', 'Belum terbaca'].includes(candidate) || candidate.startsWith('Belum')) {
       continue;
     }
     const key = candidate.toLocaleLowerCase('id-ID');
@@ -85,20 +82,18 @@ export function PersonnelDocuments({
     groupMap.set(key, [...(groupMap.get(key) ?? []), row]);
   }
 
-  const rawGroups: DocGroup[] = [...groupMap].map(([id, docRows]) => {
+  const docGroups: DocGroup[] = [...groupMap].map(([id, docRows]) => {
     const first = docRows[0];
     const docType = first.detail?.source_label || 'Dokumen Personel';
     const filename = first.detail?.source_filename;
+    const shortFilename = stripUploadTimestamp(filename);
     const owners = extractOwners(docRows);
-    const cleaned = cleanFilenameLabel(filename);
-    const baseLabel =
+    const headerTitle =
       owners.length === 1
         ? `${docType} — ${owners[0]}`
         : owners.length > 1
-          ? `${docType} — ${owners.join(', ')}`
-          : cleaned && cleaned.toLocaleLowerCase('id-ID') !== docType.toLocaleLowerCase('id-ID')
-            ? `${docType} — ${cleaned}`
-            : docType;
+          ? `${docType} — ${formatOwnerSummary(owners)}`
+          : docType;
     const isShared = Boolean(
       first.detail?.shared_document || first.detail?.co_owners?.length || owners.length > 1,
     );
@@ -110,7 +105,8 @@ export function PersonnelDocuments({
       documentId: first.document_id,
       docType,
       filename,
-      label: baseLabel,
+      shortFilename,
+      headerTitle,
       owners,
       isShared,
       coOwners,
@@ -119,36 +115,13 @@ export function PersonnelDocuments({
     };
   });
 
-  // Disambiguate colliding tab labels automatically without hardcoding
-  const baseCounts = new Map<string, number>();
-  for (const g of rawGroups) {
-    baseCounts.set(g.label, (baseCounts.get(g.label) ?? 0) + 1);
-  }
-  const usedLabels = new Set<string>();
-  const docGroups = rawGroups.map((g) => {
-    let label = g.label;
-    if ((baseCounts.get(g.label) ?? 0) > 1) {
-      const cleaned = cleanFilenameLabel(g.filename);
-      if (cleaned && !label.toLocaleLowerCase('id-ID').includes(cleaned.toLocaleLowerCase('id-ID'))) {
-        label = `${label} (${cleaned})`;
-      }
-    }
-    if (usedLabels.has(label)) {
-      let counter = 2;
-      while (usedLabels.has(`${label} (#${counter})`)) {
-        counter += 1;
-      }
-      label = `${label} (#${counter})`;
-    }
-    usedLabels.add(label);
-    return { ...g, label };
-  });
-
   if (!docGroups.length) {
     return <p className="matching-filter-empty">Tidak ada field yang sesuai pencarian atau filter.</p>;
   }
 
+  const duplicateTabIds = findDuplicatePersonnelTabIds(docGroups);
   const activeGroup = docGroups.find((g) => g.id === activeTabId) ?? docGroups[0];
+  const displayHeaderFilename = activeGroup.shortFilename || activeGroup.filename;
   const comparisonRows = activeGroup.rows.filter((r) => !isPersonnelInformation(r));
   const informationRows = activeGroup.rows.filter(isPersonnelInformation);
   const distinctPeople = new Set(
@@ -158,54 +131,72 @@ export function PersonnelDocuments({
 
   return (
     <div className="personnel-documents">
-      {/* Tab Navigasi Dokumen Personel (1 tab per file unggahan) */}
-      <div className="personnel-doc-tabs" role="tablist" aria-label="Daftar Dokumen Personel">
-        {docGroups.map((group) => {
-          const isActive = group.id === activeGroup.id;
-          return (
-            <button
-              key={group.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              className={`personnel-doc-tab ${isActive ? 'active' : ''}`}
-              title={group.filename ? `${group.label} (${group.filename})` : group.label}
-              onClick={() => setActiveTabId(group.id)}
-            >
-              <span
-                className={`doc-tab-status-dot status-dot-${group.status.toLowerCase()}`}
-                aria-hidden="true"
-              />
-              <span className="doc-tab-label">{group.label}</span>
-              {group.isShared && (
-                <span
-                  className="doc-tab-badge-shared"
-                  title={
-                    group.owners.length > 1
-                      ? `Dokumen bersama: memuat ${group.owners.join(', ')}`
-                      : `Dokumen bersama: juga memuat ${group.coOwners.join(', ')}`
-                  }
-                >
-                  Kolektif
-                </span>
-              )}
-              {(group.status === 'REVIEW' || group.status === 'MISMATCH') && (
-                <span className={`doc-tab-badge-status status-${group.status.toLowerCase()}`}>
-                  {group.status === 'MISMATCH' ? 'Mismatch' : 'Review'}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Daftar Dokumen Personel di Kolom Kiri (1 item per file unggahan) */}
+      <aside className="personnel-doc-sidebar">
+        <div className="personnel-doc-list-title">Daftar Dokumen ({docGroups.length})</div>
+        <div className="personnel-doc-tabs" role="tablist" aria-label="Daftar Dokumen Personel">
+          {docGroups.map((group) => {
+            const isActive = group.id === activeGroup.id;
+            const ownerText = group.owners.length > 0 ? formatOwnerSummary(group.owners) : null;
+            const showDisambiguator = duplicateTabIds.has(group.id) && Boolean(group.shortFilename);
+            const tooltipFilename = group.shortFilename || group.filename;
+            return (
+              <button
+                key={group.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`personnel-doc-tab ${isActive ? 'active' : ''}`}
+                title={tooltipFilename ? `${group.docType} — ${tooltipFilename}` : group.docType}
+                onClick={() => setActiveTabId(group.id)}
+              >
+                <div className="doc-tab-top">
+                  <span
+                    className={`doc-tab-status-dot status-dot-${group.status.toLowerCase()}`}
+                    aria-hidden="true"
+                  />
+                  <span className="doc-tab-title">{group.docType}</span>
+                  {(group.isShared || group.status === 'REVIEW' || group.status === 'MISMATCH') && (
+                    <span className="doc-tab-badges">
+                      {group.isShared && (
+                        <span
+                          className="doc-tab-badge-shared"
+                          title={
+                            group.owners.length > 1
+                              ? `Dokumen bersama: memuat ${group.owners.join(', ')}`
+                              : `Dokumen bersama: juga memuat ${group.coOwners.join(', ')}`
+                          }
+                        >
+                          Kolektif
+                        </span>
+                      )}
+                      {(group.status === 'REVIEW' || group.status === 'MISMATCH') && (
+                        <span className={`doc-tab-badge-status status-${group.status.toLowerCase()}`}>
+                          {group.status === 'MISMATCH' ? 'Mismatch' : 'Review'}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <div className={ownerText ? 'doc-tab-owner' : 'doc-tab-owner doc-tab-owner-unknown'}>
+                  {ownerText ?? 'Pemilik belum terbaca'}
+                </div>
+                {showDisambiguator && <div className="doc-tab-file">{group.shortFilename}</div>}
+              </button>
+            );
+          })}
+        </div>
+      </aside>
 
-      {/* Konten Dokumen yang Dipilih */}
+      {/* Konten Dokumen yang Dipilih di Kolom Kanan */}
       <section className="personnel-doc-content" key={activeGroup.id}>
         <div className="personnel-doc-header">
           <div className="personnel-doc-title-group">
-            <h3>{activeGroup.label}</h3>
-            {activeGroup.filename && (
-              <p className="personnel-doc-filename">{activeGroup.filename}</p>
+            <h3>{activeGroup.headerTitle}</h3>
+            {displayHeaderFilename && (
+              <p className="personnel-doc-filename" title={activeGroup.filename}>
+                {displayHeaderFilename}
+              </p>
             )}
             {activeGroup.isShared && (
               <div className="personnel-shared-notice" role="note">
@@ -214,8 +205,7 @@ export function PersonnelDocuments({
                   <strong>Dokumen Bersama / Kolektif:</strong>{' '}
                   {activeGroup.owners.length > 1 ? (
                     <>
-                      Dokumen ini memuat data personel untuk{' '}
-                      <strong>{activeGroup.owners.join(', ')}</strong>.
+                      Dokumen ini memuat data personel untuk <strong>{activeGroup.owners.join(', ')}</strong>.
                     </>
                   ) : (
                     <>
@@ -227,22 +217,6 @@ export function PersonnelDocuments({
               </div>
             )}
           </div>
-          {activeGroup.documentId && (
-            <button
-              type="button"
-              className="button button-source button-sm"
-              onClick={() =>
-                setSource({
-                  documentId: activeGroup.documentId!,
-                  title: activeGroup.label,
-                  page: activeGroup.rows[0]?.detail?.pages?.[0] ?? activeGroup.rows[0]?.page,
-                  imageOnly: activeGroup.rows.some((r) => r.field === 'Pengesahan'),
-                })
-              }
-            >
-              <ExternalLink size={15} /> Lihat dokumen sumber
-            </button>
-          )}
         </div>
 
         {/* Tabel Terpadu Dokumen Personel (Field yang dicocokkan dengan formulir permohonan) */}
@@ -253,7 +227,7 @@ export function PersonnelDocuments({
               className="table-scroll matching-table-scroll"
               tabIndex={0}
               role="region"
-              aria-label={`Tabel perbandingan ${activeGroup.label}`}
+              aria-label={`Tabel perbandingan ${activeGroup.headerTitle}`}
             >
               <table className="matching-table">
                 <thead>
@@ -327,7 +301,7 @@ export function PersonnelDocuments({
                 openSource={(documentId, page, imageOnly) =>
                   setSource({
                     documentId,
-                    title: `${activeGroup.label} — ${row.field}`,
+                    title: `${activeGroup.headerTitle} — ${row.field}`,
                     page,
                     imageOnly,
                   })
@@ -369,9 +343,16 @@ function PersonnelEvidenceCard({
 
   const isPengesahan = row.field === 'Pengesahan' || row.detail?.group === 'Pengesahan';
   const isMasaBerlaku = row.field === 'Masa Berlaku';
+  const isPeriodePemakaian = row.field === 'Periode Pemakaian';
 
   const review = Boolean(row.detail?.review_required || row.status === 'REVIEW');
   const found = pages.length > 0 && !row.observed?.startsWith('Belum');
+  const periodItems = isPeriodePemakaian && found ? extractUsagePeriods(row) : [];
+  const hideGenericPeriodNote =
+    isPeriodePemakaian &&
+    found &&
+    !review &&
+    row.note === 'Periode pemakaian ditampilkan sebagai informasi dokumen.';
   const foundLabel = isPengesahan
     ? 'Halaman pengesahan ditemukan'
     : isMasaBerlaku
@@ -392,11 +373,24 @@ function PersonnelEvidenceCard({
       <h4>{row.field}</h4>
       <EvidenceStatus found={found} review={review} foundLabel={foundLabel} />
 
-      {!isPengesahan && row.observed && row.observed !== '—' && (
-        <p className="protection-value" style={{ margin: '6px 0', fontWeight: 600 }}>
-          {row.observed}
-        </p>
-      )}
+      {!isPengesahan &&
+        (periodItems.length > 0 ? (
+          <ul className="personnel-period-list">
+            {periodItems.map((item, idx) => (
+              <li key={`${item.page ?? 'p'}-${idx}`} className="personnel-period-item">
+                {item.page != null && <span className="personnel-period-page">Hal. {item.page}</span>}
+                <span className="personnel-period-value">{item.value}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          row.observed &&
+          row.observed !== '—' && (
+            <p className="protection-value" style={{ margin: '6px 0', fontWeight: 600 }}>
+              {row.observed}
+            </p>
+          )
+        ))}
 
       {row.detail?.review_required && row.detail.review_reason && (
         <p className="protection-note">{row.detail.review_reason}</p>
@@ -404,7 +398,10 @@ function PersonnelEvidenceCard({
 
       {isPengesahan ? (
         <p className="protection-note">{defaultNote}</p>
-      ) : row.note && row.note !== row.observed && row.note !== row.detail?.review_reason ? (
+      ) : !hideGenericPeriodNote &&
+        row.note &&
+        row.note !== row.observed &&
+        row.note !== row.detail?.review_reason ? (
         <p className="protection-note">{row.note}</p>
       ) : defaultNote ? (
         <p className="protection-note">{defaultNote}</p>

@@ -64,12 +64,12 @@ except RuntimeError:
                     with (
                         patch.dict(os.environ, env_without_wait, clear=True),
                         patch(
-                            "app.protection.llm.time.monotonic", side_effect=[100.0, 279.9, 280.0]
+                            "app.protection.llm.time.monotonic", side_effect=[100.0, 699.9, 700.0]
                         ),
                         patch("app.protection.llm.time.sleep") as sleep_mock,
                     ):
                         with self.assertRaisesRegex(
-                            RuntimeError, r"Antrean Qwen penuh setelah menunggu 180 detik"
+                            RuntimeError, r"Antrean Qwen penuh setelah menunggu 600 detik"
                         ):
                             with llm.request_slot():
                                 self.fail("Slot acquired while already locked")

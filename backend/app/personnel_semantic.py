@@ -18,12 +18,50 @@ Isi per record:
 - role: profesi/keahlian/klasifikasi/jabatan pemilik yang tertulis di rentang bukti (kosongkan string jika tidak ada). Jangan ambil jabatan penandatangan atau daftar materi pelatihan.
 - Pada dokumen izin, profesi/klasifikasi dapat ditulis sebagai satu baris tepat di bawah nomor izin tanpa label 'profesi'; ambil jika tata letaknya menghubungkannya dengan pemilik dan sertakan seluruh konteks itu dalam rentang bukti.
 - expiry: salin teks mentah tanggal akhir masa berlaku sertifikat/izin milik pemilik (kosongkan string jika tidak ada, jika hanya tanggal terbit/lahir/ujian/pelatihan, jika hanya durasi seperti '5 tahun sejak ...', atau jika hanya periode pemantauan dosis TLD/zero check). Bila ada rentang tanggal berlaku, salin rentang lengkap.
-- start_line dan end_line (inklusif): rentang nomor baris sumber yang HARUS menyertakan baris label konteks pemilik (mis. 'Nama / Name', 'Nama Pekerja Radiasi', 'Dengan ini menugaskan kepada', 'memberikan sertifikat kepada', 'herewith CERTIFY that', 'Dengan ini menyatakan bahwa') SAMPAI baris nama pemilik (serta baris role dan expiry bila diisi). Untuk tabel pemantauan dosis, mulailah start_line dari baris header kolom 'Nama Pekerja Radiasi' sampai baris nama pekerjanya. Nomor baris hanya penanda, bukan isi dokumen.
+- start_line dan end_line (inklusif): rentang nomor baris sumber yang HARUS menyertakan baris label konteks pemilik (mis. 'Nama / Name', 'Nama Pekerja Radiasi', 'Dengan ini menugaskan kepada', 'memberikan sertifikat kepada', 'herewith CERTIFY that', 'Dengan ini menyatakan bahwa', 'Awarded/Presented to', atau bila tanpa label, sertakan baris keterangan penerima seperti 'Telah mengikuti' / 'has participated') SAMPAI baris nama pemilik (serta baris role dan expiry bila diisi). Untuk tabel pemantauan dosis, mulailah start_line dari baris header kolom 'Nama Pekerja Radiasi' sampai baris nama pekerjanya. Nomor baris hanya penanda, bukan isi dokumen.
 Jika ada beberapa pemilik berbeda pada halaman yang sama, keluarkan semua pemiliknya. Jika benar-benar tidak ada pemilik yang terbaca, kembalikan records kosong."""
 
 VALIDITY = re.compile(r"berlaku|berakhir|valid\s*(?:until|through|to)|expir\w*|hingga|sampai", re.I)
 HOLDER_ANCHOR = re.compile(
-    r"nama|\bname\b|kepada|certify|menyatakan|menunjuk|mengangkat|menugaskan|pemegang|penerima|pekerja|karyawan",
+    r"(?<!atas\s)\bnama\b|\bname\b|kepada|certif(?:y|ies|ied)|menyatakan|menerangkan|"
+    r"menunjuk|mengangkat|menugaskan|menetapkan|pemegang|penerima|pekerja|karyawan|"
+    r"\bpeserta\b|\bholder\b|\brecipient\b|"
+    r"(?:awarded|presented|granted|issued)\s+to\b|conferred\s+(?:upon|to)\b",
+    re.I,
+)
+HOLDER_PREDICATE = re.compile(
+    r"\btelah\s+(?:mengikuti|menyelesaikan|menjalani|lulus|menempuh)\b|"
+    r"\bhas\s+(?:participated|completed|attended|passed|successfully\s+(?:completed|passed))\b|"
+    r"\bhave\s+(?:participated|completed|attended|passed)\b|"
+    r"\bdinyatakan\s+(?:lulus|kompeten|berhasil)\b|"
+    r"\bdeclared\s+competent\b|"
+    r"\blulus\s+(?:ujian|pelatihan|sertifikasi|kompetensi)\b|"
+    r"\b(?:bertugas|ditugaskan|bekerja|diangkat|ditetapkan|menjabat)\s+sebagai\b",
+    re.I,
+)
+HOLDER_CONTEXT_BARRIER = re.compile(
+    r"\bat[ae]s\s+nama\b|\bon\s+behalf\s+of\b|\byang\s+bertanda\s+tangan\b|"
+    r"\bditandatangani\b|\bmengetahui\b|\bdisahkan\b|"
+    r"\b(?:direktur|director|pimpinan|ketua|penguji)\b|\bnip\.?\s*\d|\ba\.?\s*n\.?\s+kepala\b|"
+    r"\b(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|"
+    r"january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\b|"
+    r"\b(?:dipindai\s+dengan|scanned\s+with)\b",
+    re.I,
+)
+SIGNER_TITLE_NEAR_NAME = re.compile(
+    r"\b(?:direktur|director|pimpinan|ketua|penguji|manajer|manager|"
+    r"kepala\s+(?:bapeten|lab|balai|instalasi)|mengetahui|ditandatangani|nip\.?\s*\d)\b",
+    re.I,
+)
+TABLE_HOLDER_HEADER = re.compile(
+    r"\bnama\s+(?:pekerja(?:\s+radiasi)?|personel|petugas|pemakai|peserta|karyawan)\b",
+    re.I,
+)
+TABLE_SECTION_BARRIER = re.compile(
+    r"\bmetode\s+uji\b|\bcatatan\b|\blimit\s+deteksi\b|\bnilai\s+batas\s+dosis\b|"
+    r"\bkepala\b|\bdirektur\b|\bdirector\b|\bpimpinan\b|\bketua\b|\bpenguji\b|"
+    r"\byang\s+bertanda\s+tangan\b|\bditandatangani\b|\bmengetahui\b|\bdisahkan\b|"
+    r"\bat[ae]s\s+nama\b|\bon\s+behalf\s+of\b|\bnip\.?\s*\d",
     re.I,
 )
 PERMIT_NUMBER_LABEL = re.compile(
@@ -123,6 +161,90 @@ def permit_role_evidence(pages, owner_name):
     return None
 
 
+def _has_holder_evidence(raw_quote, person):
+    """Verify source quote links person as document holder/recipient, not signer."""
+    text = compact(raw_quote)
+    if HOLDER_ANCHOR.search(text):
+        return True
+    target = compact(person)
+    if not target:
+        return False
+    match = re.search(re.escape(target), text, re.I)
+    if not match:
+        return False
+    after = text[match.end() :]
+    pred = HOLDER_PREDICATE.search(after)
+    if not pred:
+        return False
+    return not SIGNER_TITLE_NEAR_NAME.search(after[: pred.start()])
+
+
+def _extend_holder_lines(lines, start, end, person):
+    """Include immediate intro/predicate lines when the model clipped right around the name."""
+    base = "\n".join(lines[start - 1 : end])
+    target = compact(person)
+    if not target or target.casefold() not in compact(base).casefold():
+        return base
+    # Step up at most 3 contiguous non-empty lines only when no explicit label/intro
+    # already sits inside start..end, stopping at any signer/date/predicate barrier.
+    if not HOLDER_ANCHOR.search(compact(base)):
+        best_start = start
+        scanned = 0
+        for idx in range(start - 2, -1, -1):
+            line = compact(lines[idx])
+            if not line:
+                continue
+            scanned += 1
+            if scanned > 3:
+                break
+            if HOLDER_CONTEXT_BARRIER.search(line) or HOLDER_PREDICATE.search(line):
+                break
+            if HOLDER_ANCHOR.search(line):
+                best_start = idx + 1
+                continue
+            if best_start < start:
+                break
+        if best_start < start:
+            candidate = "\n".join(lines[best_start - 1 : end])
+            if len(compact(candidate)) <= 2500:
+                return candidate
+    if _has_holder_evidence(base, person):
+        return base
+    # If unlabelled above, peek up to 2 contiguous lines below for a recipient predicate.
+    scanned_after = 0
+    for idx in range(end, len(lines)):
+        line = compact(lines[idx])
+        if not line:
+            continue
+        scanned_after += 1
+        if scanned_after > 2:
+            break
+        if HOLDER_CONTEXT_BARRIER.search(line):
+            break
+        candidate = "\n".join(lines[start - 1 : idx + 1])
+        if len(compact(candidate)) <= 2500 and _has_holder_evidence(candidate, person):
+            return candidate
+    if not SIGNER_TITLE_NEAR_NAME.search(compact(base)) and not TABLE_SECTION_BARRIER.search(
+        compact(base)
+    ):
+        scanned_table = 0
+        for idx in range(start - 2, -1, -1):
+            line = compact(lines[idx])
+            if not line:
+                continue
+            scanned_table += 1
+            if scanned_table > 18:
+                break
+            if TABLE_SECTION_BARRIER.search(line):
+                break
+            if TABLE_HOLDER_HEADER.search(line):
+                candidate = "\n".join(lines[idx:end])
+                if len(compact(candidate)) <= 2500:
+                    return candidate
+                break
+    return base
+
+
 def windows(pages):
     """Split on whole lines and retain absolute line numbers for source validation."""
     batch, size = [], 0
@@ -217,7 +339,7 @@ def recover(pages):
                 start, end = item.get("start_line"), item.get("end_line")
                 lines = page_lookup.get(item.get("page"), [])
                 item["quote"] = (
-                    "\n".join(lines[start - 1 : end])
+                    _extend_holder_lines(lines, start, end, item.get("person", ""))
                     if (type(start) is int and type(end) is int and 1 <= start <= end <= len(lines))
                     else ""
                 )
@@ -246,7 +368,7 @@ def recover(pages):
                 valid = (
                     valid
                     and person_key(person) == person_key(value)
-                    and bool(HOLDER_ANCHOR.search(quote))
+                    and _has_holder_evidence(quote, person)
                 )
             if kind == "expiry":
                 labels = list(VALIDITY.finditer(quote))
@@ -257,7 +379,7 @@ def recover(pages):
             if not valid:
                 if kind == "holder":
                     candidate_warnings.append(
-                        "Hasil LLM tanpa kutipan sumber dan hubungan pemilik yang memadai diabaikan."
+                        "Nama pada dokumen belum disertai keterangan pemilik atau penerima yang terverifikasi."
                     )
                 continue
             evidence.append(
@@ -326,9 +448,13 @@ def enrich(parsed, rows, application, doc, *, today=None):
             warnings.append('Nama penerima terbaca pada blok penugasan; verifikasi LLM belum tuntas.')
     holders = {person_key(r["person"]): r["person"] for r in records if r["kind"] == "holder"}
     # Multiple owners/documents require splitting; never attach a global role/expiry to one person.
-    if len(holders) != 1:
+    if len(holders) == 0:
         warnings.append(
-            "Pemilik tunggal dokumen belum terverifikasi; periksa atau pisahkan dokumen gabungan."
+            "Nama pemilik dokumen belum dapat dipastikan secara otomatis; silakan periksa dokumen sumber."
+        )
+    elif len(holders) > 1:
+        warnings.append(
+            "Terdeteksi lebih dari satu nama pemilik pada dokumen; silakan periksa atau pisahkan bila merupakan dokumen gabungan."
         )
     if warnings:
         doc["_uncacheable"] = True
@@ -355,7 +481,15 @@ def enrich(parsed, rows, application, doc, *, today=None):
                     row["field"] == "Masa Berlaku" and row.get("detail", {}).get("pages")
                 ):
                     row["status"] = "REVIEW"
-                row["note"] = " ".join(dict.fromkeys(warnings))
+                if (
+                    row["field"] == "Periode Pemakaian"
+                    and row.get("detail", {}).get("pages")
+                ):
+                    row["note"] = (
+                        "Periode pemakaian terbaca pada dokumen; silakan periksa keterkaitannya dengan pemilik dokumen."
+                    )
+                else:
+                    row["note"] = " ".join(dict.fromkeys(warnings))
                 row.setdefault("detail", {})["review_required"] = True
             if linked_person:
                 linked_name = linked_person.get("nama") or linked_person.get("name")

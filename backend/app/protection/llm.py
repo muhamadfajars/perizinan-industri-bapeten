@@ -92,7 +92,7 @@ def request_slot(*, wait_seconds=None):
     Restart all workers after changing the limit. Slot zero retains the old lock.
     """
     if wait_seconds is None:
-        raw_wait = os.getenv("BAPETEN_LLM_QUEUE_WAIT", "180")
+        raw_wait = os.getenv("BAPETEN_LLM_QUEUE_WAIT", "600")
         try:
             wait_seconds = int(raw_wait)
         except ValueError as exc:

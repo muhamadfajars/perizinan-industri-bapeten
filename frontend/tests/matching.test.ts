@@ -7,7 +7,12 @@ import {
   nextToggleAllSections,
   sortMatchingSections,
 } from '../src/lib/matching.ts';
-import { matchingSectionTitle } from '../src/lib/matchingDisplay.ts';
+import {
+  extractUsagePeriods,
+  findDuplicatePersonnelTabIds,
+  matchingSectionTitle,
+  stripUploadTimestamp,
+} from '../src/lib/matchingDisplay.ts';
 import type { CategoryId, MatchRow, MatchSection } from '../src/types/models.ts';
 
 const order: CategoryId[] = [
@@ -184,7 +189,7 @@ test('matchingSectionTitle returns proper personnel title with and without perso
   const unifiedSection: MatchSection = {
     id: 'sec-0',
     category: 'personel',
-    name: 'Dokumen Personel · 3 file',
+    name: 'Dokumen Personel · 3 Dokumen',
     rows: [],
   };
   const namedSection: MatchSection = {
@@ -213,7 +218,65 @@ test('matchingSectionTitle returns proper personnel title with and without perso
     ],
   };
 
-  assert.equal(matchingSectionTitle(unifiedSection), 'Dokumen Personel · 3 file');
+  assert.equal(matchingSectionTitle(unifiedSection), 'Dokumen Personel · 3 Dokumen');
   assert.equal(matchingSectionTitle(namedSection), 'Dokumen Personel — JUVIANDY');
   assert.equal(matchingSectionTitle(groupedSubtypeSection), 'Surat Izin Bekerja (SIB)');
+});
+
+test('stripUploadTimestamp and findDuplicatePersonnelTabIds identify colliding tabs only', () => {
+  assert.equal(
+    stripUploadTimestamp('20261019082501-Mulia Perbaikan Garansi (Rama).pdf'),
+    'Mulia Perbaikan Garansi (Rama).pdf',
+  );
+  const duplicates = findDuplicatePersonnelTabIds([
+    { id: 'd1', docType: 'Sertifikat Pelatihan', owners: ['Shafira'] },
+    { id: 'd2', docType: 'Surat Penunjukan Tugas', owners: ['Shafira'] },
+    { id: 'd3', docType: 'Surat Penunjukan Tugas', owners: ['Shafira'] },
+    { id: 'd4', docType: 'Surat Penunjukan Tugas', owners: ['Juviandy'] },
+  ]);
+  assert.deepEqual([...duplicates], ['d2', 'd3']);
+});
+
+test('extractUsagePeriods prefers structured page evidence and falls back cleanly', () => {
+  const withEvidence: MatchRow = {
+    id: 'p1',
+    field: 'Periode Pemakaian',
+    expected: '—',
+    observed: 'September - November 2026; Desember 2026 - Februari 2027',
+    score: null,
+    status: 'INFO',
+    detail: {
+      type: 'personnel',
+      pages: [1, 2],
+      evidence: [
+        { page: 1, quote: 'Periode pemakaian September - November 2026', value: 'September - November 2026' },
+        {
+          page: 2,
+          quote: 'Periode pemakaian Desember 2026 - Februari 2027',
+          value: 'Desember 2026 - Februari 2027',
+        },
+      ],
+    },
+  };
+  assert.deepEqual(extractUsagePeriods(withEvidence), [
+    { page: 1, value: 'September - November 2026' },
+    { page: 2, value: 'Desember 2026 - Februari 2027' },
+  ]);
+
+  const fallbackRow: MatchRow = {
+    id: 'p2',
+    field: 'Periode Pemakaian',
+    expected: '—',
+    observed: 'Mei - Juli 2026; Agustus - Oktober 2026',
+    score: null,
+    status: 'INFO',
+    detail: {
+      type: 'personnel',
+      pages: [1, 2],
+    },
+  };
+  assert.deepEqual(extractUsagePeriods(fallbackRow), [
+    { page: 1, value: 'Mei - Juli 2026' },
+    { page: 2, value: 'Agustus - Oktober 2026' },
+  ]);
 });
