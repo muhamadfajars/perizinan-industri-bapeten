@@ -79,7 +79,14 @@ def _program(doc, app, ref):
 def _supp(doc, app, ref):
     from src.extraction.supplementary_matching import analyze
 
-    raw = analyze(str(storage.file_path(doc)), SUPP[doc["category"]], ref)
+    path = str(storage.file_path(doc))
+    raw = analyze(path, SUPP[doc["category"]], ref)
+    if doc["category"] in ("paparan", "kebocoran"):
+        from ..exposure_hybrid import enrich_exposure_rows
+
+        raw, llm_warn = enrich_exposure_rows(doc, app, path, raw)
+        if llm_warn:
+            doc["_uncacheable"] = True
     rows = []
     for x in raw.get("rows") or []:
         evidence = (x.get("evidence") or [{}])[0]
@@ -89,14 +96,20 @@ def _supp(doc, app, ref):
         status = x.get("status")
         score = x.get("score")
         # A model suffix is material, never silently accept E7894X as E7894.
+        # Partial multi-word model families (e.g. DXL 800 vs DXL 800 Niton) remain REVIEW + score.
         if "tipe" in field_name.lower() and (x.get("expected") and x.get("observed")):
+            from ..exposure_hybrid import is_token_subset_model
             from src.matching.import_approval_matcher import compare_field
 
             kind = "tipe_tabung" if "tabung" in field_name.lower() else "tipe_unit"
             check = compare_field(kind, x["expected"], x["observed"])
             if check["status"] == "MISMATCH":
-                status = "MISMATCH"
-                score = check["score"]
+                if is_token_subset_model(x["expected"], x["observed"]):
+                    status = "REVIEW"
+                    score = check["score"]
+                else:
+                    status = "MISMATCH"
+                    score = check["score"]
         # Paparan / kebocoran: compare only equipment fields evidenced in this document.
         # Keep facility and approval checks even when absent: their completeness matters.
         # A literal dash, null or empty OCR reading is not evidence of a mismatch.

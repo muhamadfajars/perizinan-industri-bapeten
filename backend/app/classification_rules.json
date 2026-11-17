@@ -83,6 +83,11 @@
       "subtype": null
     },
     {
+      "pattern": "sertifikat[\\s_-]*(?:uji[\\s_-]*)?mutu|uji[\\s_-]*mutu|sertifikat[\\s_-]*kalibrasi|calibration[\\s_-]*cert|quality[\\s_-]*(?:control[\\s_-]*)?cert|factory[\\s_-]*(?:test|qc)[\\s_-]*cert|certificate[\\s_-]*of[\\s_-]*(?:quality|calibration|conformity)",
+      "category": "mutu",
+      "subtype": null
+    },
+    {
       "pattern": "kebocoran[\\s_-]*tabung|pengukuran[\\s_-]*kebocoran|uji[\\s_-]*kebocoran",
       "category": "kebocoran",
       "subtype": null

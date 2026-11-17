@@ -9,12 +9,14 @@ from .constants import PROG, SUPP
 from ..protection.service import evaluate as evaluate_protection
 
 from ..management.service import evaluate as evaluate_management
+from ..quality_hybrid import evaluate as evaluate_quality
 
 HANDLERS = {
     **{k: _program for k in PROG},
     **{k: _supp for k in SUPP},
     "kesesuaian": _suitability,
     "fungsi": _functional,
+    "mutu": evaluate_quality,
     "personel": _personnel,
     "spesifikasi": _specification,
     "impor": _import,

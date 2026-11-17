@@ -69,6 +69,12 @@ export const CATEGORIES: DocumentCategory[] = [
     description: 'Uploader gabungan, matching identitas saja',
   },
   {
+    id: 'mutu',
+    name: 'Sertifikat Uji Mutu',
+    icon: 'filecheck',
+    description: 'Identitas alat, QC/kalibrasi pabrikan, pengesahan',
+  },
+  {
     id: 'paparan',
     name: 'Uji Paparan Radiasi',
     icon: 'radiation',

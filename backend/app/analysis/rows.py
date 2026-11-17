@@ -20,7 +20,7 @@ def _status(v):
         "DETECTED": "MATCH",
         "INCOMPLETE": "MISSING",
         "EXPIRED": "MISMATCH",
-    }.get(s, s if s in {"MATCH", "REVIEW", "MISMATCH", "MISSING"} else "REVIEW")
+    }.get(s, s if s in {"MATCH", "REVIEW", "MISMATCH", "MISSING", "INFO"} else "REVIEW")
 
 
 def _row(

@@ -22,6 +22,7 @@ CATEGORIES = (
     "impor",
     "kesesuaian",
     "fungsi",
+    "mutu",
     "paparan",
     "kebocoran",
 )
@@ -54,7 +55,7 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     ),
     # Manajemen
     (
-        r"(?i)SISTEM\s+MANAJEMEN\s+FASILITAS|SISTEM\s+MANAJEMEN\s+KESELAMATAN|SISTEM\s+MANAJEMEN\b|ASSURANCE\s+QUALIT|QUALITY\s+SYSTEM|SERTIFIKAT\s+MUTU",
+        r"(?i)SISTEM\s+MANAJEMEN\s+FASILITAS|SISTEM\s+MANAJEMEN\s+KESELAMATAN|SISTEM\s+MANAJEMEN\b|ASSURANCE\s+QUALIT|QUALITY\s+SYSTEM",
         "manajemen",
         None,
     ),
@@ -121,6 +122,12 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     (
         r"(?i)ACCEPTANCE\s+TEST|INSTALLATION\s+AND\s+VERIFICATION|SERVICE\s+REPORT|BERITA\s+ACARA\s+UJI\s+FUNGSI|HASIL\s+UJI\s+FUNGSI",
         "fungsi",
+        None,
+    ),
+    # Sertifikat Uji Mutu
+    (
+        r"(?i)SERTIFIKAT\s+(?:UJI\s+)?MUTU|QUALITY\s+(?:CONTROL\s+)?CERTIFICATE|CERTIFICATE\s+OF\s+(?:QUALITY|CONFORMITY)",
+        "mutu",
         None,
     ),
     # Paparan & Kebocoran
@@ -234,6 +241,11 @@ def classify_by_content(
             "Sertifikat Pelatihan",
             "Judul sertifikat dan keterangan pelatihan personel ditemukan",
         )
+    if (
+        re.search(r"(?im)^\s*(?:LAPORAN\s+(?:HASIL\s+)?)?.*UJI\s+PAPARAN\s+RADIASI\b", text[:1200])
+        and re.search(r"(?i)\bUJI\s+(?:FUNGSI|KOMISIONING)\b", text[:1200])
+    ):
+        return "fungsi", None, "Laporan gabungan uji paparan dan uji fungsi/komisioning terdeteksi"
     candidates = {}
     # Require a heading at the start of a line. Mentions within narrative text
     # are not enough evidence to choose a document category.
@@ -245,7 +257,7 @@ def classify_by_content(
             suffix = text[m.end() : line_end if line_end >= 0 else len(text)]
             if re.search(r"\.{3,}|…|\s\d+\s*$", suffix):
                 continue
-            if re.fullmatch(r"\s*(?:DOKUMEN\s+)?", prefix, re.IGNORECASE):
+            if re.fullmatch(r"\s*(?:(?:DOKUMEN|LAPORAN(?:\s+HASIL)?)\s+)?", prefix, re.IGNORECASE):
                 candidates[(cat, subtype)] = m.group(0)
     if len(candidates) == 1:
         (cat, subtype), evidence = next(iter(candidates.items()))
@@ -256,6 +268,27 @@ def classify_by_content(
             None,
             "Judul dokumen mengarah ke beberapa kategori. Perlu Pilih Kategori.",
         )
+    if (
+        re.search(r"(?i)\btest(?:ing)?\s+report\b", text[:1500])
+        and re.search(
+            r"(?i)\b(?:radiation\s+protection\s+detection|(?:x[-\s]*[γy]\s+)?radiation\s+dose\s+rate)\b",
+            text,
+        )
+        and not re.search(r"(?i)\b(?:uji\s+fungsi|functional\s+test|acceptance\s+test)\b", text)
+    ):
+        return "paparan", None, "Laporan pengujian laju dosis / proteksi radiasi terdeteksi"
+    if (
+        re.search(r"(?i)\b(?:calibration\s+certificate|sertifikat\s+kalibrasi)\b", text[:1200])
+        and re.search(
+            r"(?i)\b(?:name\s+of\s+product|instrument\s+serial|portable\s+xrf|handheld\s+xrf|x[\s-]*ray\s+(?:analyzer|unit|tube|equipment))\b",
+            text,
+        )
+        and not re.search(
+            r"(?i)\b(?:surveymeter|survey\s+meter|dose\s+rate\s+meter|dosimeter|tld|alat\s+ukur)\b",
+            text,
+        )
+    ):
+        return "mutu", None, "Sertifikat uji mutu / kalibrasi pabrikan peralatan sinar-X terdeteksi"
     if re.search(
         r"(?:CAUTION|DANGER|WARNING)\s+(?:X[\s-]*RAY|RADIATION)|"
         r"PRODUCES\s+RADIATION(?:\s+.*?)?\s+WHEN\s+ENERGIZED|"

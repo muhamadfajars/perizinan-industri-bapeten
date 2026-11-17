@@ -439,8 +439,10 @@ def _address(pages, expected, kind=None):
 def _signoff(pages, kind):
     """Detect an explicit letter sign-off or an approval block; NOT authenticity."""
     phrases = (
-        r"(?i)\b(?:mengetahui|pengesahan|ditandatangani|ditandatangani\s+oleh|"
-        r"menyetujui|disahkan|manajer\s+unit\s+administrasi|penguji\s+paparan\s+radiasi)\b"
+        r"(?i)(?:\b(?:mengetahui|pengesahan|ditandatangani|ditandatangani\s+oleh|"
+        r"menyetujui|disahkan|manajer\s+unit\s+administrasi|penguji\s+paparan\s+radiasi)\b|"
+        r"(?:^|\b)(?:conducted|tested|surveyed|verified|checked|approved|authorized)\s+by\s*:|"
+        r"^\s*(?:conducted|tested|surveyed|verified|checked|approved|authorized)\s+by\b)"
     )
     for pg in reversed(pages):
         text = pg.get("text") or ""

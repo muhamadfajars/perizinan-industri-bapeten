@@ -138,6 +138,40 @@ class ClassificationRobustnessTests(unittest.TestCase):
         self.assertEqual(read.call_count, 3)
         self.assertEqual(len(text.split("\f")), 6)
         doc.close()
+
+    def test_english_dose_rate_combined_report_and_equipment_calibration(self):
+        self.assertEqual(
+            classify_by_content(
+                "Test Report\nTesting Type: Commission Test\nItem Name: Radiation protection detection"
+            )[0],
+            "paparan",
+        )
+        self.assertEqual(
+            classify_by_content(
+                "LAPORAN HASIL UJI PAPARAN RADIASI, DAN UJI FUNGSI/ UJI KOMISIONING PESAWAT SINAR-X"
+            )[0],
+            "fungsi",
+        )
+        self.assertEqual(
+            classify_by_content(
+                "LANScientific Co., Ltd.\nCalibration Certificate\nName of Product: Handheld XRF analyzer\nInstrument Serial number: 1536367"
+            )[0],
+            "mutu",
+        )
+        self.assertEqual(
+            classify_by_content("SERTIFIKAT UJI MUTU PERALATAN\nNomor Seri: SN-001")[0],
+            "mutu",
+        )
+        self.assertEqual(
+            classify_by_content("CERTIFICATE OF QUALITY\nModel: TrueX G5")[0],
+            "mutu",
+        )
+        # Surveymeter calibration certificate must never be mistaken for unit acceptance test
+        self.assertIsNone(
+            classify_by_content(
+                "Calibration Certificate\nName of Product: Digital Surveymeter Dose Rate Meter\nSerial: SM-123"
+            )[0]
+        )
         image = io.BytesIO()
         Image.new("RGB", (10, 10)).save(image, format="TIFF")
         with patch("app.classification_reader.ocr", return_value="SURAT IZIN BEKERJA PETUGAS"):

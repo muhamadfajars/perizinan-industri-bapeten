@@ -26,6 +26,7 @@ CATEGORIES = {
     "impor",
     "kesesuaian",
     "fungsi",
+    "mutu",
     "paparan",
     "kebocoran",
 }

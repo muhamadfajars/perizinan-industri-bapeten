@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 
 from .. import storage
@@ -78,8 +79,10 @@ def _suitability(doc, app, ref):
 def _functional(doc, app, ref):
     from src.extraction.functional_test import parse_functional_test
     from src.matching.functional_test_matcher import match_functional_test
+    from ..exposure_hybrid import enrich_functional_rows
 
-    parsed = parse_functional_test(str(storage.file_path(doc)), include_checkboxes=False)
+    path = str(storage.file_path(doc))
+    parsed = parse_functional_test(path, include_checkboxes=False)
     matched = match_functional_test(app, parsed)
     idx = matched.get("selected_equipment_index")
     data = matched.get("fields") or {}
@@ -113,6 +116,9 @@ def _functional(doc, app, ref):
                 item.get("evidence"),
             )
         )
+    rows, llm_warn = enrich_functional_rows(doc, app, path, rows)
+    if llm_warn:
+        doc["_uncacheable"] = True
     if not rows:
         rows.append(
             _row(
