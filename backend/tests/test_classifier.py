@@ -69,7 +69,6 @@ class TestClassifier(unittest.TestCase):
                 "Sertifikat Kompetensi PPR",
             ),
             ("Sertifikat pelatihan PPR.pdf", "personel", "Sertifikat Pelatihan"),
-            ("SIKR Junaidi.pdf", "personel", "Surat Izin Kerja"),
             (
                 "surat keterangan kerja Radiografer isra new.docx",
                 "personel",

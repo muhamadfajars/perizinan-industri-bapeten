@@ -110,7 +110,6 @@ export const PERSONNEL_TYPES = [
   'Surat Perintah',
   'Sertifikat Kompetensi PPR',
   'Sertifikat Pelatihan',
-  'Surat Izin Kerja',
   'Surat Keterangan Kerja',
   'Surat Penunjukan Tugas',
   'Evaluasi Dosis / Zero Check',

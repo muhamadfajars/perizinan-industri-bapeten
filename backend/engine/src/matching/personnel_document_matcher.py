@@ -13,13 +13,6 @@ PERSONNEL_FIELDS = {
         ("Status Kompetensi", "pass"),
         ("Pengesahan", "approval"),
     ],
-    "WORK_PERMIT": [
-        ("Nama Petugas", "person"),
-        ("Nama Fasilitas", "facility"),
-        ("Alamat Fasilitas", "address"),
-        ("Masa Berlaku", "expiry"),
-        ("Pengesahan", "approval"),
-    ],
     "WORK_LETTER": [
         ("Nama Petugas", "person"),
         ("Keahlian", "expertise"),
@@ -53,7 +46,6 @@ def validate_additional_personnel(document, application):
     from dateutil import parser as date_parser
     from src.matching.personnel_comparison import (
         address_evidence,
-        workplace_address,
         choose_person_reference,
         personnel_role_quote,
         explicit_assignment_role,
@@ -63,9 +55,7 @@ def validate_additional_personnel(document, application):
     )
     from src.matching.personnel_evidence import (
         find_evidence,
-        find_practice_facility,
         find_pass_status,
-        _facility_score,
     )
 
     dtype = document.get("document_type")
@@ -96,7 +86,6 @@ def validate_additional_personnel(document, application):
         best_person[3] if best_person else (references[0][1] if references else None)
     )
     expiry = (document.get("expiry") or {}).get("expiry_date")
-    workplace = find_practice_facility(text) if dtype == "WORK_PERMIT" else None
     rows = []
     approval_result = (
         detect_approval(document.get("pages") or [], text)
@@ -158,29 +147,15 @@ def validate_additional_personnel(document, application):
             )
         elif kind == "facility":
             expected = facility
-            if dtype == "WORK_PERMIT" and workplace:
-                observed = workplace
-                score = _facility_score(expected, observed)
-                status = (
-                    "MATCH"
-                    if score is not None and score >= 90
-                    else "MISMATCH"
-                    if score is None
-                    else "REVIEW"
-                )
-            else:
-                observed, score = find_evidence(text, expected, "facility")
-                if dtype == "DOSE" and observed:
-                    addr_quote, addr_score, _ = address_evidence(text, address)
-                    score = related_facility_score(expected, observed, addr_quote, addr_score)
-                status = "MATCH" if score is not None and score >= 90 else "REVIEW"
+            observed, score = find_evidence(text, expected, "facility")
+            if dtype == "DOSE" and observed:
+                addr_quote, addr_score, _ = address_evidence(text, address)
+                score = related_facility_score(expected, observed, addr_quote, addr_score)
+            status = "MATCH" if score is not None and score >= 90 else "REVIEW"
             add(label, expected, observed, score, status)
         elif kind == "address":
             expected = address
-            if dtype == "WORK_PERMIT":
-                observed, score, status = workplace_address(text, expected)
-            else:
-                observed, score, status = address_evidence(text, expected)
+            observed, score, status = address_evidence(text, expected)
             add(label, expected, observed, score, status)
         elif kind == "expiry":
             try:

@@ -397,6 +397,93 @@ class ProtectionTests(unittest.TestCase):
             self.assertFalse(row["detail"].get("review_required", False))
             self.assertEqual(row["detail"]["pages"], [44, 45])
 
+    def test_import_approval_hybrid_llm_fallback_and_full_six_equipment_fields(self):
+        from pathlib import Path
+        from app.analysis.equipment import _import
+
+        app = {
+            "equipment": [
+                {
+                    "merk_unit": "LANScientific",
+                    "tipe_unit": "TrueX G5",
+                    "nomor_seri_unit": "1536367",
+                    "merk_tabung": "Moxtek",
+                    "tipe_tabung": "X-Ray Tube Magnum",
+                    "nomor_seri_tabung": "25-82682",
+                }
+            ]
+        }
+        doc = {"id": "doc_imp", "filename": "Persetujuan Impor.pdf", "category": "impor"}
+
+        complete_table = {
+            "equipment": [
+                {
+                    "page": 2,
+                    "merk_unit": "LANScientific",
+                    "tipe_unit": "TrueX G5",
+                    "nomor_seri_unit": "1536367",
+                    "merk_tabung": "Moxtek",
+                    "tipe_tabung": "X-Ray Tube Magnum",
+                    "nomor_seri_tabung": "25-82682",
+                    "raw_unit": "TrueX G5/1536367",
+                    "raw_tabung": "X-Ray Tube Magnum / 25-82682",
+                    "quote": "LANScientific | TrueX G5/1536367 | Moxtek | X-Ray Tube Magnum / 25-82682",
+                    "needs_review": False,
+                }
+            ]
+        }
+        with (
+            patch("app.analysis.equipment.storage.file_path", return_value=Path("impor.pdf")),
+            patch("src.extraction.import_approval.parse_import_approval", return_value=complete_table),
+            patch("app.protection.llm.extract") as llm_mock,
+        ):
+            rows = _import(dict(doc), app, {})
+        llm_mock.assert_not_called()
+        self.assertEqual(len(rows), 6)
+        self.assertTrue(all(r["status"] == "MATCH" and r["score"] == 100 for r in rows))
+        self.assertTrue(any(r["field"] == "Alat 1: No. Seri Insersi Tabung" for r in rows))
+        self.assertEqual(rows[0]["detail"]["type"], "import")
+        self.assertEqual(rows[0]["detail"]["pages"], [2])
+
+        source_text = (
+            "LAMPIRAN I PERSETUJUAN IMPOR\n"
+            "Spesifikasi Teknis Sumber Radiasi Pengion\n"
+            "LANScientific TrueX G5 1536367 Moxtek X-Ray Tube Magnum 25-82682"
+        )
+        llm_record = {
+            "page": 2,
+            "quote": "LANScientific TrueX G5 1536367 Moxtek X-Ray Tube Magnum 25-82682",
+            "merk_unit": "LANScientific",
+            "tipe_unit": "TrueX G5",
+            "nomor_seri_unit": "1536367",
+            "merk_tabung": "Moxtek",
+            "tipe_tabung": "X-Ray Tube Magnum",
+            "nomor_seri_tabung": "25-82682",
+        }
+        with (
+            patch("app.analysis.equipment.storage.file_path", return_value=Path("impor.pdf")),
+            patch("src.extraction.import_approval.parse_import_approval", return_value={"equipment": []}),
+            patch("app.protection.reader.read_document", return_value=([page(source_text, 2)], [])),
+            patch("app.protection.extraction.table_records", return_value={"equipment": []}),
+            patch("app.protection.llm.extract", return_value=[llm_record]) as llm_mock,
+        ):
+            rows = _import(dict(doc), app, {})
+        llm_mock.assert_called_once()
+        self.assertEqual(len(rows), 6)
+        self.assertTrue(all(r["status"] == "MATCH" for r in rows))
+
+        failing_doc = dict(doc)
+        with (
+            patch("app.analysis.equipment.storage.file_path", return_value=Path("impor.pdf")),
+            patch("src.extraction.import_approval.parse_import_approval", return_value={"equipment": []}),
+            patch("app.protection.reader.read_document", return_value=([page(source_text, 2)], [])),
+            patch("app.protection.extraction.table_records", return_value={"equipment": []}),
+            patch("app.protection.llm.extract", side_effect=RuntimeError("offline")),
+        ):
+            rows = _import(failing_doc, app, {})
+        self.assertTrue(failing_doc.get("_uncacheable"))
+        self.assertTrue(all(r["status"] == "REVIEW" for r in rows))
+
 
 if __name__ == "__main__":
     unittest.main()

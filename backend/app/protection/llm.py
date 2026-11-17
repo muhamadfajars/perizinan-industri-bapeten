@@ -57,11 +57,17 @@ def extract(kind, pages, *, only_fields=None):
     }
     scope = ""
     if only_fields:
+        ordered_fields = sorted(only_fields) if isinstance(only_fields, set) else only_fields
         scope = (
             "Field yang masih dibutuhkan hanya: "
-            + ", ".join(only_fields)
+            + ", ".join(ordered_fields)
             + ". Field lain isi string kosong. Jika field yang dibutuhkan tidak tercantum, kembalikan records kosong. "
         )
+    output_limit = (
+        450
+        if kind == "identity"
+        else (1200 if kind == "equipment" and (only_fields or len(pages) == 1) else 2300)
+    )
     return request_records(
         schema,
         "Jenis ekstraksi: " + kind,
@@ -69,11 +75,15 @@ def extract(kind, pages, *, only_fields=None):
         scope
         + "Salin nilai mentah; jangan memperbaiki nama atau nomor. Nilai tidak tercantum diisi string kosong. "
         "Satu record per orang/baris alat. Jangan menggabungkan unit dan tabung berbeda. "
-        "Quote harus mencakup semua nilai record, maksimal 1500 karakter. "
+        "Quote harus mencakup semua nilai record, satu baris tabel ringkas saja untuk equipment (maksimal 260 karakter) atau maksimal 1500 karakter untuk jenis lain. "
         "Lokasi harus terkait langsung dengan orang/alat. Untuk identity ambil instansi dan alamat proyek; "
         "jangan ambil alamat kantor sebagai proyek. Alamat tanpa label kantor/proyek boleh diambil. "
-        "Untuk personnel jangan ambil jabatan dari uraian tugas tanpa nama orang.",
-        output_limit=450 if kind == "identity" else 2300,
+        "Untuk personnel jangan ambil jabatan dari uraian tugas tanpa nama orang. "
+        "Untuk equipment, jika kolom tabel menggabungkan Tipe/No. Seri dengan garis miring "
+        "(mis. 'TrueX G5/1536367' atau 'X-Ray Tube Magnum / 25-82682'), pisahkan bagian tipe ke "
+        "tipe_unit/tipe_tabung dan bagian nomor seri ke nomor_seri_unit/nomor_seri_tabung; abaikan "
+        "baris yang merk_unit dan merk_tabung keduanya kosong atau '-' (Non-SRP '- / -').",
+        output_limit=output_limit,
     )
 
 
@@ -152,7 +162,7 @@ def request_records(schema, task, pages, instructions, *, output_limit=2300):
     if total_chars > 12000:
         raise ValueError("Konteks melebihi batas pembacaan; jangan memotong sumber diam-diam.")
     small_request = (total_chars <= 5000 and output_limit <= 600) or (
-        total_chars <= 3500 and output_limit <= 1000
+        total_chars <= 3800 and output_limit <= 1400
     )
     num_ctx = 4096 if small_request else 8192
     payload = {

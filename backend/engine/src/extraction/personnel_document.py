@@ -246,7 +246,6 @@ def classify_document(
         "SIB": 0,
         "SPRINT": 0,
         "COMPETENCE": 0,
-        "WORK_PERMIT": 0,
         "WORK_LETTER": 0,
         "ASSIGNMENT": 0,
         "DOSE": 0,
@@ -286,7 +285,6 @@ def classify_document(
             ("sertifikat keahlian", 9),
             ("dinyatakan kompeten", 5),
         ],
-        "WORK_PERMIT": [("surat izin kerja", 12), ("izin kerja", 7)],
         "WORK_LETTER": [("surat keterangan kerja", 12), ("keterangan bekerja", 7)],
         "ASSIGNMENT": [
             ("surat penunjukan tugas", 12),

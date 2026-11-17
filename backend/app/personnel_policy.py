@@ -15,7 +15,7 @@ EXPIRY_LABEL = re.compile(
     r"valid\s+(?:until|through)|expiry|expires?\s+on|berakhir",
     re.I,
 )
-PERMIT_TYPES = {"SIB", "WORK_PERMIT"}
+PERMIT_TYPES = {"SIB"}
 APPROVAL_TYPES = {"ASSIGNMENT", "SPRINT", "WORK_LETTER"}
 USAGE_PERIOD_LABEL = re.compile(
     r"periode\s+(?:pemakaian|penggunaan|pemantauan|pengukuran|evaluasi)|"

@@ -141,6 +141,7 @@ def parse_row(row, mapping, page, row_number, method):
         "nomor_seri_tabung": tube_serial,
         "raw_unit": unit_raw,
         "raw_tabung": tube_raw or None,
+        "quote": " | ".join(x for x in row if x),
         "parse_notes": [],
         "needs_review": False,
     }
@@ -316,8 +317,14 @@ def parse_import_approval(path):
                 for table in page.extract_tables() or []:
                     found.extend(process_table(table, page_number, "PDF_TABLE"))
                 if not found:
-                    image = image_from_page(rendered[i])
-                    found = ocr_table(image, page_number)
+                    native_text = clean(page.extract_text() or "")
+                    if len(native_text) < 40 or re.search(
+                        r"merk\s+unit|nama\s+sumber|tipe\s*/?\s*no\.?\s*seri|spesifikasi\s+teknis",
+                        native_text,
+                        re.I,
+                    ):
+                        image = image_from_page(rendered[i])
+                        found = ocr_table(image, page_number)
                 equipment.extend(found)
                 page_info.append(
                     {

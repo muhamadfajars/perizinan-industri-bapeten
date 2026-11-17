@@ -82,7 +82,6 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
         "personel",
         "Sertifikat Kompetensi PPR",
     ),
-    (r"(?i)SURAT\s+IZIN\s+KERJA|SIKR\b", "personel", "Surat Izin Kerja"),
     (
         r"(?i)(?:SURAT\s+)?IZIN\s+BEKERJA\s+PETUGAS|SURAT\s+IZIN\s+BEKERJA\s+\(SIB\)|SIB\s+PPR",
         "personel",

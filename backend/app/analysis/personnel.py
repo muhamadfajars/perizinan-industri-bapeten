@@ -185,7 +185,6 @@ def _personnel(doc, app, ref):
         "Sertifikat Kompetensi": "COMPETENCE",
         "Sertifikat Kompetensi PPR": "COMPETENCE",
         "Sertifikat Pelatihan": "TRAINING",
-        "Surat Izin Kerja": "WORK_PERMIT",
         "Surat Keterangan Kerja": "WORK_LETTER",
         "Surat Penunjukan Tugas": "ASSIGNMENT",
         "Evaluasi Dosis": "DOSE",

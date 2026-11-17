@@ -48,11 +48,6 @@
       "subtype": "Sertifikat Kompetensi PPR"
     },
     {
-      "pattern": "sikr\\b|surat[\\s_-]*izin[\\s_-]*kerja",
-      "category": "personel",
-      "subtype": "Surat Izin Kerja"
-    },
-    {
       "pattern": "data[\\s_-]*sib|kartu[\\s_-]*sib|sib\\b|izin[\\s_-]*bekerja",
       "category": "personel",
       "subtype": "Surat Izin Bekerja (SIB)"

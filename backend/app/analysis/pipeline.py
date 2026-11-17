@@ -144,7 +144,7 @@ def analyze_application(aid, progress):
                 detail = fut.result()
                 rows = (
                     detail["rows"]
-                    if d["category"] in ("proteksi", "manajemen", "personel")
+                    if d["category"] in ("proteksi", "manajemen", "personel", "impor")
                     else finalize_legacy_rows(detail["rows"], d)
                 )
                 timings.append(

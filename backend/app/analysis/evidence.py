@@ -119,7 +119,6 @@ def _personnel_title(doc):
         "Sertifikat Kompetensi": "Sertifikat Kompetensi PPR",
         "Sertifikat Kompetensi PPR": "Sertifikat Kompetensi PPR",
         "Sertifikat Pelatihan": "Sertifikat Pelatihan",
-        "Surat Izin Kerja": "Surat Izin Kerja",
         "Surat Keterangan Kerja": "Surat Keterangan Kerja",
         "Surat Penunjukan Tugas": "Surat Penunjukan Tugas",
         "Evaluasi Dosis": "Evaluasi Dosis",

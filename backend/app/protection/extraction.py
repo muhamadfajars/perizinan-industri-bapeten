@@ -1,6 +1,7 @@
 """Layout extraction first, local LLM for unstructured passages, source grounding always."""
 
 import re
+import unicodedata
 import pymupdf
 from .evidence import compact, toc
 from . import llm
@@ -17,7 +18,11 @@ from .context import adjacent_window
 
 
 def norm(text):
-    return re.sub(r"[^a-z0-9]", "", str(text or "").lower())
+    return re.sub(
+        r"[^a-z0-9]",
+        "",
+        unicodedata.normalize("NFKC", str(text or "")).lower(),
+    )
 
 
 EQUIPMENT_ALIASES = {
