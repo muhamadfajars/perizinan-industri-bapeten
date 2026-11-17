@@ -21,6 +21,7 @@ const MATCHING_CATEGORY_ORDER: readonly CategoryId[] = [
   'impor',
   'kesesuaian',
   'fungsi',
+  'mutu',
   'paparan',
   'kebocoran',
 ];

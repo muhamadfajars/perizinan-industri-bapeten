@@ -12,6 +12,7 @@ export type CategoryId =
   | 'impor'
   | 'kesesuaian'
   | 'fungsi'
+  | 'mutu'
   | 'paparan'
   | 'kebocoran';
 

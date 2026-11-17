@@ -12,6 +12,7 @@ NAMES = {
     "impor": "Persetujuan Impor",
     "kesesuaian": "Uji Kesesuaian",
     "fungsi": "Uji Fungsi / Acceptance Test",
+    "mutu": "Sertifikat Uji Mutu",
     "paparan": "Uji Paparan Radiasi",
     "kebocoran": "Uji Kebocoran Tabung",
 }

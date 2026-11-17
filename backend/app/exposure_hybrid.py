@@ -302,24 +302,27 @@ def _is_contractor_or_oem(value: str, page_text: str) -> bool:
 def _run_tesseract_png(png_bytes: bytes) -> str:
     import subprocess
 
-    res = subprocess.run(
-        [
-            os.getenv("BAPETEN_TESSERACT_CMD") or "tesseract",
-            "stdin",
-            "stdout",
-            "-l",
-            os.getenv("BAPETEN_TESS_LANG") or "ind+eng",
-            "--psm",
-            "3",
-        ],
-        input=png_bytes,
-        capture_output=True,
-        timeout=30,
-        env={**os.environ, "OMP_THREAD_LIMIT": "2"},
-    )
-    if res.returncode != 0:
-        return ""
-    return res.stdout.decode("utf-8", errors="replace").strip()
+    for psm in ("3", "6"):
+        res = subprocess.run(
+            [
+                os.getenv("BAPETEN_TESSERACT_CMD") or "tesseract",
+                "stdin",
+                "stdout",
+                "-l",
+                os.getenv("BAPETEN_TESS_LANG") or "ind+eng",
+                "--psm",
+                psm,
+            ],
+            input=png_bytes,
+            capture_output=True,
+            timeout=30,
+            env={**os.environ, "OMP_THREAD_LIMIT": "2"},
+        )
+        if res.returncode == 0:
+            txt = res.stdout.decode("utf-8", errors="replace").strip()
+            if len(re.sub(r"\s+", "", txt)) >= 20 or psm == "6":
+                return txt
+    return ""
 
 
 def read_exposure_pages(path: str) -> list[dict]:

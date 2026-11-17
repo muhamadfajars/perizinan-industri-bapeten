@@ -22,6 +22,7 @@ CATEGORIES = (
     "impor",
     "kesesuaian",
     "fungsi",
+    "mutu",
     "paparan",
     "kebocoran",
 )
@@ -54,7 +55,7 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     ),
     # Manajemen
     (
-        r"(?i)SISTEM\s+MANAJEMEN\s+FASILITAS|SISTEM\s+MANAJEMEN\s+KESELAMATAN|SISTEM\s+MANAJEMEN\b|ASSURANCE\s+QUALIT|QUALITY\s+SYSTEM|SERTIFIKAT\s+MUTU",
+        r"(?i)SISTEM\s+MANAJEMEN\s+FASILITAS|SISTEM\s+MANAJEMEN\s+KESELAMATAN|SISTEM\s+MANAJEMEN\b|ASSURANCE\s+QUALIT|QUALITY\s+SYSTEM",
         "manajemen",
         None,
     ),
@@ -121,6 +122,12 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     (
         r"(?i)ACCEPTANCE\s+TEST|INSTALLATION\s+AND\s+VERIFICATION|SERVICE\s+REPORT|BERITA\s+ACARA\s+UJI\s+FUNGSI|HASIL\s+UJI\s+FUNGSI",
         "fungsi",
+        None,
+    ),
+    # Sertifikat Uji Mutu
+    (
+        r"(?i)SERTIFIKAT\s+(?:UJI\s+)?MUTU|QUALITY\s+(?:CONTROL\s+)?CERTIFICATE|CERTIFICATE\s+OF\s+(?:QUALITY|CONFORMITY)",
+        "mutu",
         None,
     ),
     # Paparan & Kebocoran
@@ -281,7 +288,7 @@ def classify_by_content(
             text,
         )
     ):
-        return "fungsi", None, "Sertifikat kalibrasi/QC pabrikan peralatan sinar-X terdeteksi"
+        return "mutu", None, "Sertifikat uji mutu / kalibrasi pabrikan peralatan sinar-X terdeteksi"
     if re.search(
         r"(?:CAUTION|DANGER|WARNING)\s+(?:X[\s-]*RAY|RADIATION)|"
         r"PRODUCES\s+RADIATION(?:\s+.*?)?\s+WHEN\s+ENERGIZED|"

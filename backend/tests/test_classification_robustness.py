@@ -156,7 +156,15 @@ class ClassificationRobustnessTests(unittest.TestCase):
             classify_by_content(
                 "LANScientific Co., Ltd.\nCalibration Certificate\nName of Product: Handheld XRF analyzer\nInstrument Serial number: 1536367"
             )[0],
-            "fungsi",
+            "mutu",
+        )
+        self.assertEqual(
+            classify_by_content("SERTIFIKAT UJI MUTU PERALATAN\nNomor Seri: SN-001")[0],
+            "mutu",
+        )
+        self.assertEqual(
+            classify_by_content("CERTIFICATE OF QUALITY\nModel: TrueX G5")[0],
+            "mutu",
         )
         # Surveymeter calibration certificate must never be mistaken for unit acceptance test
         self.assertIsNone(
