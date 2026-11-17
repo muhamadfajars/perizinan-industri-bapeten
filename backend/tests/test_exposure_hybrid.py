@@ -10,10 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "engine"))
 
-from app.analysis import programs  # noqa: E402
+from app.analysis import equipment, programs  # noqa: E402
 from app.exposure_hybrid import (  # noqa: E402
     _in_detector_only_context,
     enrich_exposure_rows,
+    enrich_functional_rows,
     evaluate_exposure_field,
     extract_exposure_llm,
     is_token_subset_model,
@@ -64,6 +65,39 @@ class ExposureHybridTests(unittest.TestCase):
         self.assertTrue(_in_detector_only_context("30456", text))
         self.assertFalse(_in_detector_only_context("DXL 800", text))
         self.assertFalse(_in_detector_only_context("CD0719", text))
+
+    def test_model_only_label_promoted_and_generic_noun_rejected(self):
+        pages = [
+            {
+                "page": 1,
+                "text": (
+                    "Equipment Name: X-ray fluorescence spectrometer\n"
+                    "Equipment Model: TrueX\n"
+                    "Approved by: QC Stamp"
+                ),
+            }
+        ]
+        # Adversarial LLM returns generic noun in tipe_unit and real model in nomor_seri_unit.
+        mock_records = [
+            {
+                "page": 1,
+                "quote": "Equipment Model: TrueX",
+                "facility_name": "",
+                "facility_address": "",
+                "merk_unit": "",
+                "tipe_unit": "X-ray fluorescence spectrometer",
+                "nomor_seri_unit": "TrueX",
+                "merk_tabung": "",
+                "tipe_tabung": "",
+                "nomor_seri_tabung": "",
+                "approval_quote": "Approved by: QC Stamp",
+            }
+        ]
+        with patch("app.exposure_hybrid.llm.request_records", return_value=mock_records):
+            records, warn = extract_exposure_llm(pages, {"tipe_unit", "nomor_seri_unit"})
+        self.assertFalse(warn)
+        self.assertEqual(records[0].get("tipe_unit"), "TrueX")
+        self.assertNotIn("nomor_seri_unit", records[0])
 
     def test_oem_survey_certificate_hybrid_and_anti_contamination(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -257,6 +291,80 @@ class ExposureHybridTests(unittest.TestCase):
         self.assertEqual(fields["Alat 2: Tipe unit"]["status"], "MATCH")
         self.assertEqual(fields["Alat 2: No. seri unit"]["status"], "MATCH")
         self.assertNotIn("Alat 1: Tipe unit", fields)
+
+    def test_functional_hybrid_recovers_commissioning_and_calibration_and_blocks_importer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "commissioning.pdf"
+            _make_pdf(
+                pdf_path,
+                [
+                    "LAPORAN HASIL UJI PAPARAN RADIASI DAN UJI FUNGSI",
+                    "Identitas Penguji",
+                    "Nama Perusahaan/Importir: PT Mitra Teknik",
+                    "Alat Ukur: Survey Meter Rex Smart / RSM-100S",
+                    "Nomor Seri: SM-9911",
+                    "Identitas Peralatan",
+                    "Merek: LANScientific",
+                    "Tipe/Model: TrueX G5",
+                    "Nomor Seri: 1536367",
+                ],
+            )
+            app = {
+                "general": {"instansi": "PT Tuku Emas Indonesia", "alamat_proyek": "Jl. Sudirman 10"},
+                "equipment": [
+                    {
+                        "merk_unit": "LANScientific",
+                        "tipe_unit": "TrueX G5",
+                        "nomor_seri_unit": "1536367",
+                    }
+                ],
+            }
+            doc = {"id": "doc-fn-1", "category": "fungsi", "filename": pdf_path.name}
+            ref = {"general": app["general"], "equipment": app["equipment"]}
+            mock_records = [
+                {
+                    "page": 1,
+                    "quote": "Merek: LANScientific Tipe/Model: TrueX G5 Nomor Seri: 1536367",
+                    "facility_name": "PT Mitra Teknik",
+                    "facility_address": "",
+                    "merk_unit": "LANScientific",
+                    "tipe_unit": "TrueX G5",
+                    "nomor_seri_unit": "1536367",
+                    "merk_tabung": "",
+                    "tipe_tabung": "",
+                    "nomor_seri_tabung": "",
+                    "approval_quote": "",
+                }
+            ]
+            with (
+                patch("app.storage.file_path", return_value=pdf_path),
+                patch("app.exposure_hybrid.llm.request_records", return_value=mock_records),
+            ):
+                rows = equipment._functional(doc, app, ref)
+
+        by_field = {r["field"]: r for r in rows}
+        self.assertEqual(by_field["Alat 1: Merek Unit"]["observed"], "LANScientific")
+        self.assertEqual(by_field["Alat 1: Merek Unit"]["status"], "MATCH")
+        self.assertEqual(by_field["Alat 1: Tipe Unit"]["observed"], "TrueX G5")
+        self.assertEqual(by_field["Alat 1: Tipe Unit"]["status"], "MATCH")
+        self.assertEqual(by_field["Alat 1: Nomor Seri Unit"]["observed"], "1536367")
+        self.assertEqual(by_field["Alat 1: Nomor Seri Unit"]["status"], "MATCH")
+        # Importer/contractor must NOT leak into Nama Fasilitas
+        if "Nama Fasilitas" in by_field:
+            self.assertNotEqual(by_field["Nama Fasilitas"]["observed"], "PT Mitra Teknik")
+
+    def test_functional_llm_failure_marks_uncacheable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "cal_cert.pdf"
+            _make_pdf(pdf_path, ["Calibration Certificate", "Model: TrueX G5"])
+            app = {
+                "general": {"instansi": "PT Tuku Emas Indonesia"},
+                "equipment": [{"merk_unit": "LANScientific", "tipe_unit": "TrueX G5", "nomor_seri_unit": "1536367"}],
+            }
+            doc = {"id": "doc-fn-err", "category": "fungsi", "filename": pdf_path.name}
+            with patch("app.exposure_hybrid.llm.request_records", side_effect=TimeoutError("timeout")):
+                _, warn = enrich_functional_rows(doc, app, str(pdf_path), [])
+        self.assertTrue(warn)
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ _SIGNOFF_CUE_RE = re.compile(
 _CONTRACTOR_HINT_RE = re.compile(
     r"(?i)\b(?:tewksbury|radcliff|ma\s+0\d{4}|usa|suzhou|china|"
     r"penguji|laboratorium|laboratory|calibrator|surveymeter|"
-    r"nuklindolab|ruisen|radiation\s+technology)\b|www\.|@"
+    r"nuklindolab|ruisen|radiation\s+technology|importir|entrusting|supplier)\b|www\.|@"
 )
 
 _PAGE_CUE_RE = re.compile(
@@ -64,6 +64,52 @@ _PAGE_CUE_RE = re.compile(
     r"equipment|pesawat|tabung|identitas|instansi|fasilitas|rumah\s+sakit|"
     r"conducted\s+by|approved\s+by|checked\s+by|mengetahui|pengesahan)\b"
 )
+
+_GENERIC_DEVICE_NOUN_RE = re.compile(
+    r"(?i)\b(?:analyzer|analyzers|spectrometer|radiography|fluoroscopy|x-?ray\s+(?:system|unit|device|machine)|pesawat\s+sinar[- ]?x)\b"
+)
+
+
+def _is_generic_device_noun(value: str) -> bool:
+    """True when text describes an apparatus category with no model code/digits."""
+    s = _space(value)
+    return bool(s) and not any(ch.isdigit() for ch in s) and bool(_GENERIC_DEVICE_NOUN_RE.search(s))
+
+
+_MODEL_ONLY_LABEL_RE = re.compile(
+    r"(?i)\b(?:equipment|instrument|unit|device)?\s*(?:model|tipe|type)\s*:\s*$"
+)
+
+
+def _has_model_only_label(value: str, page_text: str) -> bool:
+    """True when value occurs directly after an explicit Model/Type label (not Serial)."""
+    toks = _tokens(value)
+    if not toks:
+        return False
+    pat = re.compile(r"(?is)" + r"[^a-z0-9]{0,4}".join(map(re.escape, toks)))
+    for m in pat.finditer(page_text):
+        before = page_text[max(0, m.start() - 40) : m.start()]
+        if _MODEL_ONLY_LABEL_RE.search(before):
+            return True
+    return False
+
+
+_EXPLICIT_MODEL_LINE_RE = re.compile(
+    r"(?im)\b(?:equipment|instrument|unit|device|pesawat)\s+(?:model|tipe|type)\s*:\s*([A-Za-z0-9][A-Za-z0-9\-./ ]{1,35}?)(?=\s{2,}|\r|\n|$)"
+)
+
+
+def _extract_explicit_labeled_model(page_text: str) -> str:
+    """Recover explicit non-detector 'Equipment/Instrument Model: <val>' if Qwen skipped it."""
+    for m in _EXPLICIT_MODEL_LINE_RE.finditer(page_text):
+        cand = _space(m.group(1)).strip(" :;|")
+        if (
+            cand
+            and not _is_generic_device_noun(cand)
+            and not _in_detector_only_context(cand, page_text)
+        ):
+            return cand
+    return ""
 
 
 def _space(value) -> str:
@@ -248,22 +294,62 @@ def _is_contractor_or_oem(value: str, page_text: str) -> bool:
                 line,
             ):
                 return True
+            if re.search(r"(?i)\b(?:nama\s+perusahaan\s*/\s*importir|identitas\s+penguji|entrusting)\b", line):
+                return True
     return False
 
 
+def _run_tesseract_png(png_bytes: bytes) -> str:
+    import subprocess
+
+    res = subprocess.run(
+        [
+            os.getenv("BAPETEN_TESSERACT_CMD") or "tesseract",
+            "stdin",
+            "stdout",
+            "-l",
+            os.getenv("BAPETEN_TESS_LANG") or "ind+eng",
+            "--psm",
+            "3",
+        ],
+        input=png_bytes,
+        capture_output=True,
+        timeout=30,
+        env={**os.environ, "OMP_THREAD_LIMIT": "2"},
+    )
+    if res.returncode != 0:
+        return ""
+    return res.stdout.decode("utf-8", errors="replace").strip()
+
+
 def read_exposure_pages(path: str) -> list[dict]:
-    """Read exposure/leakage document pages with OCR fallback for scanned PDFs."""
-    if not str(path).lower().endswith(".pdf"):
+    """Read exposure/leakage/functional document pages (PDF or image) with OCR fallback."""
+    lower = str(path).lower()
+    if lower.endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")):
+        try:
+            import io
+            from PIL import Image, ImageOps
+
+            with Image.open(path) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                buf = io.BytesIO()
+                im.save(buf, format="PNG")
+                txt = _run_tesseract_png(buf.getvalue())
+            return [{"page": 1, "text": txt, "source": "ocr"}] if txt else []
+        except Exception:
+            return []
+
+    if not lower.endswith(".pdf"):
         return []
     import fitz
 
     from .protection.reader import _merge_native_and_ocr
 
     pages: list[dict] = []
-    ocr_budget = 5
+    ocr_budget = 6
     with fitz.open(path) as doc:
         num = len(doc)
-        priority_indices = sorted(set(range(min(num, 3))) | ({num - 1} if num > 0 else set()))
+        priority_indices = sorted(set(range(min(num, 4))) | ({num - 1} if num > 0 else set()))
         for idx in range(num):
             page = doc[idx]
             native = (page.get_text("text", sort=True) or "").strip()
@@ -284,29 +370,11 @@ def read_exposure_pages(path: str) -> list[dict]:
             if needs_ocr and (idx in priority_indices or ocr_budget > 0) and ocr_budget > 0:
                 ocr_budget -= 1
                 try:
-                    import subprocess
-
-                    png = page.get_pixmap(dpi=160, alpha=False).tobytes("png")
-                    res = subprocess.run(
-                        [
-                            os.getenv("BAPETEN_TESSERACT_CMD") or "tesseract",
-                            "stdin",
-                            "stdout",
-                            "-l",
-                            os.getenv("BAPETEN_TESS_LANG") or "ind+eng",
-                            "--psm",
-                            "3",
-                        ],
-                        input=png,
-                        capture_output=True,
-                        timeout=30,
-                        env={**os.environ, "OMP_THREAD_LIMIT": "2"},
-                    )
-                    if res.returncode == 0:
-                        ocr_txt = res.stdout.decode("utf-8", errors="replace").strip()
-                        if ocr_txt:
-                            text = _merge_native_and_ocr(native, ocr_txt)
-                            source = "ocr"
+                    png = page.get_pixmap(dpi=180, alpha=False).tobytes("png")
+                    ocr_txt = _run_tesseract_png(png)
+                    if ocr_txt:
+                        text = _merge_native_and_ocr(native, ocr_txt)
+                        source = "ocr"
                 except Exception:
                     pass
             pages.append({"page": idx + 1, "text": text, "source": source})
@@ -387,7 +455,7 @@ def extract_exposure_llm(
         "Salin nilai PERSIS seperti tertulis pada dokumen; jangan mengarang atau mengubah karakter. "
         "Isi string kosong \"\" jika field tidak tercantum pada halaman. "
         "Untuk tipe_unit: ambil kode model/tipe spesifik yang tertulis di kolom atau label 'Instrument Model', 'Equipment Model', 'Tipe/Model', 'Model', atau 'Tipe' "
-        "(contoh: 'DXL 800', 'TrueX G5'), JANGAN mengambil kategori umum jenis alat seperti 'Portable XRF Analyzers', 'X-ray fluorescence spectrometer', atau 'Pesawat Sinar-X'. "
+        "(contoh: 'DXL 800', 'TrueX', 'TrueX G5'), JANGAN mengambil Equipment Name atau kategori umum jenis alat seperti 'Portable XRF Analyzers', 'X-ray fluorescence spectrometer', atau 'Pesawat Sinar-X'. "
         "PENTING - Bedakan PESAWAT/UNIT X-RAY yang diuji vs ALAT UKUR (Detector / Surveymeter / Dose Rate Instrument / Calibrator): "
         "JANGAN PERNAH menyalin model atau nomor seri detector/surveymeter/alat ukur (mis. Detector Model, Detector S/N, Alat Ukur, Testing equipment) ke kolom unit maupun tabung. "
         "PENTING - Bedakan PEMOHON/FASILITAS LOKAL vs PABRIKAN/PENGUJI: jangan menyalin nama atau alamat footer pabrikan maupun laboratorium penguji ke facility_name atau facility_address; bila dokumen adalah sertifikat pabrik tanpa fasilitas pemohon, biarkan facility_name dan facility_address kosong \"\". "
@@ -441,6 +509,15 @@ def extract_exposure_llm(
                     continue
                 if _in_detector_only_context(val, text):
                     continue
+                if eq_key in ("tipe_unit", "tipe_tabung") and _is_generic_device_noun(val):
+                    continue
+                # Never allow an explicit 'Model: <val>' (e.g. 'Equipment Model: TrueX') into nomor_seri_*.
+                if eq_key in ("nomor_seri_unit", "nomor_seri_tabung") and _has_model_only_label(val, text):
+                    target_type = "tipe_unit" if eq_key == "nomor_seri_unit" else "tipe_tabung"
+                    if not cleaned.get(target_type) and not _is_generic_device_noun(val):
+                        cleaned[target_type] = val
+                        has_any = True
+                    continue
                 cleaned[eq_key] = val
                 has_any = True
 
@@ -457,6 +534,12 @@ def extract_exposure_llm(
             if _value_grounded(app_val, text) and _SIGNOFF_CUE_RE.search(app_val):
                 cleaned["approval_quote"] = app_val
                 has_any = True
+
+            if "tipe_unit" in needed_targets and not cleaned.get("tipe_unit"):
+                explicit_model = _extract_explicit_labeled_model(text)
+                if explicit_model:
+                    cleaned["tipe_unit"] = explicit_model
+                    has_any = True
 
             if has_any:
                 grounded_records.append(cleaned)
@@ -648,8 +731,11 @@ def enrich_exposure_rows(doc: dict, app: dict, path: str, raw: dict) -> tuple[di
             if existing is not None and existing.get("status") == "MATCH":
                 continue
             if existing is not None and not _absent(existing.get("observed")):
-                # Keep existing non-empty deterministic observation unless it was ungrounded/worse.
-                continue
+                if not (
+                    ekey in ("tipe_unit", "tipe_tabung")
+                    and _is_generic_device_noun(existing.get("observed"))
+                ):
+                    continue
             status, score, note = evaluate_exposure_field(ekey, expected_val, llm_val)
             reason = note or "Terbaca melalui bantuan Qwen dari teks dokumen"
             if existing is not None:
@@ -688,3 +774,153 @@ def enrich_exposure_rows(doc: dict, app: dict, path: str, raw: dict) -> tuple[di
                 raw_rows.insert(signoff_idx, new_row)
 
     return {**raw, "rows": raw_rows}, warning
+
+
+def enrich_functional_rows(doc: dict, app: dict, path: str, rows: list[dict]) -> tuple[list[dict], bool]:
+    """Run bounded Qwen fallback for functional / acceptance / calibration reports."""
+    equipments = list(app.get("equipment") or [])
+    needed: set[str] = set()
+    rows = list(rows or [])
+
+    for row in rows:
+        fname = _space(row.get("field")).casefold()
+        obs = row.get("observed")
+        stat = row.get("status")
+        if "nama fasilitas" in fname and (_absent(obs) or stat != "MATCH"):
+            needed.add("facility_name")
+        elif "alamat fasilitas" in fname and (_absent(obs) or stat != "MATCH"):
+            needed.add("facility_address")
+
+    eq_rows_by_key = {}
+    for row in rows:
+        ekey = _match_field_key(row.get("field") or "")
+        if ekey:
+            eq_rows_by_key[ekey] = row
+
+    if equipments:
+        ref_eq = equipments[0]
+        for ekey in EQUIPMENT_FIELDS:
+            if not _absent(ref_eq.get(ekey)):
+                existing = eq_rows_by_key.get(ekey)
+                if existing is None or _absent(existing.get("observed")) or existing.get("status") != "MATCH":
+                    needed.add(ekey)
+
+    if not needed:
+        return rows, False
+
+    pages = read_exposure_pages(path)
+    records, warning = extract_exposure_llm(pages, needed, equipments)
+    if not records:
+        return rows, warning
+
+    eq_idx, chosen = _choose_record_and_form_idx(records, equipments)
+    if not chosen:
+        return rows, warning
+
+    from .analysis.rows import _row as build_row
+    from .analysis.constants import FIELDS as DISPLAY_FIELDS
+    from src.matching.suitability_matcher import compare_institution
+
+    full_text = "\n".join(p.get("text") or "" for p in pages)
+
+    # Enrich facility name / address only when empty/MISSING or currently pointing to contractor/surveymeter.
+    for row_idx, row in enumerate(rows):
+        fname = _space(row.get("field")).casefold()
+        obs_empty = _absent(row.get("observed")) or row.get("status") == "MISSING"
+        if "nama fasilitas" in fname and obs_empty and chosen.get("facility_name"):
+            obs = chosen["facility_name"]
+            exp = "" if _absent(row.get("expected")) else row["expected"]
+            comp = compare_institution(exp, obs) if exp else {"status": "REVIEW", "score": None}
+            pg = chosen.get("facility_name_page") or chosen["page"]
+            q = chosen.get("facility_name_quote") or chosen.get("quote") or obs
+            rows[row_idx] = build_row(
+                row["field"],
+                exp,
+                obs,
+                comp.get("status", "REVIEW"),
+                comp.get("score"),
+                pg,
+                "Terbaca melalui bantuan Qwen dari teks dokumen",
+                doc["id"],
+                q,
+            )
+        elif "alamat fasilitas" in fname and obs_empty and chosen.get("facility_address"):
+            obs = chosen["facility_address"]
+            exp = "" if _absent(row.get("expected")) else row["expected"]
+            pg = chosen.get("facility_address_page") or chosen["page"]
+            q = chosen.get("facility_address_quote") or chosen.get("quote") or obs
+            rows[row_idx] = build_row(
+                row["field"],
+                exp,
+                obs,
+                "REVIEW",
+                None,
+                pg,
+                "Terbaca melalui bantuan Qwen dari teks dokumen",
+                doc["id"],
+                q,
+            )
+
+    if equipments:
+        target_eq = equipments[eq_idx]
+        # Replace placeholder fallback row when actual equipment identity is recovered.
+        rows = [r for r in rows if _space(r.get("field")).casefold() != "identitas alat"]
+        existing_idx_map = {
+            _match_field_key(r.get("field") or ""): i
+            for i, r in enumerate(rows)
+            if _match_field_key(r.get("field") or "")
+        }
+        for ekey in EQUIPMENT_FIELDS:
+            expected_val = _space(target_eq.get(ekey))
+            if not expected_val:
+                continue
+            llm_val = _space(chosen.get(ekey))
+            if _absent(llm_val):
+                continue
+            pg = chosen.get(f"{ekey}_page") or chosen["page"]
+            q = chosen.get(f"{ekey}_quote") or chosen.get("quote") or llm_val
+            r_idx = existing_idx_map.get(ekey)
+            if r_idx is not None:
+                cur = rows[r_idx]
+                cur_obs = _space(cur.get("observed"))
+                is_empty = _absent(cur_obs) or cur.get("status") == "MISSING"
+                is_detector_false_hit = (
+                    cur.get("status") != "MATCH"
+                    and not is_empty
+                    and (
+                        _in_detector_only_context(cur_obs, full_text)
+                        or (ekey in ("tipe_unit", "tipe_tabung") and _is_generic_device_noun(cur_obs))
+                    )
+                )
+                if cur.get("status") == "MATCH" or (not is_empty and not is_detector_false_hit):
+                    continue
+                status, score, note = evaluate_exposure_field(ekey, expected_val, llm_val)
+                rows[r_idx] = build_row(
+                    f"Alat {eq_idx + 1}: {DISPLAY_FIELDS[ekey]}",
+                    expected_val,
+                    llm_val,
+                    status,
+                    score,
+                    pg,
+                    note or "Terbaca melalui bantuan Qwen dari teks dokumen",
+                    doc["id"],
+                    q,
+                )
+            else:
+                status, score, note = evaluate_exposure_field(ekey, expected_val, llm_val)
+                rows.append(
+                    build_row(
+                        f"Alat {eq_idx + 1}: {DISPLAY_FIELDS[ekey]}",
+                        expected_val,
+                        llm_val,
+                        status,
+                        score,
+                        pg,
+                        note or "Terbaca melalui bantuan Qwen dari teks dokumen",
+                        doc["id"],
+                        q,
+                    )
+                )
+
+    return rows, warning
+
