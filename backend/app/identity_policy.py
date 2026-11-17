@@ -36,7 +36,7 @@ CONTACT = re.compile(
     r"(?i)(?:\s*[,;|]\s*|\s{2,})(?:(?:no\.?\s*)?(?:telp|telepon|tel|phone|fax|faks|email|website))\s*[:.]?\s*(?=\S)"
 )
 FACSTART = re.compile(
-    r"(?i)\b(?:rsud|rsu|rsj|rumah\s+sakit(?:\s+umum\s+daerah)?|rumkit|rs\.?\s+(?=\w)|klinik|puskesmas|balai\s+kesehatan|balai\s+pengobatan|hospital)\b"
+    r"(?i)\b(?:rsud|rsu|rsj|rumah\s+sakit(?:\s+umum\s+daerah)?|rumkit|rs\.?\s+(?=\w)|klinik|puskesmas|balai\s+(?:kesehatan|pengobatan|besar|riset|pengujian)|hospital|pt\.?\s+(?=\w)|cv\.?\s+(?=\w)|ud\.?\s+(?=\w)|koperasi\s+(?=\w)|yayasan\s+(?=\w)|universitas\s+(?=\w)|institut\s+(?=\w)|politeknik\s+(?=\w))\b"
 )
 ROAD = re.compile(r"(?i)\b(?:jalan|jl|jln|j1|ji|gang|gg|komplek?s?|kawasan)[.:-]?\s*(?=[\w])")
 CONT = re.compile(
