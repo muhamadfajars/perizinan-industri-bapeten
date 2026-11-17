@@ -91,6 +91,7 @@ def find_best_fuzzy_line(
         }
 
     best_score = 0.0
+    best_tie = 0.0
     best_text = None
 
     minimum_length = max(
@@ -112,19 +113,21 @@ def find_best_fuzzy_line(
         if len(candidate_normalized) < minimum_length:
             continue
 
+        ratio_score = fuzz.ratio(
+            expected_normalized,
+            candidate_normalized,
+        )
         score = max(
-            fuzz.ratio(
-                expected_normalized,
-                candidate_normalized,
-            ),
+            ratio_score,
             fuzz.token_set_ratio(
                 expected_normalized,
                 candidate_normalized,
             ),
         )
 
-        if score > best_score:
+        if (score, ratio_score) > (best_score, best_tie):
             best_score = score
+            best_tie = ratio_score
             best_text = candidate
 
     return {

@@ -256,7 +256,53 @@ def classify_by_content(
             None,
             "Judul dokumen mengarah ke beberapa kategori. Perlu Pilih Kategori.",
         )
+    if re.search(
+        r"(?:CAUTION|DANGER|WARNING)\s+(?:X[\s-]*RAY|RADIATION)|"
+        r"PRODUCES\s+RADIATION(?:\s+.*?)?\s+WHEN\s+ENERGIZED|"
+        r"RADIATION\s+WHEN\s+ENERGIZED",
+        text,
+        re.I | re.S,
+    ):
+        return "label", None, "Label peringatan radiasi pada unit/tabung terdeteksi"
+    if (
+        len(text.strip()) < 800
+        and re.search(r"(?i)\bMODEL\s*[:/]\s*\S+", text)
+        and re.search(r"(?i)\b(?:SERIAL(?:\s*(?:NO\.?|NUMBER))?|S/?N)\s*[:#]?\s*[A-Z0-9-]{4,}", text)
+    ):
+        return "label", None, "Label spesifikasi/nomor seri unit atau tabung terdeteksi"
     return None, None, None
+
+
+def _is_photo_album_pdf(filename: str, file_bytes: bytes, ocr_text: str) -> bool:
+    """Detect multi-photo PDFs (unit/label photos) that lack native text and OCR prose."""
+    if Path(filename).suffix.lower() != ".pdf":
+        return False
+    if re.search(
+        r"denah|lokasi|peta|layout|gedung|sertifikat|surat|formulir|laporan|uji|program|sistem|tld|osl",
+        filename,
+        re.I,
+    ):
+        return False
+    if len(re.sub(r"\s+", "", ocr_text or "")) >= 120:
+        return False
+    import pymupdf
+
+    with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
+        native_chars = 0
+        photo_pages = 0
+        large_images = 0
+        for page in doc[:6]:
+            native_chars += len(re.sub(r"\s+", "", page.get_text("text") or ""))
+            area = max(page.rect.width * page.rect.height, 1)
+            page_large = sum(
+                1
+                for info in page.get_image_info()
+                if pymupdf.Rect(info["bbox"]).get_area() / area >= 0.15
+            )
+            if page_large:
+                photo_pages += 1
+                large_images += page_large
+        return native_chars < 30 and (photo_pages >= 2 or large_images >= 2)
 
 
 def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict[str, Any]:
@@ -325,6 +371,15 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
                 "layer": 1,
                 "confidence": 0.65,
                 "reason": f"{reason1}. Judul pada isi belum terkonfirmasi; periksa kategori.",
+            }
+        if not reason1 and not reason2 and _is_photo_album_pdf(clean_name, file_bytes, text):
+            return {
+                "filename": clean_name,
+                "category": "label",
+                "subtype": None,
+                "layer": 2,
+                "confidence": 0.80,
+                "reason": "PDF berisi rangkaian foto fisik unit/label tanpa teks dokumen.",
             }
 
     # Unknown

@@ -323,6 +323,8 @@ def process_support(doc, application, reference, key):
 
 def cache_key_label_group(documents, reference_digest, source_digest):
     """Atomic key: any changed label invalidates the combined extraction."""
+    from .protection.llm import digest as protection_digest
+
     payload = {
         "documents": [(d["id"], d["sha256"], d["filename"]) for d in documents],
         "ref": reference_digest,
@@ -330,7 +332,8 @@ def cache_key_label_group(documents, reference_digest, source_digest):
         "ocr_profile": os.getenv("BAPETEN_OCR_PROFILE", "fast"),
         "engine": os.getenv("BAPETEN_OCR_ENGINE", "auto"),
         "label_profile": os.getenv("BAPETEN_LABEL_OCR_PROFILE", "quality"),
-        "group_version": 2,
+        "protection": protection_digest(),
+        "group_version": 3,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -351,7 +354,11 @@ def process_label_group(documents, application, reference, key):
             }
     rows = _label_group(documents, application, reference)
     duration = round(time.perf_counter() - start, 3)
-    if rows and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1":
+    if (
+        rows
+        and not any(d.get("_uncacheable") for d in documents)
+        and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1"
+    ):
         try:
             _write_cache(path, rows)
         except OSError:
@@ -418,7 +425,11 @@ def finalize_label_group(documents, application, reference, key, pages):
     from .analysis.labels import _label_group
 
     rows = _label_group(documents, application, reference, prefetched_pages=pages)
-    if rows and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1":
+    if (
+        rows
+        and not any(d.get("_uncacheable") for d in documents)
+        and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1"
+    ):
         try:
             _write_cache(_cache_file(documents[0], "labels_" + key), rows)
         except OSError:

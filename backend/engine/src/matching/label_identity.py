@@ -91,6 +91,15 @@ def _negative_field(expected, old, candidates, kind, meta):
     if old.get("status") == "MATCH" or not expected:
         return old
     if not candidates:
+        has_review_evidence = old.get("status") == "REVIEW" and (
+            bool(old.get("evidence"))
+            or any(
+                isinstance(c, dict) and bool(c.get("evidence"))
+                for c in (old.get("components") or [])
+            )
+        )
+        if has_review_evidence:
+            return old
         return {
             "status": "REVIEW",
             "expected": expected,

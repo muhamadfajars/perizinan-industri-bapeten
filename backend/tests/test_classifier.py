@@ -35,6 +35,47 @@ class TestClassifier(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIsNone(classify_by_filename(name)[0])
 
+    def test_label_photo_and_pdf_variants(self):
+        for name in (
+            "Foto Unit Tabung 0719.pdf",
+            "20261016091422-X Tube 174943-04204.jpeg",
+            "20260810092057-25-82682.png",
+            "foto_alat_xray.jpg",
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(classify_by_filename(name)[:2], ("label", None))
+
+        for name in ("Lokasi sumber.png", "123456.pdf"):
+            with self.subTest(non_label=name):
+                self.assertIsNone(classify_by_filename(name)[0])
+
+        self.assertEqual(
+            classify_by_content("PRODUCES RADIATION\nTHIS EQUIPMENT\nWHEN ENERGIZED.")[:2],
+            ("label", None),
+        )
+        self.assertEqual(
+            classify_by_content("MODEL: TrueX G5\nSERIAL NO: 1536367")[:2],
+            ("label", None),
+        )
+
+        import io
+        import pymupdf
+        from PIL import Image
+        from unittest.mock import patch
+
+        buf = io.BytesIO()
+        Image.new("RGB", (600, 800), (80, 80, 80)).save(buf, format="JPEG")
+        img_bytes = buf.getvalue()
+        pdf_doc = pymupdf.open()
+        for _ in range(2):
+            page = pdf_doc.new_page(width=595, height=842)
+            page.insert_image(pymupdf.Rect(20, 20, 575, 822), stream=img_bytes)
+        pdf_bytes = pdf_doc.tobytes()
+
+        with patch("app.classifier.extract_document_text", return_value=""):
+            res = classify_document("Lampiran cabang.pdf", pdf_bytes)
+        self.assertEqual((res["category"], res["layer"]), ("label", 2))
+
     def test_appointment_content_variants(self):
         for title in (
             "SURAT PENUNJUKAN SEBAGAI PETUGAS PROTEKSI RADIASI (PPR)",

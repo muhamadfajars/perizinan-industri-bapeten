@@ -325,16 +325,30 @@ def match_type_field_on_page(
             if len(candidate_value) < minimum_length:
                 continue
 
-            score = max(
-                fuzz.ratio(
-                    component_normalized,
-                    candidate_value,
-                ),
-                fuzz.token_set_ratio(
-                    component_normalized,
-                    candidate_value,
-                ),
-            )
+            comp_tokens = set(component_normalized.split())
+            cand_tokens = set(candidate_value.split())
+            if comp_tokens and comp_tokens.issubset(cand_tokens):
+                score = max(
+                    fuzz.ratio(
+                        component_normalized,
+                        candidate_value,
+                    ),
+                    fuzz.token_set_ratio(
+                        component_normalized,
+                        candidate_value,
+                    ),
+                )
+            else:
+                score = max(
+                    fuzz.ratio(
+                        component_normalized,
+                        candidate_value,
+                    ),
+                    fuzz.token_sort_ratio(
+                        component_normalized,
+                        candidate_value,
+                    ),
+                )
 
             if is_type_labeled_line(candidate):
                 score += 5
@@ -367,6 +381,106 @@ def match_type_field_on_page(
         status = "REVIEW"
 
     else:
+        # Check OCR character ambiguity (e.g. 5/S, 0/O, 1/I/L) on single-model codes
+        # before falling back to MISMATCH so minor optical substitutions stay REVIEW.
+        ambiguous_candidate = None
+        if len(expected_compact := compact_text(expected)) >= 4 and re.search(r"\d", expected_compact):
+            for item in ocr_items:
+                candidate = item.get("text")
+                if not candidate:
+                    continue
+                cleaned = re.sub(
+                    r"^\s*(?:INSERT\s+MODEL|UNIT\s+MODEL|MODEL|TYPE|TIPE)\s*[:#.\-\|]*\s*",
+                    "",
+                    str(candidate),
+                    flags=re.IGNORECASE,
+                ).strip(" |[]{}")
+                if serial_ocr_ambiguity(expected_compact, cleaned):
+                    ambiguous_candidate = cleaned or normalize_type_candidate(candidate)
+                    break
+        if ambiguous_candidate:
+            ambiguous_score = round(
+                fuzz.ratio(expected_compact, compact_text(ambiguous_candidate)), 1
+            )
+            return {
+                "status": "REVIEW",
+                "expected": expected,
+                "components": [
+                    {
+                        "component": expected,
+                        "found": False,
+                        "score": ambiguous_score,
+                        "evidence": ambiguous_candidate,
+                    }
+                ],
+                "reason": "Kemungkinan ambiguity OCR pada kode tipe/model.",
+                **metadata,
+            }
+
+        # Partial type match fallback (never awards MATCH 100%). Prioritizes
+        # explicit Model/Type labeled rows over unprefixed body logos.
+        exp_norm = normalize_text(expected)
+        partial_candidates = []
+        if len(expected_compact) >= 4:
+            exp_has_digit = bool(re.search(r"\d", expected_compact))
+            for item in ocr_items:
+                raw_cand = item.get("text")
+                if not raw_cand:
+                    continue
+                is_labeled = is_type_labeled_line(raw_cand)
+                cleaned = re.sub(
+                    r"^\s*(?:INSERT\s+MODEL|UNIT\s+MODEL|MODEL|TYPE|TIPE)\s*[:#.\-\|]*\s*",
+                    "",
+                    str(raw_cand),
+                    flags=re.IGNORECASE,
+                ).strip(" |[]{}")
+                cand_comp = compact_text(cleaned)
+                cand_norm = normalize_text(cleaned)
+                if len(cand_comp) < 4:
+                    continue
+                if exp_has_digit and is_labeled and not re.search(r"\d", cand_comp):
+                    continue
+                cov_ok = (
+                    (expected_compact.startswith(cand_comp) or cand_comp in expected_compact)
+                    and len(cand_comp) >= 0.45 * len(expected_compact)
+                )
+                set_ok = (
+                    fuzz.token_set_ratio(exp_norm, cand_norm) >= 85
+                    and len(cand_comp) >= 0.45 * len(expected_compact)
+                )
+                if not (cov_ok or set_ok):
+                    continue
+                sim = round(
+                    min(
+                        max(fuzz.ratio(exp_norm, cand_norm), fuzz.token_sort_ratio(exp_norm, cand_norm)),
+                        99.9,
+                    ),
+                    1,
+                )
+                if sim < 50.0 and not cov_ok:
+                    continue
+                partial_candidates.append((1 if is_labeled else 0, sim, cleaned, is_labeled))
+        if partial_candidates:
+            partial_candidates.sort(key=lambda t: (t[0], t[1]), reverse=True)
+            _, best_sim, best_ev, best_labeled = partial_candidates[0]
+            return {
+                "status": "REVIEW",
+                "expected": expected,
+                "components": [
+                    {
+                        "component": expected,
+                        "found": False,
+                        "score": best_sim,
+                        "evidence": best_ev,
+                    }
+                ],
+                "reason": (
+                    "Kecocokan parsial dari baris label Model/Type; perlu verifikasi visual"
+                    if best_labeled
+                    else "Kecocokan parsial dari label foto; perlu verifikasi visual"
+                ),
+                **metadata,
+            }
         status = "MISMATCH"
 
     return {

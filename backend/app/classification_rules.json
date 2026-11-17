@@ -93,7 +93,7 @@
       "subtype": null
     },
     {
-      "pattern": "foto[\\s_-]*label|label[\\s_-]*generator|label[\\s_-]*tabung|label[\\s_-]*unit|sn[\\s_-]*(?:unit|tube|tabung|generator)(?![a-z0-9])|foto[\\s_-]*tube|foto[\\s_-]*nomor[\\s_-]*seri|foto[\\s_-]*keseluruhan",
+      "pattern": "foto[\\s_-]*(?:label|unit|tabung|tube|generator|nomor[\\s_-]*seri|keseluruhan|alat|pesawat)(?![a-z0-9])|label[\\s_-]*(?:generator|tabung|unit)(?![a-z0-9])|sn[\\s_-]*(?:unit|tube|tabung|generator)(?![a-z0-9])|(?:x[\\s_-]*ray[\\s_-]*tube|x[\\s_-]*tube)(?![a-z0-9])|^(?:\\d{8,14}[\\s_-]+)?[a-z]{0,3}\\d[\\d-]{3,}[a-z0-9-]*\\.(?:png|jpe?g|webp|bmp|tiff?)$",
       "category": "label",
       "subtype": null
     }
