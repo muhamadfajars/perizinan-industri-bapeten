@@ -159,9 +159,11 @@ def conditional_rows(parsed, original, application, doc, *, today=None):
 
     # Only a labelled validity statement is eligible. Issue dates and monitoring
     # periods must not become expiry dates through the legacy latest-date fallback.
+    from .personnel_semantic import _semantic_page_text
+
     validity = []
     for page in pages:
-        lines = get_page_text(page).splitlines()
+        lines = _semantic_page_text(page).splitlines()
         for index, line in enumerate(lines):
             if not EXPIRY_LABEL.search(line):
                 continue

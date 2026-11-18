@@ -288,3 +288,51 @@ class PersonnelPolicyTests(unittest.TestCase):
         )
         self.assertTrue(shared_budi["detail"]["shared_document"])
         self.assertEqual(shared_budi["detail"]["co_owners"], ["Rama Chandra"])
+
+    def test_expiry_prefers_clean_native_text_over_reordered_ocr_duplicate(self):
+        native = "\n".join(
+            [
+                "Sertifikat Kompetensi Petugas Proteksi Radiasi",
+                "Nomor Sertifikat/Certificate Number: 470683.120.10.140826",
+                "Nama/Name : Budi Santoso",
+                "LULUS/HAS PASSED",
+                "Ujian Sertifikasi Kompetensi Petugas Proteksi Radiasi",
+                "Berlaku sampai dengan/Valid until :",
+                "13 Agustus 2031 / 13",
+                "th August 2031",
+                "Jakarta, 14 Agustus 2026 / 14",
+                "th August 2026",
+            ]
+        )
+        ocr = [
+            {"text": "Sertifikat Kompetensi Petugas Proteksi Radiasi"},
+            {"text": "Nama/Name : Budi Santoso"},
+            {"text": "Berlaku sampai dengan/Valid until :"},
+            {"text": "Jakarta, 14 Agustus 2026 / 14” August 2026"},
+            {"text": "13 Agustus 2031 / 13\" August 2031"},
+        ]
+        parsed = {
+            "text": native,
+            "document_type": "COMPETENCE",
+            "pages": [{"page": 1, "native_text": native, "ocr": ocr}],
+        }
+        original = [
+            {
+                "field": "Nama Petugas",
+                "expected": "Budi Santoso",
+                "observed": "Budi Santoso",
+                "status": "MATCH",
+                "score": 100,
+            }
+        ]
+        doc = {"id": "doc_tte", "filename": "serkom_tte.pdf", "subtype": "Sertifikat Kompetensi PPR"}
+        rows = conditional_rows(
+            parsed,
+            original,
+            {"personnel": [{"nama": "Budi Santoso", "keahlian": "PPR"}]},
+            doc,
+            today=date(2026, 11, 18),
+        )
+        validity = next(r for r in rows if r["field"] == "Masa Berlaku")
+        self.assertEqual(validity["observed"], "13/08/2031")
+        self.assertEqual(validity["status"], "INFO")
