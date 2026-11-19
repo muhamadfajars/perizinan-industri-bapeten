@@ -229,9 +229,9 @@ export function MatchingSection({
                 {stats.compared ? (
                   <>
                     <strong>
-                      {stats.match} / {stats.compared}
+                      {stats.percentage}%
                     </strong>
-                    <span>data sesuai formulir</span>
+                    <span>total field sesuai</span>
                   </>
                 ) : (
                   'Tidak ada data yang dibandingkan dengan formulir'
