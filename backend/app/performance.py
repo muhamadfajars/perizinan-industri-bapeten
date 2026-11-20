@@ -170,6 +170,23 @@ def get_pool():
         return POOL
 
 
+def recycle_broken_pool(expected_pool):
+    """Discard one failed executor so the next submission receives fresh workers.
+
+    A worker can still terminate unexpectedly because of a native OCR/PDF
+    library.  ``ProcessPoolExecutor`` cannot accept work after that event.  The
+    caller supplies the executor it used so a concurrent analysis never closes
+    a newer replacement pool.
+    """
+    global POOL
+    with POOL_STATE:
+        if POOL is not expected_pool:
+            return False
+        broken, POOL = POOL, None
+    broken.shutdown(wait=False, cancel_futures=True)
+    return True
+
+
 def shutdown():
     global POOL
     with POOL_STATE:

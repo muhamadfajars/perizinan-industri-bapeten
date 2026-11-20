@@ -30,6 +30,7 @@ def analyze_application(aid, progress):
     import concurrent.futures
     import hashlib
     import json
+    from concurrent.futures.process import BrokenProcessPool
     from .. import performance
 
     started = time.perf_counter()
@@ -99,6 +100,8 @@ def analyze_application(aid, progress):
         key = performance.cache_key(d, r_digest, source_digest)
         fut = pool.submit(performance.process_support, d, application, reference, key)
         futures[fut] = (index, d, [d])
+    if futures or label_futures:
+        progress(10, f"Menganalisis {len(futures) + len(label_futures)} dokumen")
     completed = {}
     timings = []
     group_ocr = []
@@ -127,6 +130,43 @@ def analyze_application(aid, progress):
     total_jobs = len(futures) + len(label_futures)
     label_started = time.perf_counter()
     label_finished = None
+
+    def record_support(index, d, group, detail):
+        rows = (
+            detail["rows"]
+            if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu")
+            else finalize_legacy_rows(detail["rows"], d)
+        )
+        timings.append(
+            {
+                "category": d["category"],
+                "filename": " + ".join(item["filename"] for item in group),
+                "seconds": detail["seconds"],
+                "cache_hit": detail["cached"],
+            }
+        )
+        if not rows:
+            errors.append(
+                {
+                    "document_id": d["id"],
+                    "category": d["category"],
+                    "filename": d["filename"],
+                    "error": "Tidak ada bukti ekstraksi yang dapat diverifikasi",
+                }
+            )
+            return
+        completed[index] = {
+            "id": d["id"],
+            "category": d["category"],
+            "name": _personnel_title(d)
+            if d["category"] == "personel"
+            else NAMES[d["category"]] + " · " + d["filename"],
+            "document_id": d["id"],
+            "source_documents": [{"id": d["id"], "filename": d["filename"]}],
+            "rows": rows,
+            "info": "Hasil pemeriksaan file ini",
+        }
+
     for number, fut in enumerate(concurrent.futures.as_completed([*futures, *label_futures]), 1):
         if fut in label_futures:
             _, d = label_futures[fut]
@@ -141,41 +181,27 @@ def analyze_application(aid, progress):
         else:
             index, d, group = futures[fut]
             try:
-                detail = fut.result()
-                rows = (
-                    detail["rows"]
-                    if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu")
-                    else finalize_legacy_rows(detail["rows"], d)
-                )
-                timings.append(
-                    {
-                        "category": d["category"],
-                        "filename": " + ".join(item["filename"] for item in group),
-                        "seconds": detail["seconds"],
-                        "cache_hit": detail["cached"],
-                    }
-                )
-                if not rows:
+                record_support(index, d, group, fut.result())
+            except BrokenProcessPool:
+                # Native OCR/PDF code can terminate a worker. Recreate only
+                # this shared pool and retry the affected document once.
+                performance.recycle_broken_pool(pool)
+                try:
+                    retry_pool = performance.get_pool()
+                    retry_key = performance.cache_key(d, r_digest, source_digest)
+                    retry = retry_pool.submit(
+                        performance.process_support, d, application, reference, retry_key
+                    )
+                    record_support(index, d, group, retry.result())
+                except Exception as retry_exc:
                     errors.append(
                         {
                             "document_id": d["id"],
                             "category": d["category"],
                             "filename": d["filename"],
-                            "error": "Tidak ada bukti ekstraksi yang dapat diverifikasi",
+                            "error": f"{type(retry_exc).__name__}: {str(retry_exc)[:240]}",
                         }
                     )
-                else:
-                    completed[index] = {
-                        "id": d["id"],
-                        "category": d["category"],
-                        "name": _personnel_title(d)
-                        if d["category"] == "personel"
-                        else NAMES[d["category"]] + " · " + d["filename"],
-                        "document_id": d["id"],
-                        "source_documents": [{"id": d["id"], "filename": d["filename"]}],
-                        "rows": rows,
-                        "info": "Hasil pemeriksaan file ini",
-                    }
             except Exception as exc:
                 errors.append(
                     {

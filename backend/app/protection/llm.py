@@ -191,15 +191,14 @@ def request_records(schema, task, pages, instructions, *, output_limit=2300):
             },
         ],
     }
+    timeout = int(os.getenv("BAPETEN_LLM_TIMEOUT", "180"))
     with request_slot():
         request = urllib.request.Request(
             config["url"].rstrip("/") + "/api/chat",
             data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(
-            request, timeout=int(os.getenv("BAPETEN_LLM_TIMEOUT", "180"))
-        ) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             result = json.load(response)
         if result.get("done_reason") == "length":
             raise RuntimeError("Keluaran Qwen terpotong; ekstraksi belum lengkap.")

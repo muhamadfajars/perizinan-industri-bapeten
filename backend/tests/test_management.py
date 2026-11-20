@@ -132,6 +132,21 @@ class ManagementTests(unittest.TestCase):
         )
         self.assertEqual(rows[2]["status"], "MISMATCH")
 
+    def test_chapter_culture_heading_across_subsections(self):
+        body = (
+            "BAB I\n"
+            "BUDAYA KESELAMATAN DAN BUDAYA KEAMANAN\n"
+            "1.1 Umum\n"
+            "Berkaitan dengan budaya keselamatan dan budaya keamanan radiasi, PT Contoh memiliki Organisasi Proteksi Radiasi yang bertanggung jawab pada penyelenggaraan dan pengawasan keselamatan kerja radiasi, pencegahan paparan berlebih, serta pelatihan dan pelaporan kejadian secara berkelanjutan di seluruh fasilitas.\n"
+            "1.2 Kebijakan\n"
+            "Seluruh personel berkomitmen penuh menjaga kepatuhan operasional dan prosedur keamanan sumber radiasi.\n"
+            "BAB II PENDEKATAN BERTINGKAT\n"
+            "Uraian bab lain yang tidak termasuk budaya."
+        )
+        topics = culture_evidence([page(body, 5)])
+        self.assertTrue(all(t["found"] for t in topics))
+        self.assertTrue(all(t["evidence"][0]["page"] == 5 for t in topics))
+
 
 if __name__ == "__main__":
     unittest.main()

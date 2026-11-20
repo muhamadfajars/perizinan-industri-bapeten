@@ -484,6 +484,510 @@ class ProtectionTests(unittest.TestCase):
         self.assertTrue(failing_doc.get("_uncacheable"))
         self.assertTrue(all(r["status"] == "REVIEW" for r in rows))
 
+    def test_grouped_personnel_and_combined_srp_tables(self):
+        import tempfile
+        from pathlib import Path
+        import pymupdf
+        from app.protection.extraction import table_records
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "grouped_and_combined.pdf"
+            with pymupdf.open() as pdf:
+                def draw_table(p, y0, col_widths, row_h, rows):
+                    xs = [30]
+                    for w in col_widths:
+                        xs.append(xs[-1] + w)
+                    y_end = y0 + row_h * len(rows)
+                    for x in xs:
+                        p.draw_line((x, y0), (x, y_end))
+                    for r_idx in range(len(rows) + 1):
+                        y = y0 + r_idx * row_h
+                        p.draw_line((xs[0], y), (xs[-1], y))
+                    for r_idx, row in enumerate(rows):
+                        y = y0 + r_idx * row_h
+                        for c_idx, txt in enumerate(row):
+                            p.insert_textbox(
+                                pymupdf.Rect(xs[c_idx] + 3, y + 3, xs[c_idx + 1] - 3, y + row_h - 3),
+                                txt,
+                                fontsize=8,
+                            )
+
+                p1 = pdf.new_page()
+                draw_table(
+                    p1,
+                    60,
+                    [35, 160, 120, 100, 100],
+                    32,
+                    [
+                        ["No", "Nama", "No. SIB", "Exam", "Valid Until"],
+                        ["Operator Analisis", "Operator Analisis", "Operator Analisis", "Operator Analisis", "Operator Analisis"],
+                        ["1", "Andika Akbar", "456346.425", "05 Jan 2025", "05 Jan 2030"],
+                        ["PPR (Petugas Proteksi Radiasi)", "PPR (Petugas Proteksi Radiasi)", "PPR (Petugas Proteksi Radiasi)", "PPR (Petugas Proteksi Radiasi)", "PPR (Petugas Proteksi Radiasi)"],
+                        ["1", "Erric Eka K", "414939.113", "07 Nov 2024", "07 Nov 2027"],
+                    ],
+                )
+                p2 = pdf.new_page()
+                draw_table(
+                    p2,
+                    60,
+                    [30, 130, 130, 130, 100],
+                    85,
+                    [
+                        ["No", "SRP XRF", "Personel", "Lokasi Pemanfaatan", "Alat Ukur"],
+                        [
+                            "1",
+                            "Thermo Fisher Scientific, XL2 980 PLUS NITON/200286",
+                            "1. Andika Akbar (Operator)\n2. Erric Eka K (PPR)",
+                            "1. Project Batam Based.\n2. Kawasan Industri Kabil.\n3. XRF digunakan sesuai kebutuhan",
+                            "Surveymeter SN 123",
+                        ],
+                    ],
+                )
+                pdf.save(path)
+            pages = [
+                page("LAMPIRAN 5: DAFTAR PERSONIL TEAM ANALISIS", 1),
+                page("LAMPIRAN 6: DAFTAR PENGGUNA DAN ALAT KERJA XRF\nSRP XRF\nLokasi Pemanfaatan", 2),
+            ]
+            records = table_records(path, pages)
+
+        self.assertTrue(
+            any(r.get("name") == "Andika Akbar" and r.get("role") == "Operator Analisis" for r in records["personnel"])
+        )
+        self.assertTrue(
+            any(r.get("name") == "Erric Eka K" and "PPR" in (r.get("role") or "") for r in records["personnel"])
+        )
+        self.assertTrue(
+            any(r.get("name") == "Erric Eka K" and r.get("role") == "PPR" and r["page"] == 2 for r in records["personnel"])
+        )
+        equip = [r for r in records["equipment"] if r.get("nomor_seri_unit") == "200286"]
+        self.assertEqual(len(equip), 1)
+        self.assertEqual(equip[0].get("merk_unit"), "Thermo Fisher Scientific")
+        self.assertEqual(equip[0].get("tipe_unit"), "XL2 980 PLUS NITON")
+        self.assertIn("Kawasan Industri Kabil", equip[0].get("location", ""))
+        self.assertNotIn("digunakan sesuai kebutuhan", equip[0].get("location", ""))
+
+    def test_native_identity_rejects_prose_abbreviations_and_extracts_prose_location(self):
+        from app.protection.extraction import native_identity
+
+        pages = [
+            page("RT I : Radiografer Tingkat I\nRT II : Radiografer Tingkat II\ngedung/fasilitas.\n• Evakuasi: Seluruh personel harus keluar.", 1),
+            page("Lokasi penyimpanan PT Contoh\nberada di Jl. Hang Kesturi No. 5, Kawasan Industri Kabil Batam.", 20),
+        ]
+        recs = native_identity(pages)
+        addrs = [r["project_address"] for r in recs if r.get("project_address")]
+        self.assertEqual(len(addrs), 1)
+        self.assertEqual(addrs[0], "Jl. Hang Kesturi No. 5, Kawasan Industri Kabil Batam")
+
+    def test_metadata_extracts_header_control_code_with_rev_and_bare_tanggal(self):
+        pages = [
+            page(
+                "PT CONTOH\nPM-HSE-08-PPKR-Rev 05\nPROGRAM PROTEKSI DAN KESELAMATAN RADIASI\nTanggal: 16-07-2026\nTanggal : 16 Juli 2026",
+                1,
+            ),
+            page("PM-HSE-08-PPKR-R\nPROGRAM PROTEKSI DAN KESELAMATAN RADIASI", 4),
+            page("PM-HSE-08-PRP-Rev 05\nPROGRAM PROTEKSI DAN KESELAMATAN RADIASI", 63),
+            page("217299-11 / LT / RP / 06 / 2025\nPROGRAM PROTEKSI DAN KESELAMATAN RADIASI", 75),
+        ]
+        meta = metadata(pages, expected_number="PM-HSE-08-PPKR-Rev 05", expected_date="16/07/2026")
+        self.assertEqual([n["value"] for n in meta["number"]], ["PM-HSE-08-PPKR-Rev 05"])
+        self.assertEqual(len(meta["date"]), 1)
+        self.assertEqual(compare("16/07/2026", meta["date"][0]["value"], "date")[0], "MATCH")
+
+    def test_has_real_tube_cue_filters_generic_prose(self):
+        from app.protection.extraction import _has_real_tube_cue
+
+        self.assertFalse(_has_real_tube_cue("Pencatatan jam kerja tabung (X-ray tube log)."))
+        self.assertFalse(_has_real_tube_cue("Bagian dalam ruangan radiography tempat tabung X-ray berada."))
+        self.assertTrue(_has_real_tube_cue("No. Seri Insersi Tabung: S21693"))
+        self.assertTrue(_has_real_tube_cue("Tabel X-Ray Tube dan Unit"))
+        self.assertTrue(_has_real_tube_cue("XTube DXL 800 Niton"))
+
+    def test_approval_prefers_bilingual_signature_sheet_over_prose_mentions(self):
+        from app.protection.evidence import approval_evidence
+
+        pages = [
+            page(
+                "DOKUMEN PROGRAM\n"
+                "Disusun Oleh,\nErric Eka\nRadiation Protection Officer\n"
+                "Diperiksa Oleh,\nUsman\nOperational Manager\n"
+                "Disetujui Oleh,\nRaden Erwin\nDirector",
+                1,
+            ),
+            page("Revisi perubahan nama PPR yang bertanggung jawab dalam lembar pengesahan", 4),
+            page("Pimpinan mengesahkan perencanaan tersebut; manajer terkait menindaklanjuti.", 12),
+        ]
+        found = approval_evidence(pages)
+        self.assertEqual([item["page"] for item in found], [1])
+
+    def test_legal_section_keeps_lowercase_items_across_pages(self):
+        pages = [
+            page(
+                "1.6 Referensi\n"
+                "a) Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran\n"
+                "b) Peraturan Pemerintah Nomor 45 Tahun 2023",
+                11,
+            ),
+            page(
+                "c) Peraturan Pemerintah Nomor 28 Tahun 2025\n"
+                "d) Peraturan BAPETEN Nomor 4 Tahun 2024\n"
+                "f) Peraturan BAPETEN Nomor 5 Tahun 2025\n"
+                "BAB II MANAJEMEN KESELAMATAN\nPP 2 Tahun 2020",
+                12,
+            ),
+        ]
+        rows = information(pages, lambda *args, **kwargs: make_row("d", *args, **kwargs))
+        laws = [r for r in rows if r["detail"]["group"] == "Dasar hukum"]
+        self.assertEqual(len(laws), 5)
+        self.assertTrue(all(r["detail"]["pages"] for r in laws))
+
+    def test_metadata_clusters_ocr_number_variants_and_keeps_genuine_conflicts(self):
+        pages = [
+            {
+                "page": 1,
+                "text": "DOKUMEN PROGRAM PROTEKSI\nNomor Dokumen: OO2/SIMPRG/PPR-QA/V/2026",
+                "native_text": "",
+                "method": "ocr",
+                "has_visual": True,
+            },
+            {
+                "page": 2,
+                "text": "DOKUMEN PROGRAM PROTEKSI\nNomor Dokumen: 002/SIM/PRG/PPR-QA/V/2026",
+                "native_text": "DOKUMEN PROGRAM PROTEKSI\nNomor Dokumen: 002/SIM/PRG/PPR-QA/V/2026",
+                "method": "ocr",
+                "has_visual": True,
+            },
+        ]
+        meta = metadata(pages)
+        self.assertEqual([n["value"] for n in meta["number"]], ["002/SIM/PRG/PPR-QA/V/2026"])
+
+        conflict_pages = [
+            page("DOKUMEN PROGRAM PROTEKSI\nNomor Dokumen: 001/SIM/PRG/2026", 1),
+            page("DOKUMEN PROGRAM PROTEKSI\nNomor Dokumen: 002/SIM/PRG/2026", 2),
+        ]
+        conflict_meta = metadata(conflict_pages)
+        self.assertEqual(
+            sorted(n["value"] for n in conflict_meta["number"]),
+            ["001/SIM/PRG/2026", "002/SIM/PRG/2026"],
+        )
+
+    def test_equipment_kv_tables_text_blocks_measuring_exclusion_and_serial_core_link(self):
+        import os
+        import tempfile
+        import pymupdf
+        from app.protection.extraction import extract_records, table_records
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            pdf_path = tmp.name
+        try:
+            doc = pymupdf.open()
+            pg = doc.new_page(width=595, height=842)
+            # Generic 3-col horizontal table (Merk + Tipe/No. Seri) without "Unit" in header
+            y0, x_cols = 50, [40, 90, 220, 480]
+            h_rows = [
+                ["No", "Merk", "Tipe / No. Seri"],
+                ["1", "Rigaku", "NEX CG / SN: RG-44556"],
+            ]
+            for r_i, vals in enumerate(h_rows):
+                y_top, y_bot = y0 + r_i * 22, y0 + (r_i + 1) * 22
+                for c_i, val in enumerate(vals):
+                    rect = pymupdf.Rect(x_cols[c_i], y_top, x_cols[c_i + 1], y_bot)
+                    pg.draw_rect(rect)
+                    pg.insert_text((x_cols[c_i] + 4, y_top + 15), val, fontsize=9)
+            # Vertical 2-col key-value specification table (without measuring tools)
+            kv_y0, kv_x = 130, [40, 220, 480]
+            kv_rows = [
+                ["Parameter", "Nilai"],
+                ["Merk", "Bruker"],
+                ["Tipe", "S1 Titan"],
+                ["No. Seri Unit", "BT-9001"],
+                ["Tabung Sinar-X", ""],
+                ["Merk", "Moxtek"],
+                ["No. Seri", "MX-778"],
+            ]
+            for r_i, vals in enumerate(kv_rows):
+                y_top, y_bot = kv_y0 + r_i * 20, kv_y0 + (r_i + 1) * 20
+                for c_i, val in enumerate(vals):
+                    rect = pymupdf.Rect(kv_x[c_i], y_top, kv_x[c_i + 1], y_bot)
+                    pg.draw_rect(rect)
+                    if val:
+                        pg.insert_text((kv_x[c_i] + 4, y_top + 14), val, fontsize=9)
+            # Measuring tool table that must be excluded
+            m_y0, m_x = 300, [40, 140, 250, 360, 480]
+            m_rows = [
+                ["Alat", "Merk", "Tipe", "No. Seri"],
+                ["Surveymeter", "Thermo", "RadEye", "11223"],
+            ]
+            for r_i, vals in enumerate(m_rows):
+                y_top, y_bot = m_y0 + r_i * 20, m_y0 + (r_i + 1) * 20
+                for c_i, val in enumerate(vals):
+                    rect = pymupdf.Rect(m_x[c_i], y_top, m_x[c_i + 1], y_bot)
+                    pg.draw_rect(rect)
+                    pg.insert_text((m_x[c_i] + 4, y_top + 14), val, fontsize=9)
+            doc.new_page(width=595, height=842)
+            doc.save(pdf_path)
+            doc.close()
+
+            pages = [
+                page("Data Pesawat Sinar-X\nMerk\nNo. Seri\nTipe\nSurveymeter", 1),
+                page(
+                    "Spesifikasi Pesawat Portable\n"
+                    "Merk : Evident   Tipe : Vanta M   No. Seri : S/N 00EV33445\n"
+                    "No. Seri Tabung : TB-8899\n"
+                    "Lokasi Pemanfaatan : Site Morowali, Sulawesi Tengah\n\n\n\n"
+                    "Merk Unit   Rigaku\n"
+                    "Tipe Unit   NEX\n"
+                    "No. Seri Unit   RG-9988\n\n\n\n"
+                    "Daftar Alat Ukur\nMerk : Automess   Tipe : 6150AD   No. Seri : AM-999",
+                    2,
+                ),
+            ]
+            tbl = table_records(pdf_path, pages)
+            serials_tbl = {r.get("nomor_seri_unit") for r in tbl["equipment"]}
+            self.assertEqual(serials_tbl, {"RG-44556", "BT-9001"})
+            bruker = next(r for r in tbl["equipment"] if r.get("nomor_seri_unit") == "BT-9001")
+            self.assertEqual(bruker.get("merk_tabung"), "Moxtek")
+            self.assertEqual(bruker.get("nomor_seri_tabung"), "MX-778")
+            self.assertNotIn("11223", serials_tbl)
+
+            with patch("app.protection.llm.extract", return_value=[]):
+                recs, _ = extract_records(
+                    pdf_path,
+                    pages,
+                    {
+                        "identity": {"institution": "PT Uji", "project_address": "Morowali"},
+                        "equipment": [
+                            {
+                                "merk_unit": "Evident",
+                                "tipe_unit": "Vanta M",
+                                "nomor_seri_unit": "EV33445",
+                                "nomor_seri_tabung": "TB-8899",
+                            }
+                        ],
+                    },
+                )
+            all_serials = {r.get("nomor_seri_unit") for r in recs["equipment"]}
+            self.assertIn("S/N 00EV33445", all_serials)
+            self.assertIn("RG-9988", all_serials)
+            self.assertNotIn("AM-999", all_serials)
+
+            rows = build_rows(
+                "d",
+                {
+                    "equipment": [
+                        {
+                            "merk_unit": "Evident",
+                            "tipe_unit": "Vanta M",
+                            "nomor_seri_unit": "EV33445",
+                            "nomor_seri_tabung": "TB-8899",
+                        }
+                    ]
+                },
+                pages,
+                recs,
+                semantic={"legal_sections": [], "dose": []},
+            )
+            merk_row = next(r for r in rows if r["field"] == "Alat 1: Merek Unit")
+            self.assertEqual(merk_row["status"], "MATCH")
+            self.assertEqual(merk_row["observed"], "Evident")
+        finally:
+            if os.path.exists(pdf_path):
+                os.unlink(pdf_path)
+
+    def test_legal_section_variants_and_semantic_alnum_grounding(self):
+        from app.protection.semantic import recover
+
+        pages = [
+            page("1.2 Dasar Hukum\nMengacu pada regulasi keselamatan radiasi yang berlaku.\n1.3 Tujuan", 1),
+            page(
+                "II. Dasar Hukum dan Peraturan Perundang-undangan:\n"
+                "1. Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran\n"
+                "2. Peraturan Pemerintah Nomor 45 Tahun 2023\n"
+                "3. Peraturan Pemerintah Nomor 28 Tahun 2025\n"
+                "4. Peraturan BAPETEN Nomor 4 Tahun 2024\n"
+                "5. Peraturan BAPETEN Nomor 5 Tahun 2025\n"
+                "BAB III ORGANISASI",
+                4,
+            ),
+        ]
+        rows = information(pages, lambda *args, **kwargs: make_row("d", *args, **kwargs))
+        laws = [r for r in rows if r["detail"]["group"] == "Dasar hukum"]
+        self.assertEqual(len(laws), 5)
+        self.assertTrue(all(r["detail"]["pages"] == [4] for r in laws))
+
+        raw_source = (
+            "1.4 Acuan Peraturan:\n"
+            "• Undang - Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran dan Keselamatan.\n"
+            "• Peraturan Pemerintah Nomor 45 Tahun 2023 tentang Keselamatan Radiasi."
+        )
+        normalized_quote = (
+            "Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran dan Keselamatan. "
+            "Peraturan Pemerintah Nomor 45 Tahun 2023 tentang Keselamatan Radiasi."
+        )
+        with patch(
+            "app.protection.llm.request_records",
+            return_value=[{"page": 3, "category": "legal_section", "quote": normalized_quote}],
+        ):
+            ev, warnings = recover("laws", [page(raw_source, 3)])
+        self.assertEqual(len(ev), 1)
+        self.assertFalse(any("diabaikan" in w for w in warnings))
+
+    def test_zone_text_fallback_prefers_zone_division_over_glossary_and_keeps_unconfirmed_diagrams(self):
+        text_only_pages = [
+            {
+                "page": 2,
+                "text": "Daftar Istilah\nDaerah Pengendalian adalah suatu daerah kerja tertentu.",
+                "method": "text",
+                "has_visual": False,
+            },
+            {
+                "page": 3,
+                "text": "Peta Lokasi Pabrik dan Fasilitas Umum",
+                "method": "text",
+                "has_visual": True,
+            },
+            {
+                "page": 9,
+                "text": (
+                    "4.1 Pembagian Daerah Kerja\n"
+                    "a. Daerah Pengendalian (Controlled Area): batas laju dosis > 3 mSv/tahun, dipasang tanda radiasi.\n"
+                    "b. Daerah Pengawasan / Supervisi (Supervised Area): batas laju dosis > 1 mSv/tahun dan <= 3 mSv/tahun."
+                ),
+                "method": "text",
+                "has_visual": False,
+            },
+        ]
+        rows = information(
+            text_only_pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        ctrl = next(r for r in rows if r["field"] == "Daerah Pengendalian")
+        supv = next(r for r in rows if r["field"] == "Daerah Pengawasan / Supervisi")
+        self.assertEqual(ctrl["detail"]["pages"][0], 9)
+        self.assertIn("3 mSv/tahun", ctrl["observed"])
+        self.assertNotIn("Denah kandidat ditemukan", ctrl["observed"])
+        self.assertFalse(ctrl["detail"].get("review_required"))
+        self.assertEqual(supv["detail"]["pages"], [9])
+
+        # Unconfirmed diagram candidate behavior must remain intact
+        diag_pages = [
+            {
+                "page": 5,
+                "text": "Denah Ruangan Fasilitas Utama",
+                "method": "text",
+                "has_visual": True,
+            }
+        ]
+        diag_rows = information(
+            diag_pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        diag_ctrl = next(r for r in diag_rows if r["field"] == "Daerah Pengendalian")
+        self.assertEqual(diag_ctrl["observed"], "Denah kandidat ditemukan; jenis daerah belum terkonfirmasi")
+        self.assertTrue(diag_ctrl["detail"].get("review_required"))
+
+    def test_dose_statements_handles_intro_bullets_kendala_and_rejects_nbd_only(self):
+        from app.protection.dose import dose_statements
+
+        pages = [
+            page(
+                "4.3 Penetapan Pembatas Dosis\n"
+                "Pembatasan dosis saat beroperasi di fasilitas saat ini ditetapkan sebagai berikut.\n"
+                "1. Pekerja radiasi: 5 mSv/tahun.\n"
+                "2. Masyarakat umum: 0,5 mSv/tahun.\n"
+                "Nilai batas dosis pekerja radiasi adalah 20 mSv/tahun.",
+                7,
+            )
+        ]
+        found = dose_statements(pages)
+        self.assertTrue(found)
+        self.assertIn("5 mSv/tahun", found[0]["quote"])
+        self.assertNotIn("20 mSv/tahun", found[0]["quote"])
+
+        kendala_pages = [
+            page("Kendala dosis (dose constraint) untuk operasi saat ini sebesar 3 mSv/tahun.", 8)
+        ]
+        self.assertEqual(len(dose_statements(kendala_pages)), 1)
+
+        nbd_only = [
+            page(
+                "Pembatas dosis harus tidak melampaui Nilai Batas Dosis pekerja radiasi sebesar 20 mSv/tahun.",
+                9,
+            )
+        ]
+        self.assertEqual(dose_statements(nbd_only), [])
+
+        frac_nbd = [
+            page("Penetapan pembatas dosis:\nPekerja radiasi 1/4 NBD (5 mSv/tahun).", 10)
+        ]
+        frac_found = dose_statements(frac_nbd)
+        self.assertEqual(len(frac_found), 1)
+        self.assertIn("5 mSv/tahun", frac_found[0]["quote"])
+
+    def test_law_regex_variants_and_robust_legal_section_extraction(self):
+        from app.protection.evidence import LAW, law_key, legal_section
+
+        samples = [
+            ("Perka BAPETEN Nomor 4 Tahun 2013", ("Perba", "4", "2013")),
+            ("Perba BAPETEN No. 5 Tahun 2025", ("Perba", "5", "2025")),
+            ("Peraturan Badan Pengawas Tenaga Nuklir (BAPETEN) Nomor 4 Tahun 2024", ("Perba", "4", "2024")),
+            ("UU RI No. 10 Thn. 1997", ("UU", "10", "1997")),
+        ]
+        for text, expected in samples:
+            match = LAW.search(text)
+            self.assertIsNotNone(match, text)
+            self.assertEqual(law_key(*match.groups()), expected, text)
+
+        for heading in ("I.2. Dasar Hukum", "BAB II DASAR HUKUM", "1.3 Dasar Hukum"):
+            doc_pages = [
+                page(
+                    f"{heading}\n"
+                    "1.3.1 Peraturan Nasional\n"
+                    "A. Undang-Undang\n"
+                    "UU RI No. 10 Thn. 1997\n"
+                    "B. Peraturan Pemerintah\n"
+                    "A. Peraturan Badan Pengawas Tenaga Nuklir\nNomor 4 Tahun 2024\n"
+                    "C. Perba BAPETEN No. 5 Tahun 2025\n"
+                    "I.3. Tujuan dan Ruang Lingkup\nPP No. 2 Tahun 2020",
+                    3,
+                )
+            ]
+            sec = legal_section(doc_pages)
+            keys = {law_key(*m.groups()) for item in sec for m in LAW.finditer(item["text"])}
+            self.assertIn(("UU", "10", "1997"), keys, heading)
+            self.assertIn(("Perba", "4", "2024"), keys, heading)
+            self.assertIn(("Perba", "5", "2025"), keys, heading)
+            self.assertNotIn(("PP", "2", "2020"), keys, heading)
+
+        inline_pages = [
+            page(
+                "Dasar Hukum : Undang-Undang Nomor 10 Tahun 1997 dan PP No. 45 Tahun 2023\n"
+                "II. Tujuan\nPP No. 2 Tahun 2020",
+                2,
+            )
+        ]
+        inline_keys = {
+            law_key(*m.groups()) for item in legal_section(inline_pages) for m in LAW.finditer(item["text"])
+        }
+        self.assertEqual(inline_keys, {("UU", "10", "1997"), ("PP", "45", "2023")})
+
+        prose_pages = [
+            page(
+                "I.1. Pendahuluan\n"
+                "Dokumen ini disusun untuk pemanfaatan sumber radiasi di PT Contoh.\n"
+                "Penyusunan dokumen ini mengacu pada berbagai dasar hukum dan referensi yang berlaku, "
+                "antara lain Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran, "
+                "Peraturan Pemerintah Nomor 45 Tahun 2023, dan Perka BAPETEN Nomor 4 Tahun 2013.\n"
+                "I.2. Kebijakan Perusahaan\nPeraturan Pemerintah Nomor 28 Tahun 2025 dalam narasi lain.",
+                5,
+            )
+        ]
+        prose_sec = legal_section(prose_pages)
+        prose_keys = {law_key(*m.groups()) for item in prose_sec for m in LAW.finditer(item["text"])}
+        self.assertEqual(prose_keys, {("UU", "10", "1997"), ("PP", "45", "2023"), ("Perba", "4", "2013")})
+        self.assertEqual(legal_section([page("UU 10 Tahun 1997 dan PP 45 Tahun 2023.", 1)]), [])
+
 
 if __name__ == "__main__":
     unittest.main()

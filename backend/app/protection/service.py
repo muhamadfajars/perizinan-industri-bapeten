@@ -6,7 +6,7 @@ from .identity import person_similarity, person_key
 from .. import storage
 from ..analysis.constants import FIELDS
 from .reader import read_document
-from .extraction import extract_records, metadata, norm
+from .extraction import extract_records, metadata, norm, _serial_core
 from .evidence import information
 from .matching import compare, choose, date_key
 
@@ -172,7 +172,18 @@ def build_rows(document_id, application, pages, records, *, semantic=None):
             ("Profesi / Keahlian", "role", person.get("keahlian_klasifikasi"), "role"),
         ):
             field_sources = [p for p in found if p.get(key)]
+            if key == "role" and expected and len(field_sources) > 1:
+                field_sources.sort(
+                    key=lambda p: (
+                        compare(expected, p["role"], "role")[0] != "MATCH",
+                        -(compare(expected, p["role"], "role")[1] or 0),
+                    )
+                )
             observed = field_sources[0][key] if field_sources else ""
+            if key == "role" and expected and observed and compare(expected, observed, "role")[0] == "MATCH":
+                conflict = False
+            else:
+                conflict = len({norm(p.get(key)) for p in found if p.get(key)}) > 1
             rows.append(
                 row(
                     f"Petugas {name}: {field}",
@@ -181,7 +192,7 @@ def build_rows(document_id, application, pages, records, *, semantic=None):
                     field_sources,
                     group="Petugas",
                     kind=kind,
-                    conflict=len({norm(p.get(key)) for p in found if p.get(key)}) > 1,
+                    conflict=conflict,
                 )
             )
             rows[-1]["detail"].update(
@@ -202,6 +213,13 @@ def build_rows(document_id, application, pages, records, *, semantic=None):
                 if tool.get("nomor_seri_tabung")
                 and norm(x.get("nomor_seri_tabung")) == norm(tool["nomor_seri_tabung"])
             ]
+        if not found:
+            unit_core = _serial_core(tool.get("nomor_seri_unit"))
+            tube_core = _serial_core(tool.get("nomor_seri_tabung"))
+            if len(unit_core) >= 4:
+                found = [x for x in equipment if _serial_core(x.get("nomor_seri_unit")) == unit_core]
+            if not found and len(tube_core) >= 4:
+                found = [x for x in equipment if _serial_core(x.get("nomor_seri_tabung")) == tube_core]
         # With multiple unidentified rows, never combine arbitrary field matches.
         if not found and len(equipment) == 1 and len(application.get("equipment", [])) == 1:
             found = equipment[:1]

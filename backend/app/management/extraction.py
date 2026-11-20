@@ -69,25 +69,39 @@ def culture_sections(pages):
         r"[ \t]*:?[ \t]*$"
     )
     heading = re.compile(
-        rf"(?im)^[ \t]*(?:(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*\.?|[A-Z][.)])\s+Budaya[ \t]+(?:Keselamatan|Keamanan)(?![^\n]*\b(?:adalah|merupakan|telah|akan|wajib)\b)[^\n]{{0,60}}$|{bare_heading})"
+        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)[ \t]*\n+[ \t]*{bare_heading}|(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*\.?|[A-Z][.)])\s+Budaya[ \t]+(?:Keselamatan|Keamanan)(?![^\n]*\b(?:adalah|merupakan|telah|akan|wajib)\b)[^\n]{{0,60}}$|{bare_heading})"
     )
     boundary = re.compile(
         rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)\b|\d+(?:\.\d+)+\.?\s+|[A-Z][.)]\s+|{bare_heading})"
     )
     sections = []
     active = False
+    chapter_active = False
     for page in pages:
         if toc(page["text"]):
             continue
         text = page["text"]
-        cursor = 0
+        active_start = 0 if active else None
         for event in boundary.finditer(text):
-            if active and text[cursor : event.start()].strip():
-                sections.append({**page, "text": text[cursor : event.start()]})
-            active = bool(heading.match(text, event.start()))
-            cursor = event.start()
-        if active and text[cursor:].strip():
-            sections.append({**page, "text": text[cursor:]})
+            is_bab = bool(re.match(r"(?i)\s*BAB\b", text[event.start() : event.end()]))
+            matched_heading = bool(heading.match(text, event.start()))
+            next_active = (
+                matched_heading
+                if is_bab
+                else (True if matched_heading or chapter_active else False)
+            )
+            if is_bab:
+                chapter_active = matched_heading
+            if active and not next_active:
+                chunk = text[active_start : event.start()]
+                if chunk.strip():
+                    sections.append({**page, "text": chunk})
+                active_start = None
+            elif not active and next_active:
+                active_start = event.start()
+            active = next_active
+        if active and active_start is not None and text[active_start:].strip():
+            sections.append({**page, "text": text[active_start:]})
     return sections or pages
 
 
@@ -107,8 +121,8 @@ def culture_evidence(pages):
                 quote = text[match.start() : match.end() + 1100]
                 # A title or a passing mention alone is not an explanation.
                 explanation = re.search(
-                    r"\b(?:merupakan|adalah|diterapkan|dilaksanakan|menerapkan|meliputi|mencakup|dilakukan|dengan\s+cara|diwujudkan|mengacu|bertujuan|berkomitmen|membangun|membentuk|memastikan|pencegahan)\b",
-                    quote[:240],
+                    r"\b(?:merupakan|adalah|diterapkan|dilaksanakan|menerapkan|meliputi|mencakup|dilakukan|dengan\s+cara|diwujudkan|mengacu|bertujuan|berkomitmen|membangun|membentuk|memastikan|pencegahan|bertanggung[\s-]*jawab|berkewajiban|komitmen)\b",
+                    quote[:380],
                     re.I,
                 )
                 if len(quote.split()) < 35 or not explanation:

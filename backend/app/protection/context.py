@@ -1,7 +1,7 @@
 """Retrieve bounded source windows, prioritising explicit section headings."""
 
 import re
-from .evidence import toc
+from .evidence import LAW, toc
 
 PHRASES = {
     "laws": [r"(?:dasar|landasan|acuan)\s+(?:hukum|regulasi|peraturan)", r"referensi|rujukan"],
@@ -10,7 +10,7 @@ PHRASES = {
         r"budaya\s+keamanan|budaya\s+keselamatan\s+dan\s+(?:budaya\s+)?keamanan",
     ],
     "dose": [
-        r"(?:penetapan\s+)?pembatas\s+dosis|dose\s+constraint|kendala\s+dosis",
+        r"(?:penetapan\s+)?pembatas(?:an)?\s+dosis|dose\s+constraint|kendala\s+dosis",
         r"(?:operasi|operasional|saat\s+ini).*?\d.*?Sv",
     ],
 }
@@ -49,7 +49,11 @@ def ranked_pages(task, pages, broad_pattern):
             )
         )
         exact = sum(bool(re.search(pattern, text, re.I)) for pattern in patterns)
-        return headings * 100 + exact * 20 + min(10, len(re.findall(broad_pattern, text, re.I)))
+        extra = 0
+        if task == "laws":
+            law_hits = len(LAW.findall(text))
+            extra = 40 * min(5, law_hits) if law_hits else -30
+        return headings * 100 + exact * 20 + min(10, len(re.findall(broad_pattern, text, re.I))) + extra
 
     candidates.sort(key=lambda p: -score(p))
     # Reserve coverage for both culture aspects, rather than spending every call on safety.

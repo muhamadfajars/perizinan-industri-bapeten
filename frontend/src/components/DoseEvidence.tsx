@@ -15,7 +15,7 @@ export function DoseEvidence({
   const statement = row.detail?.evidence?.find((item) => item.page === page)?.quote ?? row.observed;
   return (
     <article className="protection-evidence protection-evidence-compact dose-evidence">
-      <h4>Pembatas Dosis</h4>
+      <h4>Penetapan Pembatas Dosis</h4>
       <EvidenceStatus found={pages.length > 0} review={row.detail?.review_required} />
       <p className="protection-note">
         {row.detail?.review_required
@@ -23,7 +23,7 @@ export function DoseEvidence({
           : 'Pernyataan pembatas dosis operasional dalam dokumen:'}
       </p>
       <p className="protection-value">
-        {statement.split(/(\d+(?:[.,]\d+)?\s*mSv\s*\/\s*tahun)/gi).map((part, index) =>
+        {statement.split(/(\d+(?:[.,]\d+)?\s*(?:mSv|µSv|μSv|uSv|Sv)\s*(?:\/\s*(?:tahun|thn\.?)|per\s+tahun))/gi).map((part, index) =>
           index % 2 ? (
             <mark className="dose-highlight" key={index}>
               {part}

@@ -251,6 +251,58 @@ class SemanticFallbackTests(unittest.TestCase):
         recover("culture", [page("DAFTAR ISI\nBudaya keselamatan .... 7")])
         request.assert_not_called()
 
+    @patch("app.protection.llm.request_records", return_value=[])
+    def test_single_stage_operational_dose_without_saat_ini_confirmed_even_over_candidate_limit(
+        self, request
+    ):
+        stmt = "Penetapan pembatas dosis operasional untuk pekerja radiasi berlaku sebesar 5 mSv/tahun."
+        pages = [
+            page(stmt, 4),
+            page("Pembatas dosis pekerja radiasi ditetapkan sebesar 5 mSv/tahun.", 7),
+            page("Target pembatas dosis disebutkan secara umum dalam prosedur.", 9),
+            page("Evaluasi pembatas dosis berkala dilakukan setiap tahun.", 11),
+            page("Pembatas dosis merupakan bagian dari program proteksi.", 13),
+        ]
+        semantic, warnings = protection_fallback(pages)
+        self.assertFalse(semantic["dose_review"])
+        self.assertFalse(any("dosis" in w.lower() or "dose" in w.lower() for w in warnings))
+        row = next(
+            r
+            for r in build_rows("d", {}, pages, {}, semantic=semantic)
+            if r["field"] == "Pembatas Dosis"
+        )
+        self.assertFalse(row["detail"].get("review_required"))
+        self.assertEqual(row["detail"]["pages"], [4])
+
+    @patch("app.protection.llm.request_records", return_value=[])
+    def test_multistage_or_shielding_rate_dose_remains_review(self, request):
+        multistage = [
+            page("Konstruksi menggunakan pembatas dosis sebesar 6 mSv/tahun.", 5),
+            page("Operasi Tahap 1 menetapkan pembatas dosis sebesar 4 mSv/tahun.", 6),
+        ]
+        sem_multi, _ = protection_fallback(multistage)
+        self.assertTrue(sem_multi["dose_review"])
+
+        shielding_rate = [
+            page("Pembatas dosis pada dinding perisai didesain < 2.5 µSv/jam.", 8),
+        ]
+        sem_rate, _ = protection_fallback(shielding_rate)
+        self.assertTrue(sem_rate["dose_review"])
+
+    def test_ranked_pages_laws_prefers_actual_citations_over_generic_prose(self):
+        from app.protection.context import ranked_pages
+
+        pages = [
+            page("Peraturan dan ketentuan internal perusahaan selalu dipatuhi oleh staf.", 2),
+            page(
+                "Penyusunan mengacu pada dasar hukum Undang-Undang Nomor 10 Tahun 1997 "
+                "dan Peraturan Pemerintah Nomor 45 Tahun 2023.",
+                5,
+            ),
+        ]
+        ordered = ranked_pages("laws", pages, r"regulasi|peraturan|dasar\s+hukum")
+        self.assertEqual(ordered[0]["page"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()
