@@ -34,7 +34,7 @@ REQUIRED_LAW_TITLES = {
 }
 LAW = re.compile(
     r"\b(Peraturan\s+Presiden|Perpres|Peraturan\s+Menteri(?:\s+[A-Za-z]+){0,6}?|Permen|Peraturan\s+Daerah|Perda|"
-    r"Undang[\s-]*Undang|UU|Peraturan\s+Pemerintah|PP|"
+    r"Undang[\s\-\u2010-\u2015\u2212]*Undang|UU\.?|Peraturan\s+Pemerintah|PP\.?|"
     r"(?:Peraturan|Keputusan)\s+(?:Kepala\s+)?(?:BAPETEN|Badan\s+Pengawas\s+Tenaga\s+Nuklir)|"
     r"(?:PERBA|PERKA|KEPKA)(?:\s+(?:BAPETEN|Badan\s+Pengawas\s+Tenaga\s+Nuklir))?)"
     r"(?:\s*\((?:UU|PP|BAPETEN|PERBA|PERKA|KEPKA|RI)\))*"
@@ -51,9 +51,9 @@ def compact(text):
 def law_key(kind, number, year):
     kind = (
         "UU"
-        if re.match(r"UU|Undang", kind, re.I)
+        if re.match(r"UU\.?$|Undang", kind, re.I)
         else "PP"
-        if re.fullmatch(r"PP|Peraturan\s+Pemerintah", kind, re.I)
+        if re.fullmatch(r"PP\.?|Peraturan\s+Pemerintah", kind, re.I)
         else "Perba"
         if re.search(r"BAPETEN|Pengawas|PERBA|PERKA|KEPKA", kind, re.I)
         else compact(kind)
@@ -379,6 +379,37 @@ def information(pages, make_row, *, semantic=None):
                     ),
                 )
                 found = ranked_zones[:3]
+                found_pages = {item["page"] for item in found}
+                anchor_pages = {item["page"] for item in ranked_zones[:2]}
+                for p in pages:
+                    if not p.get("has_visual") or p["page"] <= 2 or p["page"] in found_pages or toc(p["text"]):
+                        continue
+                    ptext = p["text"]
+                    if re.search(
+                        r"struktur\s+organisasi|sertifikat\s+kalibrasi|lembar\s+pengesahan|halaman\s+pengesahan|peta\s+lokasi",
+                        ptext,
+                        re.I,
+                    ):
+                        continue
+                    is_adjacent = any(p["page"] in (ap + 1, ap + 2) for ap in anchor_pages) and not re.search(
+                        r"^\s*(?:BAB\s+[IVXLCDM\d]+|daftar\s+pustaka|pembatas(?:an)?\s+dosis)",
+                        ptext,
+                        re.I,
+                    )
+                    is_explicit_attachment = bool(
+                        re.search(
+                            r"\b(?:denah|sketsa|layout)\b.{0,40}\b(?:ruang|fasilitas\s+radiasi|area\s+kerja|zonasi|radiasi)\b|"
+                            r"\blampiran\b.{0,40}\b(?:denah|zonasi|daerah\s+kerja|ruang)\b",
+                            ptext,
+                            re.I,
+                        )
+                    )
+                    if is_adjacent or is_explicit_attachment:
+                        quote = compact(ptext)[:240] or "Lampiran gambar/denah fasilitas"
+                        found.append({"page": p["page"], "quote": quote, "has_visual": True})
+                        found_pages.add(p["page"])
+                        if len(found) >= 5:
+                            break
         if not visual and not semantic.get("dose_review"):
             found = found[:1]
         if "dosis" in title.lower():

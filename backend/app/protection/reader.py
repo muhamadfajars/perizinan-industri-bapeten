@@ -25,18 +25,27 @@ def read_document(path):
             native = page.get_text(sort=True).strip()
             method, text = "text", native
             page_area = page.rect.get_area() or 1
+            page_height = page.rect.height or 1
             images = [
                 x
                 for x in page.get_image_info()
                 if (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]) > page_area * 0.08
+            ]
+            body_images = [
+                x
+                for x in images
+                if not (
+                    x["bbox"][3] <= page_height * 0.22
+                    or x["bbox"][1] >= page_height * 0.88
+                )
             ]
             large_scan = any(
                 (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]) >= page_area * 0.30
                 for x in images
             )
             native_chars = len(re.sub(r"\s", "", native))
-            # Scan pages may still carry native headers; skip OCR only on dense text with small figures.
-            if native_chars < 100 or large_scan or (images and native_chars < 600):
+            # Scan pages may still carry native headers; skip OCR when only header/footer logos appear on readable native text.
+            if native_chars < 100 or large_scan or (body_images and native_chars < 600):
                 try:
                     png = page.get_pixmap(dpi=160, alpha=False).tobytes("png")
                     result = subprocess.run(

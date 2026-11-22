@@ -3,11 +3,14 @@
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import time
 import urllib.request
 from contextlib import contextmanager
 from .. import storage
+
+_LOGGER = logging.getLogger("uvicorn.error")
 
 PROMPT_VERSION = "protection-4-context"
 FIELDS = {
@@ -192,20 +195,43 @@ def request_records(schema, task, pages, instructions, *, output_limit=2300):
         ],
     }
     timeout = int(os.getenv("BAPETEN_LLM_TIMEOUT", "180"))
-    with request_slot():
-        request = urllib.request.Request(
-            config["url"].rstrip("/") + "/api/chat",
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"},
+    started = time.perf_counter()
+    page_nums = [p.get("page") for p in pages]
+    try:
+        with request_slot():
+            request = urllib.request.Request(
+                config["url"].rstrip("/") + "/api/chat",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                result = json.load(response)
+            if result.get("done_reason") == "length":
+                raise RuntimeError("Keluaran Qwen terpotong; ekstraksi belum lengkap.")
+            parsed = json.loads(result["message"]["content"])
+            if not isinstance(parsed.get("records"), list):
+                raise ValueError("Invalid records")
+            elapsed = time.perf_counter() - started
+            _LOGGER.info(
+                "[LLM] task=%r pages=%s ctx=%s durasi=%.2fs records=%d",
+                task,
+                page_nums,
+                num_ctx,
+                elapsed,
+                len(parsed["records"]),
+            )
+            return parsed["records"]
+    except Exception as exc:
+        elapsed = time.perf_counter() - started
+        _LOGGER.warning(
+            "[LLM] task=%r pages=%s ctx=%s GAGAL (%s) dalam %.2fs",
+            task,
+            page_nums,
+            num_ctx,
+            type(exc).__name__,
+            elapsed,
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            result = json.load(response)
-        if result.get("done_reason") == "length":
-            raise RuntimeError("Keluaran Qwen terpotong; ekstraksi belum lengkap.")
-        parsed = json.loads(result["message"]["content"])
-        if not isinstance(parsed.get("records"), list):
-            raise ValueError("Invalid records")
-        return parsed["records"]
+        raise
 
 
 def digest():

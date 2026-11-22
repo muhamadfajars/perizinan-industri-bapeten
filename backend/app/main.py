@@ -71,7 +71,7 @@ app.middleware("http")(vpn_access.gateway_middleware)
 # Registered after gateway_middleware so it executes FIRST on incoming requests.
 _URL_PREFIXES = tuple(
     p.strip().rstrip("/")
-    for p in os.environ.get("BAPETEN_URL_PREFIXES", "/rdi1").split(",")
+    for p in os.environ.get("BAPETEN_URL_PREFIXES", "/rdi1,/analisisSRP").split(",")
     if p.strip()
 )
 

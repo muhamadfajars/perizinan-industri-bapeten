@@ -55,7 +55,7 @@ TASKS = {
 }
 
 
-def recover(task, pages):
+def recover(task, pages, *, max_calls=3):
     from .evidence import law_key, REQUIRED_LAWS
 
     categories, pattern, instruction = TASKS[task]
@@ -84,6 +84,8 @@ def recover(task, pages):
         if task == "laws":
             found_laws = {law_key(*m.groups()) for e in evidence for m in LAW.finditer(e["quote"])}
             return set(REQUIRED_LAWS) <= found_laws
+        if task == "dose":
+            return bool(evidence)
         return False
 
     covered = set()
@@ -101,7 +103,7 @@ def recover(task, pages):
             re.search(r"\d[\d.,]*\s*(?:mSv|µSv|μSv|uSv|Sv)\b", p["text"], re.I) for p in window
         ):
             continue
-        if calls >= 3:
+        if calls >= max_calls:
             break
         try:
             calls += 1
@@ -162,7 +164,7 @@ def recover(task, pages):
             break
     if any(p["page"] not in covered for p in candidates) and not task_satisfied():
         warnings.append(
-            f"Pembacaan semantik {task} dibatasi 3 halaman kandidat; cakupan belum lengkap."
+            f"Pembacaan semantik {task} dibatasi {max_calls} halaman kandidat; cakupan belum lengkap."
         )
     unique = {(e["page"], e["category"], e["quote"]): e for e in evidence}
     return list(unique.values()), warnings
@@ -240,21 +242,26 @@ def _is_unambiguous_operational_dose(doses) -> bool:
 
 
 def protection_fallback(pages):
-    from .evidence import legal_section, law_key, REQUIRED_LAWS
+    from .evidence import legal_section, law_key, REQUIRED_LAWS, toc
     from .dose import dose_statements
 
     result, warnings = {}, []
     sections = legal_section(pages)
     # Exact reference identity triggers retrieval, never a compliance decision.
     text = " ".join(p["text"] for p in sections)
+    has_legal_section = bool(sections) and any(LAW.search(p["text"]) for p in sections)
     complete = set(REQUIRED_LAWS) <= {law_key(*m.groups()) for m in LAW.finditer(text)}
-    if not complete:
-        evidence, notes = recover("laws", pages)
-        result["legal_sections"] = sections + [
-            {"page": e["page"], "text": e["quote"], "method": "llm"} for e in evidence
-        ]
-        result["laws_review"] = not bool(sections or evidence) or bool(notes)
-        warnings.extend(notes)
+    if not complete and not has_legal_section:
+        has_any_law = any(LAW.search(p["text"]) for p in pages if not toc(p["text"]))
+        if has_any_law:
+            evidence, notes = recover("laws", pages)
+            result["legal_sections"] = sections + [
+                {"page": e["page"], "text": e["quote"], "method": "llm"} for e in evidence
+            ]
+            result["laws_review"] = not bool(sections or evidence) or bool(notes)
+            warnings.extend(notes)
+        else:
+            result["laws_review"] = True
         if result["laws_review"]:
             warnings.append(
                 "Bagian referensi belum terkonfirmasi lengkap; periksa sumber sebelum menyimpulkan kelengkapan peraturan."
@@ -262,7 +269,12 @@ def protection_fallback(pages):
     doses = dose_statements(pages)
     active = [e for e in doses if _DOSE_CURRENT_RE.search(e["quote"])]
     if len({e["quote"] for e in active}) != 1:
-        evidence, notes = recover("dose", pages)
+        has_established_dose = any(
+            _DOSE_ESTABLISHED_RE.search(d["quote"]) and _ANNUAL_DOSE_RE.search(d["quote"])
+            for d in doses
+        )
+        dose_calls = 1 if (_is_unambiguous_operational_dose(doses) or has_established_dose) else 3
+        evidence, notes = recover("dose", pages, max_calls=dose_calls)
         for item in evidence:
             statements = dose_statements([{"page": item["page"], "text": item["quote"]}])
             if statements:

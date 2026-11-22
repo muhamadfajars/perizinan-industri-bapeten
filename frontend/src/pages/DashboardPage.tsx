@@ -35,7 +35,7 @@ export function DashboardPage({
           <h1>
             Evaluasi Dokumen <span>Permohonan</span>
           </h1>
-          <div className="hero-scope-subtitle">Industri</div>
+          <div className="hero-scope-subtitle">Analisis Menggunakan Sumber Radiasi Pengion</div>
           <p>
             Pusat pemeriksaan dokumen, perbandingan data formulir, dan penelusuran hasil matching per
             kategori.

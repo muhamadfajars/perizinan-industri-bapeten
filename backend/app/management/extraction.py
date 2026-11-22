@@ -4,8 +4,47 @@ import re
 from ..protection.extraction import native_identity, grounded
 from ..protection.evidence import compact, toc
 from ..protection import llm
-from ..protection.identity import ranked_identity_pages
+from ..protection.identity import ADDRESS, office_address, ranked_identity_pages
 from ..protection.context import adjacent_window
+
+_MGMT_PROSE_LOC_RE = re.compile(
+    r"\b(?:berlokasi|beralamat|terletak|bertempat)\s+di\s+"
+    r"(?=(?:jl|jln|jalan|kawasan|komplek[s]?|komp|desa|kelurahan|kel|gedung|ruko)\b)"
+    r"((?:[^.\n]|(?<=\b(?:Jl|No|PT|CV|Gd|Gg|Lt))\.|(?<=\b(?:Jln|Kec|Kab|Kel|Gdg|Kav))\.|(?<=\bKomp)\.|\.(?=[a-z0-9]))+)",
+    re.I,
+)
+
+
+def _management_prose_addresses(pages):
+    found = []
+    for page in pages:
+        if toc(page["text"]):
+            continue
+        source = (
+            page["text"]
+            if page.get("method") == "ocr"
+            else (page.get("native_text") or page["text"])
+        )
+        for line in source.splitlines():
+            clean = compact(line)
+            if not clean:
+                continue
+            for match in _MGMT_PROSE_LOC_RE.finditer(clean):
+                addr = compact(match.group(1)).strip(" ,.;:")
+                parts = {re.sub(r"[^a-z]", "", m.lower()) for m in re.findall(ADDRESS, addr, re.I)}
+                if len(addr) < 12 or len(addr) > 220 or len(parts) < 2:
+                    continue
+                if office_address(addr, source):
+                    continue
+                found.append(
+                    {
+                        "project_address": addr,
+                        "page": page["page"],
+                        "quote": clean,
+                        "method": page.get("method", "text"),
+                    }
+                )
+    return found
 
 
 def identities(pages):
@@ -14,6 +53,8 @@ def identities(pages):
     for page in pages:
         if not toc(page["text"]):
             records.extend(native_identity([page]))
+    if not any(r.get("project_address") for r in records):
+        records.extend(_management_prose_addresses(pages))
     missing = [
         key for key in ("institution", "project_address") if not any(r.get(key) for r in records)
     ]
@@ -69,10 +110,10 @@ def culture_sections(pages):
         r"[ \t]*:?[ \t]*$"
     )
     heading = re.compile(
-        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)[ \t]*\n+[ \t]*{bare_heading}|(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*\.?|[A-Z][.)])\s+Budaya[ \t]+(?:Keselamatan|Keamanan)(?![^\n]*\b(?:adalah|merupakan|telah|akan|wajib)\b)[^\n]{{0,60}}$|{bare_heading})"
+        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)[ \t]*\n+[ \t]*{bare_heading}|(?:BAB\s+(?:[IVXLCDM]+|\d+)\s*[-–:.]?|[IVXLCDM]+\.\d+(?:\.\d+)*\.?|\d+(?:\.\d+)*\.?|[A-Z][.)])\s+Budaya[ \t]+(?:Keselamatan|Keamanan)(?![^\n]*\b(?:adalah|merupakan|telah|akan|wajib)\b)[^\n]{{0,60}}$|{bare_heading})"
     )
     boundary = re.compile(
-        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)\b|\d+(?:\.\d+)+\.?\s+|[A-Z][.)]\s+|{bare_heading})"
+        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)\b|[IVXLCDM]+\.\d+(?:\.\d+)*\.?\s+|\d+(?:\.\d+)+\.?\s+|[A-Z][.)]\s+|{bare_heading})"
     )
     sections = []
     active = False
@@ -110,7 +151,10 @@ def culture_evidence(pages):
     topics = []
     for label, pattern in (
         ("Budaya Keselamatan", r"budaya\s+keselamatan"),
-        ("Budaya Keamanan", r"budaya\s+keamanan|budaya\s+keselamatan\s+dan\s+keamanan"),
+        (
+            "Budaya Keamanan",
+            r"budaya\s+keamanan|budaya\s+keselamatan\s+(?:dan|&|dan/atau)\s+(?:budaya\s+)?keamanan",
+        ),
     ):
         evidence = []
         for page in pages:
@@ -127,7 +171,7 @@ def culture_evidence(pages):
                 )
                 if len(quote.split()) < 35 or not explanation:
                     continue
-                if re.search(r"\b\d+\.\d+\s", quote[: explanation.start()]):
+                if re.search(r"\b(?:[IVXLCDM]+\.\d+|\d+\.\d+)\.?\s", quote[: explanation.start()]):
                     continue
                 evidence.append({"page": page["page"], "quote": quote})
                 break

@@ -256,3 +256,42 @@ def preview_document(aid: str, did: str, background_tasks: BackgroundTasks):
             },
         )
     raise HTTPException(415, "Pratinjau format ini belum didukung")
+
+
+@router.get(
+    "/api/v1/applications/{aid}/documents/{did}/search",
+    dependencies=[Depends(authorize)],
+)
+def search_document_text(aid: str, did: str, q: str = ""):
+    """Search extracted PDF text per page so the source viewer popup supports Ctrl+F."""
+    import fitz
+
+    must_app(aid)
+    doc = storage.document(did, aid)
+    if not doc:
+        raise HTTPException(404, "Dokumen tidak ditemukan")
+    path = storage.file_path(doc)
+    if not path.is_file():
+        raise HTTPException(404, "Berkas fisik tidak ditemukan")
+    needle = " ".join((q or "").split()).strip()
+    if len(needle) < 2 or path.suffix.lower() != ".pdf":
+        return {"matches": []}
+    needle_lower = needle.lower()
+    matches = []
+    with fitz.open(str(path)) as pdf:
+        for index, pg in enumerate(pdf, 1):
+            text = " ".join((pg.get_text("text") or "").split())
+            pos = text.lower().find(needle_lower)
+            if pos < 0:
+                continue
+            start = max(0, pos - 40)
+            end = min(len(text), pos + len(needle) + 60)
+            snippet = text[start:end].strip()
+            if start > 0:
+                snippet = "…" + snippet
+            if end < len(text):
+                snippet = snippet + "…"
+            matches.append({"page": index, "snippet": snippet})
+            if len(matches) >= 50:
+                break
+    return {"matches": matches}

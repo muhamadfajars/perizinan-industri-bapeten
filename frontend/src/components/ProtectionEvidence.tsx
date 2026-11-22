@@ -64,13 +64,13 @@ export function ProtectionInformationCards({
         {requiredLaws.map((row) => (
           <ProtectionEvidence key={row.id} row={row} compact openEvidence={openRow(row)} />
         ))}
-        <h4 className="protection-law-group">Peraturan tambahan</h4>
+        <h4 className="protection-law-group">Dasar hukum lainnya</h4>
         {rows.filter((row) => !row.detail?.required).length ? (
           rows
             .filter((row) => !row.detail?.required)
             .map((row) => <ProtectionEvidence key={row.id} row={row} compact openEvidence={openRow(row)} />)
         ) : (
-          <p className="protection-note">Tidak ada peraturan tambahan yang ditemukan.</p>
+          <p className="protection-note">Tidak ada dasar hukum lainnya yang ditemukan.</p>
         )}
       </>
     );
@@ -205,31 +205,31 @@ export function ProtectionEvidence({
           <p className="protection-note">{row.note}</p>
         </>
       )}
-      {pages.length > 0 && (
+      {(pages.length > 0 || row.document_id) && (
         <div className="protection-source">
-          {law || row.detail?.group === 'Pengesahan' ? (
+          {pages.length === 0 ? (
+            <p className="protection-page-label">Halaman 1</p>
+          ) : law || row.detail?.group === 'Pengesahan' ? (
             <p className="protection-page-label">Halaman {[...new Set(pages)].join(', ')}</p>
           ) : (
-            pages.length > 0 && (
-              <div className="protection-page-control">
-                <label>
-                  Halaman sumber
-                  <select value={pageIndex} onChange={(event) => setPageIndex(Number(event.target.value))}>
-                    {pages.map((number, index) => (
-                      <option key={number} value={index}>
-                        Halaman {number}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            )
+            <div className="protection-page-control">
+              <label>
+                Halaman sumber
+                <select value={pageIndex} onChange={(event) => setPageIndex(Number(event.target.value))}>
+                  {pages.map((number, index) => (
+                    <option key={number} value={index}>
+                      Halaman {number}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           )}
-          {row.document_id && page && (
+          {row.document_id && (
             <button
               type="button"
               className="button button-source"
-              onClick={() => openEvidence(row.document_id!, page)}
+              onClick={() => openEvidence(row.document_id!, page ?? 1)}
             >
               <ExternalLink size={16} /> Lihat dokumen sumber
             </button>

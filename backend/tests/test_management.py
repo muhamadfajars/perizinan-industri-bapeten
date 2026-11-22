@@ -147,6 +147,54 @@ class ManagementTests(unittest.TestCase):
         self.assertTrue(all(t["found"] for t in topics))
         self.assertTrue(all(t["evidence"][0]["page"] == 5 for t in topics))
 
+    def test_roman_dot_subsection_culture_and_prose_address_extraction(self):
+        from unittest.mock import patch
+        from app.management.extraction import identities
+        from app.protection.identity import ranked_identity_pages
+        from app.protection.evidence import toc
+
+        doc_pages = [
+            page(
+                "I.1. Pendahuluan\n"
+                "Fasilitas PT Contoh berlokasi di Kawasan Industri Blok D, Kec. Timur, Kab. Baru.\n"
+                "I.2. Budaya Keselamatan dan Keamanan\n"
+                "Manajemen berkomitmen menerapkan budaya keselamatan dan/atau keamanan secara menyeluruh melalui "
+                "pelatihan pekerja radiasi, komunikasi terbuka antar unit kerja, pelaporan insiden tanpa rasa takut "
+                "akan sanksi, evaluasi berkala terhadap prosedur operasional, serta pengendalian akses yang ketat "
+                "terhadap seluruh fasilitas dan sumber radiasi pengion agar keselamatan pekerja dan masyarakat "
+                "tetap terjaga secara konsisten.\n"
+                "I.3. Ruang Lingkup\n"
+                "Pembahasan ruang lingkup operasional fasilitas secara umum.",
+                5,
+            ),
+            page(
+                "II.1. Kebijakan Lain\n"
+                "Budaya keselamatan dan keamanan merupakan prioritas lain yang hanya disebut ulang pada bab kedua "
+                "bersama berbagai rincian administrasi dan pengelolaan arsip perusahaan secara rutin setiap tahun.",
+                12,
+            ),
+        ]
+        topics = culture_evidence(doc_pages)
+        self.assertTrue(all(t["found"] for t in topics))
+        self.assertTrue(all(e["page"] == 5 for t in topics for e in t["evidence"]))
+
+        with patch("app.protection.llm.extract", return_value=[]):
+            recs, _ = identities(doc_pages)
+        addrs = [r["project_address"] for r in recs if r.get("project_address")]
+        self.assertIn("Kawasan Industri Blok D, Kec. Timur, Kab. Baru", addrs)
+
+        ranked = ranked_identity_pages(
+            [page("Ringkasan umum dokumen.", 1), doc_pages[0]],
+            ["project_address"],
+            toc_fn=toc,
+        )
+        self.assertEqual(ranked[0]["page"], 5)
+
+        with patch("app.protection.llm.extract", return_value=[]) as mock_extract:
+            recs_no_addr, _ = identities([page("PT CONTOH MANDIRI\nSISTEM MANAJEMEN FASILITAS", 1)])
+        self.assertTrue(any(r.get("institution") for r in recs_no_addr))
+        self.assertEqual(mock_extract.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

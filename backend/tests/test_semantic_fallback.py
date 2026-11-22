@@ -16,9 +16,35 @@ def page(text, number=1):
 class SemanticFallbackTests(unittest.TestCase):
     @patch("app.protection.llm.request_records", return_value=[])
     def test_law_type_is_part_of_completeness_trigger(self, request):
-        text = "1.6 Dasar Hukum\nUU No. 10 Tahun 1997. PP No. 45 Tahun 2023. PP No. 28 Tahun 2025. Perba No. 4 Tahun 2024. PP No. 5 Tahun 2025."
+        text = "Regulasi fasilitas meliputi UU No. 10 Tahun 1997. PP No. 45 Tahun 2023. PP No. 28 Tahun 2025. Perba No. 4 Tahun 2024. PP No. 5 Tahun 2025."
         protection_fallback([page(text)])
         self.assertEqual(request.call_args.args[1], "Analisis bagian laws")
+
+    @patch("app.protection.llm.request_records")
+    def test_dedicated_legal_section_skips_llm_and_excludes_other_subchapters(self, request):
+        pages = [
+            page(
+                "I.6. Referensi\n"
+                "1. Undang-Undang Nomor 10 Tahun 1997\n"
+                "2. Peraturan Pemerintah Nomor 45 Tahun 2023\n"
+                "3. Peraturan Pemerintah Nomor 28 Tahun 2025\n"
+                "4. Peraturan Pemerintah Nomor 29 Tahun 2008\n"
+                "II.1. Organisasi",
+                10,
+            ),
+            page(
+                "III.2. Ketentuan Tambahan\n"
+                "Mengacu pula pada Peraturan BAPETEN Nomor 5 Tahun 2025 dan Perba No. 4 Tahun 2024.",
+                18,
+            ),
+        ]
+        semantic, _ = protection_fallback(pages)
+        self.assertNotIn("legal_sections", semantic)
+        request.assert_not_called()
+        rows = build_rows("d", {}, pages, {}, semantic=semantic)
+        laws = [r for r in rows if r["detail"]["group"] == "Dasar hukum"]
+        perba5 = next(r for r in laws if "Nomor 5 Tahun 2025" in r["field"])
+        self.assertEqual(perba5["detail"]["pages"], [])
 
     @patch("app.protection.llm.request_records")
     def test_model_cannot_erase_explicit_current_dose_conflict(self, request):
@@ -302,6 +328,24 @@ class SemanticFallbackTests(unittest.TestCase):
         ]
         ordered = ranked_pages("laws", pages, r"regulasi|peraturan|dasar\s+hukum")
         self.assertEqual(ordered[0]["page"], 5)
+
+    @patch("app.protection.llm.request_records")
+    def test_skips_laws_llm_when_no_law_exists_and_caps_dose_calls_to_one(self, request):
+        request.return_value = [
+            {
+                "page": 4,
+                "category": "dose",
+                "quote": "Penetapan pembatas dosis operasional untuk pekerja radiasi berlaku sebesar 5 mSv/tahun.",
+            }
+        ]
+        pages = [
+            page("Penetapan pembatas dosis operasional untuk pekerja radiasi berlaku sebesar 5 mSv/tahun.", 4),
+            page("Target pembatas dosis 5 mSv/tahun disebut kembali pada ringkasan.", 9),
+        ]
+        semantic, _ = protection_fallback(pages)
+        self.assertFalse(semantic["dose_review"])
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(request.call_args.args[1], "Analisis bagian dose")
 
 
 if __name__ == "__main__":

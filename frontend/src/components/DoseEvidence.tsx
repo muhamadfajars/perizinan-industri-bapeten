@@ -33,14 +33,14 @@ export function DoseEvidence({
           ),
         )}
       </p>
-      {pages.length > 0 && (
+      {(pages.length > 0 || row.document_id) && (
         <div className="protection-source">
-          <p className="protection-page-label">Halaman {page}</p>
-          {row.document_id && page && (
+          <p className="protection-page-label">Halaman {page ?? 1}</p>
+          {row.document_id && (
             <button
               type="button"
               className="button button-source"
-              onClick={() => openEvidence(row.document_id!, page)}
+              onClick={() => openEvidence(row.document_id!, page ?? 1)}
             >
               <ExternalLink size={16} /> Lihat dokumen sumber
             </button>

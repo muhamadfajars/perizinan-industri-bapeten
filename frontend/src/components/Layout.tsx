@@ -73,7 +73,11 @@ export function Sidebar({
           ))}
         </nav>
         <div className="sidebar-foot">
-          <div className="sidebar-copyright">© 2026 BAPETEN · Asisten Evaluasi Perizinan Industri</div>
+          <div className="sidebar-copyright">
+            © 2026 BAPETEN · Asisten Evaluasi Perizinan
+            <br />
+            Analisis Menggunakan SRP
+          </div>
         </div>
       </aside>
     </>

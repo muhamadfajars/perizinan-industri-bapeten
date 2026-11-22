@@ -206,12 +206,40 @@ _TIPE_SN_HEADERS = {
     "tipenoseri",
     "tipesn",
     "tipenomorseri",
+    "tipeseri",
+    "tipeserial",
     "modelnoseri",
     "modelsn",
     "modelnomorseri",
+    "tipenoseriunit",
+    "tipesnunit",
+    "tipenomorseriunit",
+    "tipeseriunit",
+    "tipeserialunit",
+    "modelnoseriunit",
+    "modelsnunit",
+    "modelnomorseriunit",
+    "tipenoseripesawat",
+    "tipenomorseripesawat",
 }
-_MERK_TIPE_HEADERS = {"merktipe", "merektipe", "merkmodel", "merekmodel"}
-_MERK_TIPE_SN_HEADERS = {"merktipenoseri", "merktipesn", "merktipenomorseri"}
+_MERK_TIPE_HEADERS = {
+    "merktipe",
+    "merektipe",
+    "merkmodel",
+    "merekmodel",
+    "merktipeunit",
+    "merektipeunit",
+    "merkmodelunit",
+    "merekmodelunit",
+}
+_MERK_TIPE_SN_HEADERS = {
+    "merktipenoseri",
+    "merktipesn",
+    "merktipenomorseri",
+    "merktipenoseriunit",
+    "merktipesnunit",
+    "merktipenomorseriunit",
+}
 
 
 def _is_measuring_tool_text(text: str) -> bool:
@@ -245,7 +273,12 @@ def _split_type_serial_cell(value: str, *, include_brand: bool = False) -> dict:
         parsed = _parse_combined_equipment_cell(text)
         if parsed.get("nomor_seri_unit"):
             return parsed
-    return {}
+    tokens = text.split()
+    if len(tokens) >= 2 and re.search(r"\d", tokens[-1]) and len(tokens[-1]) >= 4:
+        return {"tipe_unit": text, "nomor_seri_unit": tokens[-1]}
+    if re.search(r"\d", text):
+        return {"tipe_unit": text, "nomor_seri_unit": text}
+    return {"tipe_unit": text}
 
 
 def _merge_equipment_row(cells: list[list[str]]) -> tuple[list[str], list[list[str]]]:
@@ -317,6 +350,18 @@ def _apply_equipment_cell(item: dict, h: str, value: str, *, allow_overwrite: bo
                 item[k] = v
         return
     field = EQUIPMENT_ALIASES.get(h)
+    if field == "nomor_seri_tabung" and " / " in value:
+        parts = [compact(p) for p in value.split(" / ", 1) if compact(p)]
+        if (
+            len(parts) == 2
+            and re.search(r"\d", parts[1])
+            and not re.match(r"^(?:sn|s/n|no|nomor)$", parts[0], re.I)
+        ):
+            if allow_overwrite or not item.get("tipe_tabung"):
+                item["tipe_tabung"] = parts[0]
+            if allow_overwrite or not item.get("nomor_seri_tabung"):
+                item["nomor_seri_tabung"] = parts[1]
+            return
     if field and (allow_overwrite or not item.get(field)):
         item[field] = value
 
@@ -805,6 +850,16 @@ _PROSE_LOC_RE = re.compile(
     r"((?:[^.\n]|(?<=\b(?:Jl|No|PT|CV|Gd|Gg|Lt))\.|(?<=\b(?:Jln|Kec|Kab|Kel|Gdg|Kav))\.|(?<=\bKomp)\.|\.(?=[a-z0-9]))+)",
     re.I,
 )
+_ORG_PROSE_LOC_RE = re.compile(
+    r"\b("
+    + INSTITUTION
+    + r"\.?\s+[A-Z0-9][^.\n]{2,80}?)\s+"
+    r"(?:merupakan\s+(?:perusahaan|instansi|badan\s+usaha)\s+yang\s+)?"
+    r"(?:berada|berlokasi|terletak|berkedudukan|beralamat)\s+di\s+"
+    r"((?:jl|jln|jalan)\b\.?\s+(?:[^.\n]|\.(?=\s|[a-z0-9])){5,200}?)"
+    r"(?=\s+(?:dengan\s+bidang|yang\s+meliputi|yang\s+bergerak|untuk\s+)|\s*\.|$)",
+    re.I,
+)
 
 
 def native_identity(pages):
@@ -936,6 +991,26 @@ def native_identity(pages):
                             "method": page.get("method", "text"),
                         }
                     )
+                    found_page_addr = True
+            if not found_page_addr:
+                org_loc = _ORG_PROSE_LOC_RE.search(compact_source)
+                if org_loc:
+                    org_name = re.sub(r",?\s*\byang$", "", compact(org_loc.group(1)).strip(" ,."), flags=re.I)
+                    addr = compact(org_loc.group(2)).strip(" ,.")
+                    if (
+                        re.search(ADDRESS, addr, re.I)
+                        and not re.search(r"\bradiografer\s+tingkat\b", addr, re.I)
+                        and not office_address(addr, source)
+                    ):
+                        records.append(
+                            {
+                                "institution": org_name,
+                                "project_address": addr,
+                                "page": page["page"],
+                                "quote": compact(org_loc.group(0)),
+                                "method": page.get("method", "text"),
+                            }
+                        )
     return records
 
 
@@ -1001,9 +1076,134 @@ def _equipment_linked(expected, record):
     return False
 
 
+_PERSONNEL_ROLE_CUE_RE = re.compile(
+    r"\b(?:ppr|petugas\s+proteksi(?:\s+radiasi)?|operator|radiografer|ahli\s+radiografi|pksr|"
+    r"pekerja\s+radiasi|teknisi|supervisor|analis)\b",
+    re.I,
+)
+_PERSONNEL_SECTION_CUE_RE = re.compile(
+    r"^\s*(?:[-•*]|\d+(?:\.\d+)*[.)]?)?\s*(?:daftar\s+(?:nama\s+)?person[ei]l|data\s+person[ei]l|"
+    r"daftar\s+pekerja\s+radiasi|daftar\s+petugas|person[ei]l\s+(?:yang\s+terlibat|radiasi)|"
+    r"petugas\s+proteksi\s+radiasi|pekerja\s+radiasi)\s*:?\s*$",
+    re.I,
+)
+_NON_PERSON_NAME_RE = re.compile(
+    r"\b(?:pt|cv|rs|rsud|klinik|universitas|institut|perusahaan|instansi|fasilitas|"
+    r"adalah|merupakan|harus|wajib|untuk|dengan|pada|yang|sebagai)\b",
+    re.I,
+)
+
+
+def _kv_personnel_records(pages: list[dict], existing: list[dict] | None = None) -> list[dict]:
+    """Deterministic key-value and bullet-list extractor for personnel without table borders."""
+    from .identity import person_key
+
+    existing_keys = {
+        (r.get("page"), person_key(r.get("name")))
+        for r in (existing or [])
+        if r.get("name")
+    }
+    kv_line_re = re.compile(
+        r"^\s*(?:[-•*]|\d+[.)])?\s*([A-Za-z][A-Za-z0-9 /&().-]{1,40}?)\s*(?::|=|\|)\s*(.+?)\s*$"
+    )
+    list_item_re = re.compile(
+        r"^\s*(?:[-•*]|\d+[.)])\s*([A-Za-z][A-Za-z .'-]{2,64}?)\s*(?:\(([^()]+)\)|[-–—:]\s*([A-Za-z][^;\n]{1,60}))\s*$"
+    )
+    results = []
+    for page in pages:
+        raw_text = page["text"]
+        if toc(raw_text):
+            continue
+        current: dict = {}
+        quote_lines: list[str] = []
+        in_personnel_list = False
+        non_match_streak = 0
+
+        def flush():
+            nonlocal current, quote_lines
+            name = compact(current.get("name"))
+            if name and (current.get("role") or current.get("location")):
+                key_sig = (page["page"], person_key(name))
+                quote = compact(" ".join(quote_lines))
+                if key_sig not in existing_keys and quote:
+                    existing_keys.add(key_sig)
+                    current.update(page=page["page"], quote=quote[:900], method="kv")
+                    results.append(current)
+            current = {}
+            quote_lines = []
+
+        for raw_line in raw_text.splitlines():
+            line = compact(raw_line)
+            if not line:
+                non_match_streak += 1
+                if non_match_streak >= 3:
+                    flush()
+                    in_personnel_list = False
+                continue
+            if _PERSONNEL_SECTION_CUE_RE.search(line):
+                in_personnel_list = True
+                non_match_streak = 0
+                continue
+
+            m = kv_line_re.match(line)
+            if m:
+                k_raw, v_raw = compact(m.group(1)), compact(m.group(2)).strip(" -–—:")
+                nk = norm(k_raw)
+                field = PERSONNEL_ALIASES.get(nk)
+                if field and v_raw and len(v_raw) <= 120 and v_raw not in ("-", "—", "N/A", "n/a"):
+                    if field == "name" and (
+                        re.search(r"\d", v_raw) or _NON_PERSON_NAME_RE.search(v_raw)
+                    ):
+                        continue
+                    if field == "name" and current.get("name") and norm(current["name"]) != norm(v_raw):
+                        flush()
+                    if not current.get(field):
+                        current[field] = v_raw
+                    if line not in quote_lines:
+                        quote_lines.append(line)
+                    non_match_streak = 0
+                    continue
+
+            if in_personnel_list:
+                lm = list_item_re.match(line)
+                if lm:
+                    name = compact(lm.group(1))
+                    role = compact(lm.group(2) or lm.group(3))
+                    if (
+                        name
+                        and role
+                        and not re.search(r"\d", name)
+                        and not _NON_PERSON_NAME_RE.search(name)
+                        and 1 <= len(name.split()) <= 6
+                        and _PERSONNEL_ROLE_CUE_RE.search(role)
+                    ):
+                        key_sig = (page["page"], person_key(name))
+                        if key_sig not in existing_keys:
+                            existing_keys.add(key_sig)
+                            results.append(
+                                {
+                                    "name": name,
+                                    "role": role,
+                                    "page": page["page"],
+                                    "quote": line,
+                                    "method": "kv",
+                                }
+                            )
+                        non_match_streak = 0
+                        continue
+
+            non_match_streak += 1
+            if non_match_streak >= 3:
+                flush()
+                in_personnel_list = False
+        flush()
+    return results
+
+
 def extract_records(path, pages, application=None):
     warnings = []
     records = table_records(path, pages)
+    records["personnel"].extend(_kv_personnel_records(pages, records["personnel"]))
     records["equipment"].extend(_kv_equipment_records(pages, records["equipment"]))
     records["identity"] = native_identity(pages)
     records["identity"].extend(
@@ -1017,11 +1217,25 @@ def extract_records(path, pages, application=None):
         if r.get("location")
     )
     selectors = {
-        "personnel": lambda p: bool(
-            re.search(
-                r"daftar\s+nama\s+person|data\s+person|nama\s+jenis\s+pekerjaan|petugas|operator|personel|personil",
-                p["text"],
-                re.I,
+        "personnel": lambda p: (
+            bool(
+                re.search(
+                    r"daftar\s+nama\s+person|data\s+person|nama\s+jenis\s+pekerjaan|petugas|operator|personel|personil",
+                    p["text"],
+                    re.I,
+                )
+            )
+            and not (
+                not re.search(
+                    r"daftar|data\s+person|no\.?\s*sib|jabatan|keahlian|klasifikasi|ppr|pekerja\s+radiasi|:|\b(?:petugas|operator)\s+[A-Z][a-z]+",
+                    p["text"],
+                    re.I,
+                )
+                and re.search(
+                    r"\b(?:petugas|operator|person[ei]l)\s+(?:wajib|harus|yang|dapat|akan|telah|melakukan|bertanggung)\b",
+                    p["text"],
+                    re.I,
+                )
             )
         ),
         "equipment": lambda p: bool(
@@ -1073,7 +1287,52 @@ def extract_records(path, pages, application=None):
         else:
             select = selectors[kind]
             selected = [p for p in pages if not toc(p["text"]) and select(p)]
+            max_calls = 3
+            if kind == "personnel" and (application or {}).get("personnel"):
+                missing_tokens: list[str] = []
+                for expected in application["personnel"]:
+                    linked = [
+                        r
+                        for r in records["personnel"]
+                        if r.get("name")
+                        and person_similarity(expected.get("nama"), r["name"]) >= 0.72
+                    ]
+                    if not linked or any(not any(r.get(k) for r in linked) for k in required):
+                        raw_tokens = [
+                            norm(t)
+                            for t in re.findall(r"[A-Za-z]+", expected.get("nama") or "")
+                            if norm(t) not in {"prof", "drs", "drg", "apt", "ssi", "msc", "phd"}
+                        ]
+                        long_tokens = [t for t in raw_tokens if len(t) >= 4]
+                        missing_tokens.extend(long_tokens or [t for t in raw_tokens if len(t) >= 3])
+                if missing_tokens:
+                    non_toc_norm = [norm(p["text"]) for p in pages if not toc(p["text"])]
+                    if not any(tok in txt for txt in non_toc_norm for tok in missing_tokens):
+                        selected = [
+                            p
+                            for p in selected
+                            if re.search(
+                                r"(?i:daftar\s+nama\s+person|data\s+person|tabel\s+.*?(?:petugas|person[ei]l)|"
+                                r"lampiran\s+.*?(?:petugas|person[ei]l))|"
+                                r"\b(?i:petugas)\s+(?!proteksi\s+radiasi\b|yang\b|wajib\b|harus\b|dapat\b|akan\b|telah\b|adalah\b|tersebut\b|radiasi\b|perawatan\b|lain\b)[A-Z][a-z]+",
+                                p["text"],
+                            )
+                        ]
+                        max_calls = 1
+                    else:
+                        selected = [
+                            p
+                            for p in selected
+                            if any(tok in norm(p["text"]) for tok in missing_tokens)
+                            or re.search(
+                                r"daftar\s+nama\s+person|data\s+person|tabel\s+.*?(?:petugas|person[ei]l)|"
+                                r"lampiran\s+.*?(?:petugas|person[ei]l)",
+                                p["text"],
+                                re.I,
+                            )
+                        ]
             expected_serials = []
+            unit_complete = False
             if kind == "equipment" and (application or {}).get("equipment"):
                 expected_serials = [
                     sc
@@ -1098,6 +1357,20 @@ def extract_records(path, pages, application=None):
             incomplete_pages = {
                 r["page"] for r in records[kind] if any(not r.get(k) for k in required)
             }
+            if (
+                kind == "equipment"
+                and unit_complete
+                and incomplete_pages
+                and not any(
+                    p["page"] not in incomplete_pages
+                    and (
+                        (expected_serials and any(sc in norm(p["text"]) for sc in expected_serials))
+                        or re.search(r"\b(?:merk|merek|pabrikan)\s+tabung\b", p["text"], re.I)
+                    )
+                    for p in selected
+                )
+            ):
+                max_calls = 1
             selected.sort(
                 key=lambda p: (
                     p["page"] not in incomplete_pages,
@@ -1110,7 +1383,6 @@ def extract_records(path, pages, application=None):
                     p["page"],
                 )
             )
-            max_calls = 3
             window_chars = 12000
         covered = set()
         calls = 0
@@ -1373,6 +1645,40 @@ def metadata(pages, *, expected_number="", expected_date=""):
                         "label_score": score,
                     }
                 )
+            if (
+                page["page"] <= 5
+                and re.search(r"(?:lembar\s+)?pengesahan", text, re.I)
+                and re.search(r"\btanggal\b", text, re.I)
+            ):
+                raw_lines = [compact(l) for l in (page.get("native_text") or page["text"]).splitlines()]
+                for idx, line in enumerate(raw_lines):
+                    if not line:
+                        continue
+                    date_m = re.search(
+                        r"\b(\d{1,2}(?:[/.-]\d{1,2}[/.-]|\s+[A-Za-z]+\s+)\d{4})\b",
+                        line,
+                    )
+                    if not date_m:
+                        continue
+                    window_txt = " ".join(raw_lines[max(0, idx - 2) : min(len(raw_lines), idx + 3)])
+                    action_m = re.search(
+                        r"\b(disetujui|disahkan|ditetapkan|diperiksa|disusun)\b",
+                        window_txt,
+                        re.I,
+                    )
+                    if not action_m:
+                        continue
+                    action_word = action_m.group(1).lower()
+                    date.append(
+                        {
+                            "value": date_m.group(1),
+                            "page": page["page"],
+                            "quote": line[:180],
+                            "label_score": 65
+                            if action_word in ("disetujui", "disahkan", "ditetapkan")
+                            else 55,
+                        }
+                    )
     return {
         "number": _select_metadata(number, expected_number, "number"),
         "date": _select_metadata(date, expected_date, "date"),

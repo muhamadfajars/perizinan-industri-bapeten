@@ -172,3 +172,19 @@ export async function fetchEvidencePage(aid: string, did: string, page: number) 
   if (!r.ok) throw new Error(`Halaman ${page} tidak bisa ditampilkan`);
   return await r.blob();
 }
+
+export type DocumentSearchMatch = { page: number; snippet: string };
+
+export async function searchDocumentText(did: string, query: string): Promise<DocumentSearchMatch[]> {
+  const aid = sessionStorage.getItem('bapeten_application_id');
+  const q = query.trim();
+  if (!aid || q.length < 2) return [];
+  const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  const r = await fetch(
+    `${API_BASE}/api/v1/applications/${aid}/documents/${did}/search?q=${encodeURIComponent(q)}`,
+    { headers, cache: 'no-store' },
+  );
+  if (!r.ok) return [];
+  const data = (await r.json()) as { matches?: DocumentSearchMatch[] };
+  return Array.isArray(data.matches) ? data.matches : [];
+}

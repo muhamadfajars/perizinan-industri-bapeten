@@ -933,6 +933,8 @@ class ProtectionTests(unittest.TestCase):
             ("Perba BAPETEN No. 5 Tahun 2025", ("Perba", "5", "2025")),
             ("Peraturan Badan Pengawas Tenaga Nuklir (BAPETEN) Nomor 4 Tahun 2024", ("Perba", "4", "2024")),
             ("UU RI No. 10 Thn. 1997", ("UU", "10", "1997")),
+            ("Undang – Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran", ("UU", "10", "1997")),
+            ("UU. No. 10 Tahun 1997", ("UU", "10", "1997")),
         ]
         for text, expected in samples:
             match = LAW.search(text)
@@ -987,6 +989,157 @@ class ProtectionTests(unittest.TestCase):
         prose_keys = {law_key(*m.groups()) for item in prose_sec for m in LAW.finditer(item["text"])}
         self.assertEqual(prose_keys, {("UU", "10", "1997"), ("PP", "45", "2023"), ("Perba", "4", "2013")})
         self.assertEqual(legal_section([page("UU 10 Tahun 1997 dan PP 45 Tahun 2023.", 1)]), [])
+
+    def test_kv_personnel_extractor_and_zone_visual_attachment_and_header_logo_ocr_skip(self):
+        import io
+        import os
+        import tempfile
+        import pymupdf
+        from PIL import Image
+        from app.protection.extraction import _kv_personnel_records
+        from app.protection.reader import read_document
+
+        # 1. Non-table personnel KV blocks and bulleted lists
+        pers_pages = [
+            page(
+                "Daftar Pekerja Radiasi:\n"
+                "1. Budi Santoso (Petugas Proteksi Radiasi)\n"
+                "- Ani Wijaya - Operator XRF\n\n\n\n"
+                "Nama : Citra Dewi\n"
+                "Jabatan : Pekerja Radiasi\n"
+                "Lokasi : Site Morowali\n"
+                "Nama Instansi : PT Uji Contoh",
+                4,
+            )
+        ]
+        recs = _kv_personnel_records(pers_pages)
+        by_name = {r["name"]: r for r in recs}
+        self.assertEqual(by_name["Budi Santoso"]["role"], "Petugas Proteksi Radiasi")
+        self.assertEqual(by_name["Ani Wijaya"]["role"], "Operator XRF")
+        self.assertEqual(by_name["Citra Dewi"]["role"], "Pekerja Radiasi")
+        self.assertNotIn("PT Uji Contoh", by_name)
+
+        # 2. Adjacent uncaptioned visual page linked when zone falls back to text
+        zone_pages = [
+            {
+                "page": 9,
+                "text": (
+                    "4.1 Pembagian Daerah Kerja\n"
+                    "Daerah Pengendalian ditetapkan pada area ruang penyinaran dengan laju dosis > 3 mSv/tahun.\n"
+                    "Daerah Pengawasan ditetapkan di sekitar area kerja."
+                ),
+                "method": "text",
+                "has_visual": False,
+            },
+            {
+                "page": 10,
+                "text": "Lampiran 3 — Tata Letak Fasilitas",
+                "method": "text",
+                "has_visual": True,
+            },
+        ]
+        rows = information(
+            zone_pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        ctrl = next(r for r in rows if r["field"] == "Daerah Pengendalian")
+        self.assertEqual(ctrl["detail"]["pages"], [9, 10])
+        self.assertNotIn("Denah kandidat ditemukan", ctrl["observed"])
+        self.assertFalse(ctrl["detail"].get("review_required"))
+
+        # 3. Header-only logo (>8% page area) on readable native page skips OCR; body image still triggers OCR
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            pdf_path = tmp.name
+        try:
+            buf = io.BytesIO()
+            Image.new("RGB", (400, 120), color=(20, 60, 120)).save(buf, format="PNG")
+            img_bytes = buf.getvalue()
+            doc = pymupdf.open()
+            p1 = doc.new_page(width=595, height=842)
+            # Header banner in top 15% of page (~14% area) + >=120 chars native text
+            p1.insert_image(pymupdf.Rect(40, 20, 555, 135), stream=img_bytes)
+            p1.insert_text(
+                (40, 200),
+                "Dokumen Program Proteksi dan Keselamatan Radiasi resmi PT Contoh\n"
+                "untuk kegiatan analisis industri di lapangan dengan teks native yang lengkap dan jelas.",
+                fontsize=11,
+            )
+            p2 = doc.new_page(width=595, height=842)
+            # Body figure in middle of page (~15% area) + 150 chars native text (< 600)
+            p2.insert_image(pymupdf.Rect(100, 260, 480, 460), stream=img_bytes)
+            p2.insert_text((40, 120), "Teks pengantar singkat sebelum gambar tabel hasil pindai.", fontsize=11)
+            doc.save(pdf_path)
+            doc.close()
+
+            with patch("app.protection.reader.subprocess.run") as mock_run:
+                mock_run.return_value = type("Res", (), {"returncode": 0, "stdout": b"OCR text"})()
+                read_pages, _ = read_document(pdf_path)
+            self.assertEqual(read_pages[0]["method"], "text")
+            self.assertEqual(read_pages[1]["method"], "ocr")
+            self.assertEqual(mock_run.call_count, 1)
+        finally:
+            if os.path.exists(pdf_path):
+                os.unlink(pdf_path)
+
+    def test_table51_equipment_approval_date_prose_identity_and_absent_personnel_fastpath(self):
+        from app.protection.extraction import _kv_equipment_records, extract_records, native_identity
+
+        # 1. Approval table date on Lembar Pengesahan
+        p1 = page(
+            "LEMBAR PENGESAHAN\n"
+            "Nomor dokumen : ALP-MNL-XRAY-001\n"
+            "Tindakan   Nama   Jabatan   Tanda Tangan   Tanggal\n"
+            "Disetujui\n"
+            "Fery Faizal   FGM   18/09/2026\n"
+            "oleh\n",
+            1,
+        )
+        meta = metadata([p1], expected_number="ALP-MNL-XRAY-001", expected_date="18/09/2026")
+        self.assertEqual(meta["date"][0]["value"], "18/09/2026")
+
+        # 2. Prose org + location extraction without LLM
+        p7 = page(
+            "BAB I PENDAHULUAN\n"
+            "PT ALP Petro Industry merupakan perusahaan yang berlokasi di Jl. Raya\n"
+            "Kebonsari, Desa Legok, Kecamatan Gempol, Kabupaten Pasuruan, Provinsi Jawa\n"
+            "Timur dengan bidang usaha yang meliputi Industri Minyak.",
+            7,
+        )
+        ident = native_identity([p7])
+        self.assertEqual(ident[0]["institution"], "PT ALP Petro Industry")
+        self.assertIn("Jl. Raya Kebonsari", ident[0]["project_address"])
+
+        # 3. Combined Tipe / nomor. seri unit & M54 / 24-76646 tube serial in KV layout
+        p36 = page(
+            "Tabel 5.1. Spesifikasi teknis peralatan\n"
+            "Merek                      Rigaku\n"
+            "Tipe / nomor. seri unit      NEX QC2450+\n"
+            "Nomor seri tabung sinar-X    M54 / 24-76646\n",
+            36,
+        )
+        eq = _kv_equipment_records([p36])
+        self.assertEqual(len(eq), 1)
+        self.assertEqual(eq[0]["merk_unit"], "Rigaku")
+        self.assertEqual(eq[0]["tipe_unit"], "NEX QC2450+")
+        self.assertEqual(eq[0]["nomor_seri_unit"], "QC2450+")
+        self.assertEqual(eq[0]["tipe_tabung"], "M54")
+        self.assertEqual(eq[0]["nomor_seri_tabung"], "24-76646")
+
+        # 4. Absent personnel in document skips LLM completely
+        app = {
+            "general": {"instansi_asli": "PT ALP Petro Industry", "alamat_proyek": "Jl. Raya Kebonsari, Pasuruan"},
+            "personnel": [{"nama": "Fani Priyo Kurniawan", "role": "Operator"}],
+            "equipment": [{"merk_unit": "Rigaku", "tipe_unit": "NEX QC2450+", "nomor_seri_unit": "QC2450+", "tipe_tabung": "M54", "nomor_seri_tabung": "24-76646"}],
+        }
+        pages = [p1, p7, page("Operator harus mematuhi SOP proteksi radiasi.", 15), p36]
+        with patch("app.protection.extraction.table_records", return_value={"personnel": [], "equipment": []}), patch(
+            "app.protection.extraction.llm.extract", return_value=[]
+        ) as llm_mock:
+            _, warns = extract_records("unused", pages, app)
+        self.assertNotIn("personnel", [c.args[0] for c in llm_mock.call_args_list])
+        self.assertNotIn("identity", [c.args[0] for c in llm_mock.call_args_list])
+        self.assertEqual(warns, [])
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ export function ManagementCard({ row, open }: { row: MatchRow; open: (page: numb
           ? 'Periksa keberadaan tanda tangan pada dokumen sumber.'
           : 'Status menunjukkan keberadaan penjelasan, bukan penilaian penerapannya.'}
       </p>
-      {pages.length > 0 && (
+      {(pages.length > 0 || row.document_id) && (
         <div className="protection-source">
           {pages.length > 1 ? (
             <div className="protection-page-control">
@@ -72,10 +72,10 @@ export function ManagementCard({ row, open }: { row: MatchRow; open: (page: numb
               </label>
             </div>
           ) : (
-            <p className="protection-page-label">Halaman {pages[0]}</p>
+            <p className="protection-page-label">Halaman {pages[0] ?? 1}</p>
           )}
           {row.document_id && (
-            <button type="button" className="button button-source" onClick={() => open(pages[index])}>
+            <button type="button" className="button button-source" onClick={() => open(pages[index] ?? 1)}>
               <ExternalLink size={16} /> Lihat dokumen sumber
             </button>
           )}

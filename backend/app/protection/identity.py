@@ -7,7 +7,7 @@ INSTITUTION = r"(?:PT|CV|RSUD|RSUP|RS|Rumah\s+Sakit|Klinik|Universitas|Institut|
 ADDRESS = r"\b(?:jl|jalan|jln|outlet|cabang|kawasan|desa|kelurahan|kel|dusun|kampung|kecamatan|kec|kabupaten|kab|kota|rt|rw|km|komplek[s]?|komp|gedung|ruko|blok)\b"
 
 
-ADDRESS_LABEL = r"\b(?:alamat(?:\s+(?:proyek|lokasi(?:\s+pemanfaatan)?|perusahaan|fasilitas|tempat))?|lokasi\s+(?:proyek|pemanfaatan)|tempat\s+kegiatan)\s*:"
+ADDRESS_LABEL = r"\b(?:alamat(?:\s+(?:proyek|lokasi(?:\s+pemanfaatan)?|perusahaan|fasilitas|tempat|site|operasi(?:onal)?|instansi|kegiatan))?|lokasi\s+(?:proyek|pemanfaatan|fasilitas|kegiatan|kerja|operasi(?:onal)?|instansi|perusahaan|site)|tempat\s+kegiatan)\s*:"
 STRONG_STREET = r"\b(?:jl|jln|jalan|komplek[s]?|komp|kawasan)\b"
 INSTITUTION_LABEL = r"\b(?:nama\s+)?(?:instansi|perusahaan|pemohon|fasilitas)\s*:"
 
@@ -34,7 +34,7 @@ def office_address(value, text):
             or is_office
             or bool(
                 re.match(
-                    r"\s*(?:Alamat\b|Nama\b|Telepon\b|Telp\b|Email\b|Kota\b|Kode\s+Pos\b|BAB\b|\d+\.\d+\s)",
+                    r"\s*(?:Alamat\b|Nama\b|Telepon\b|Telp\b|Email\b|Kota\b|Kode\s+Pos\b|BAB\b|[IVXLCDM]+\.\d+\.?\s|\d+\.\d+\s)",
                     line,
                     re.I,
                 )
