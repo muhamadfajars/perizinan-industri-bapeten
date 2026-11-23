@@ -1577,18 +1577,24 @@ def metadata(pages, *, expected_number="", expected_date=""):
             if toc(text):
                 continue
             for match in re.finditer(
-                r"\b(?:(?P<label_doc>(?:Nomor|No\.?|Kode)\s+Dokumen)\b\s*(?::|\||–|-)?|"
+                r"\b(?:(?P<label_doc>(?:Nomor|No\.?|Kode)\s+Dokumen|Doc(?:ument)?\s+(?:Number|No\.?))\b\s*(?::|\||–|-)?|"
                 r"(?P<label_short>Nomor|No)\b\.?\s*(?::|\||–|-))\s*"
-                r"(?P<value>[A-Za-z0-9]+(?:\s*[/–—-]\s*[A-Za-z0-9]+|\.[A-Za-z0-9]+)+"
+                r"(?P<value>[A-Za-z0-9]+(?:\s*[/–—-]\s*[A-Za-z0-9]+|\.[A-Za-z0-9]+|_[A-Za-z0-9]+(?:\s+(?!Versi\b|Version\b|Tanggal\b|Date\b|Status\b|Pemilik\b|Owner\b|Page\b|Halaman\b|Uncontrolled\b)[A-Za-z0-9]+)*)+"
                 r"(?:[\s./–—-]*\bRev(?:isi)?\.?\s*\d+[A-Za-z]?)?)",
                 text,
                 re.I,
             ):
+                raw_value = match.group("value")
+                split_pat = (
+                    r"\b(?:(?:Revision|Revisi)(?!\s*\.?\s*\d)|Tanggal|Date|Page|Halaman|Versi|Version|Status|Pemilik|Owner|Uncontrolled)\b"
+                    if "_" in raw_value
+                    else r"\b(?:(?:Revision|Revisi)(?!\s*\.?\s*\d)|Tanggal|Date|Page|Halaman|PROGRAM|DOKUMEN|SISTEM|Departemen)\b"
+                )
                 value = re.split(
-                    r"\b(?:(?:Revision|Revisi)(?!\s*\.?\s*\d)|Tanggal|Date|Page|Halaman|PROGRAM|DOKUMEN|SISTEM|Departemen)\b",
-                    match.group("value"),
+                    split_pat,
+                    raw_value,
                     flags=re.I,
-                )[0].strip(" -–—/:.")
+                )[0].strip(" -–—/:._")
                 if not (re.search(r"[A-Za-z]", value) and re.search(r"\d", value)):
                     continue
                 number.append(

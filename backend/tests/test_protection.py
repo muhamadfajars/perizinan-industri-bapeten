@@ -331,6 +331,12 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(
             compare(address, address.replace("Mawar", "Melati"), "address")[0], "REVIEW"
         )
+        # Detailed administrative subdistrict/village in document should MATCH when core components agree
+        form_addr = "JL. Raya Kebonsari , Kab. Pasuruan, Jawa Timur 67155"
+        doc_addr = "Jl. Raya Kebonsari, Desa Legok-Gempol, Pasuruan 67155 Jawa Timur, Indonesia"
+        status, score, reason = compare(form_addr, doc_addr, "address")
+        self.assertEqual(status, "MATCH")
+        self.assertGreaterEqual(score, 85)
 
     def test_other_location_records_are_not_supporting_information(self):
         records = {

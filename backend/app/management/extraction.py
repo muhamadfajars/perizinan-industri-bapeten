@@ -4,7 +4,7 @@ import re
 from ..protection.extraction import native_identity, grounded
 from ..protection.evidence import compact, toc
 from ..protection import llm
-from ..protection.identity import ADDRESS, office_address, ranked_identity_pages
+from ..protection.identity import ADDRESS, INSTITUTION, office_address, ranked_identity_pages
 from ..protection.context import adjacent_window
 
 _MGMT_PROSE_LOC_RE = re.compile(
@@ -13,6 +13,49 @@ _MGMT_PROSE_LOC_RE = re.compile(
     r"((?:[^.\n]|(?<=\b(?:Jl|No|PT|CV|Gd|Gg|Lt))\.|(?<=\b(?:Jln|Kec|Kab|Kel|Gdg|Kav))\.|(?<=\bKomp)\.|\.(?=[a-z0-9]))+)",
     re.I,
 )
+
+_INST_STOP_WORDS = (
+    r"tanggal|date|versi|status|pemilik|owner|sebagai|yang|dalam|untuk|berlokasi|beralamat|"
+    r"berkomitmen|berupaya|melaksanakan|menetapkan|wajib|melakukan|termasuk|merupakan|adalah|"
+    r"dengan|dan|atau"
+)
+_MGMT_PROSE_INST_RE = re.compile(
+    r"(?i:dokumen\s+resmi|pemegang\s+izin(?:\s*\(pi\))?(?:\s+dari)?|pemohon\s+izin|milik|"
+    r"tanggung\s+jawab\s+[^.\n]{0,40}\b(?:pada|oleh)|direktur(?:/pimpinan)?|pimpinan|manajer|manager)\s+"
+    r"((?i:" + INSTITUTION + r")\.?\s+(?!(?i:" + _INST_STOP_WORDS + r")\b)[A-Z][A-Za-z0-9&'-]*"
+    r"(?:\s+(?!(?i:" + _INST_STOP_WORDS + r")\b)[A-Z][A-Za-z0-9&'-]*){0,5})"
+)
+
+
+def _management_prose_institutions(pages):
+    """Extract institution names from approval tables or applicant prose when unlabeled."""
+    found = []
+    for page in pages:
+        if toc(page["text"]):
+            continue
+        source = (
+            page["text"]
+            if page.get("method") == "ocr"
+            else (page.get("native_text") or page["text"])
+        )
+        clean = compact(source)
+        if not clean:
+            continue
+        for match in _MGMT_PROSE_INST_RE.finditer(clean):
+            inst = compact(match.group(1)).strip(" ,.;:")
+            if len(inst) < 5 or len(inst) > 150:
+                continue
+            if re.search(r"\b(?:bapeten|pengawas\s+tenaga\s+nuklir)\b", inst, re.I):
+                continue
+            found.append(
+                {
+                    "institution": inst,
+                    "page": page["page"],
+                    "quote": match.group(0),
+                    "method": page.get("method", "text"),
+                }
+            )
+    return found
 
 
 def _management_prose_addresses(pages):
@@ -53,6 +96,8 @@ def identities(pages):
     for page in pages:
         if not toc(page["text"]):
             records.extend(native_identity([page]))
+    if not any(r.get("institution") for r in records):
+        records.extend(_management_prose_institutions(pages))
     if not any(r.get("project_address") for r in records):
         records.extend(_management_prose_addresses(pages))
     missing = [

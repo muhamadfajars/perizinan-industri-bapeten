@@ -23,7 +23,6 @@ export function SectionTopicSplitView({
     documentId: string;
     page?: number;
     title: string;
-    imageOnly?: boolean;
   } | null>(null);
 
   if (!tabs.length) {
@@ -113,7 +112,6 @@ export function SectionTopicSplitView({
           documentId={source.documentId}
           page={source.page}
           title={source.title}
-          imageOnly={source.imageOnly}
           loadDocument={loadSourceDocument}
           openExternal={openEvidence}
           close={() => setSource(null)}

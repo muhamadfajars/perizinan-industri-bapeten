@@ -71,7 +71,6 @@ export function PersonnelDocuments({
     documentId: string;
     title: string;
     page?: number;
-    imageOnly?: boolean;
   } | null>(null);
 
   // Group rows by document_id
@@ -298,12 +297,11 @@ export function PersonnelDocuments({
                 key={row.id}
                 row={row}
                 documentId={row.document_id || activeGroup.documentId}
-                openSource={(documentId, page, imageOnly) =>
+                openSource={(documentId, page) =>
                   setSource({
                     documentId,
                     title: `${activeGroup.headerTitle} — ${row.field}`,
                     page,
-                    imageOnly,
                   })
                 }
               />
@@ -318,7 +316,6 @@ export function PersonnelDocuments({
           documentId={source.documentId}
           page={source.page}
           title={source.title}
-          imageOnly={source.imageOnly}
           loadDocument={loadSourceDocument}
           openExternal={openEvidence}
           close={() => setSource(null)}
@@ -335,7 +332,7 @@ function PersonnelEvidenceCard({
 }: {
   row: MatchRow;
   documentId?: string;
-  openSource: (documentId: string, page?: number, imageOnly?: boolean) => void;
+  openSource: (documentId: string, page?: number) => void;
 }) {
   const rawPages = row.detail?.pages ?? (row.page != null ? [row.page] : []);
   const pages = [...new Set(rawPages)];
@@ -360,7 +357,7 @@ function PersonnelEvidenceCard({
       : 'Ditemukan';
 
   const defaultNote = isPengesahan
-    ? 'Periksa tanda tangan pada gambar sumber.'
+    ? 'Periksa tanda tangan pada dokumen sumber.'
     : isMasaBerlaku
       ? 'Pastikan masa berlaku dokumen masih aktif saat permohonan diajukan.'
       : undefined;
@@ -429,7 +426,7 @@ function PersonnelEvidenceCard({
           <button
             type="button"
             className="button button-source"
-            onClick={() => openSource(targetDocId, targetPage, isPengesahan)}
+            onClick={() => openSource(targetDocId, targetPage)}
           >
             <ExternalLink size={16} /> Lihat dokumen sumber
           </button>

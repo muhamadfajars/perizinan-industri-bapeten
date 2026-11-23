@@ -108,6 +108,15 @@ def compare(expected, observed, kind="text"):
             score,
             "Nama instansi sangat mirip; variasi ejaan tetap ditampilkan untuk ditinjau.",
         )
+    if kind == "number" and min(len(a), len(b)) >= 4:
+        clean_exp = re.sub(r"[\s_/.-]+", " ", str(expected).strip().casefold()).strip()
+        clean_obs = re.sub(r"[\s_/.-]+", " ", str(observed).strip().casefold()).strip()
+        if clean_obs.startswith(clean_exp + " ") or clean_exp.startswith(clean_obs + " "):
+            return (
+                "REVIEW",
+                score,
+                "Kode dasar nomor dokumen sesuai, tetapi terdapat perbedaan rincian/akhiran; periksa bukti sumber.",
+            )
     return (
         "MISMATCH" if kind in ("serial", "date", "number") else "REVIEW",
         0 if kind in ("serial", "date", "number") else score,
@@ -117,6 +126,26 @@ def compare(expected, observed, kind="text"):
 
 def similarity(a, b):
     return round(100 * SequenceMatcher(None, norm(a), norm(b)).ratio(), 1)
+
+
+_ADMIN_STOPWORDS = {
+    "kabupaten",
+    "kota",
+    "provinsi",
+    "propinsi",
+    "daerah",
+    "wilayah",
+    "desa",
+    "kelurahan",
+    "kecamatan",
+    "negara",
+    "indonesia",
+    "republic",
+    "republik",
+    "dki",
+    "istimewa",
+    "khusus",
+}
 
 
 def address_tokens(value):
@@ -133,6 +162,7 @@ def address_tokens(value):
         ("kav", "kavling"),
         ("lt", "lantai"),
         (r"gdg|gd", "gedung"),
+        (r"ds", "desa"),
     ):
         text = re.sub(rf"\b{short}\b\.?", full + " ", text)
     return set(re.findall(r"[a-z]+|\d+[a-z]?", text))
@@ -163,13 +193,30 @@ def compare_address(expected, observed):
     numbers_a = {s for s in left if s[0].isdigit()}
     numbers_b = {s for s in right if s[0].isdigit()}
     conflict = bool(numbers_a and numbers_b and numbers_a != numbers_b)
-    if score >= 85 and a and b and a_kind == b_kind and a == b and not conflict:
-        # Retain a less-than-perfect score for variations beyond punctuation alone.
-        return (
-            "MATCH",
-            min(score, 99),
-            "Komponen alamat proyek sesuai; singkatan/pengulangan atau cakupan penulisan berbeda.",
-        )
+
+    content_a = left - _ADMIN_STOPWORDS
+    content_b = right - _ADMIN_STOPWORDS
+    min_content = min(len(content_a), len(content_b))
+    content_overlap = len(content_a & content_b) / max(1, min_content) if min_content else 0
+
+    if a and b and a_kind == b_kind and a == b and not conflict:
+        if score >= 85:
+            # Retain a less-than-perfect score for variations beyond punctuation alone.
+            return (
+                "MATCH",
+                min(score, 99),
+                "Komponen alamat proyek sesuai; singkatan/pengulangan atau cakupan penulisan berbeda.",
+            )
+        if content_overlap >= 0.85 and min_content >= 3:
+            effective_score = max(
+                score, min(95.0, round(0.5 * score + 0.5 * (content_overlap * 100), 1))
+            )
+            return (
+                "MATCH",
+                effective_score,
+                "Komponen utama alamat sesuai; dokumen mencantumkan rincian wilayah (desa/kecamatan) yang lebih lengkap.",
+            )
+
     return (
         "REVIEW",
         score,

@@ -34,6 +34,12 @@ export function ManagementInformation({
   );
 }
 
+function managementCardLabel(row: MatchRow) {
+  if (row.detail?.group === 'Pengesahan') return 'Pengesahan';
+  if (row.detail?.group === 'Budaya') return 'Kelengkapan Uraian';
+  return row.field;
+}
+
 export function ManagementCard({ row, open }: { row: MatchRow; open: (page: number) => void }) {
   const pages = [...new Set(row.detail?.pages ?? [])];
   const [index, setIndex] = useState(0);
@@ -42,7 +48,7 @@ export function ManagementCard({ row, open }: { row: MatchRow; open: (page: numb
   const partial = !found && !!topics?.some((topic) => topic.found);
   return (
     <article className="protection-evidence protection-evidence-compact">
-      <h4>{row.field}</h4>
+      <h4>{managementCardLabel(row)}</h4>
       <EvidenceStatus
         found={found}
         partial={partial}

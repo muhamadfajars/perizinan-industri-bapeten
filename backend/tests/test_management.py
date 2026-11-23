@@ -205,6 +205,61 @@ class ManagementTests(unittest.TestCase):
         self.assertTrue(any(r.get("institution") for r in recs_no_addr))
         self.assertEqual(mock_extract.call_count, 1)
 
+    def test_underscore_document_number_and_prose_institution(self):
+        from unittest.mock import patch
+        from app.management.extraction import identities
+
+        doc_pages = [
+            page(
+                "DOKUMEN SISTEM MANAJEMEN\n"
+                "No. Dokumen: HSE_GDL_009_Dokumen Sistem\n"
+                "Manajemen_1.0_ID_IDN\n"
+                "Versi dan Tanggal: 0.1 (12 Mei 2026)\n"
+                "Direktur/Pimpinan PT DHI Excellence Logging\n"
+                "Tanggal: 12 Mei 2026",
+                1,
+            ),
+            page(
+                "Dokumen ini merupakan dokumen resmi PT DHI EXCELLENCE LOGGING sebagai pihak yang bertanggung jawab dan pemohon izin.\n"
+                "Pemeriksaan dilakukan oleh rumah sakit atau klinik yang ditunjuk.\n"
+                "Doc Number: HSE_GDL_009_Dokumen Sistem Manajemen_1.0_ID_IDN Status: Initial draft",
+                6,
+            ),
+        ]
+        with patch("app.protection.llm.extract", return_value=[]):
+            recs, _ = identities(doc_pages)
+        insts = [r["institution"] for r in recs if r.get("institution")]
+        self.assertIn("PT DHI Excellence Logging", insts)
+        self.assertFalse(any("rumah sakit" in i.lower() for i in insts))
+
+        rows = build_rows(
+            "d",
+            {
+                "general": {"instansi": "PT DHI Excellence Logging"},
+                "administration": {
+                    "manajemen": {"number": "HSE_GDL_009_Dokumen Sistem Manajemen_1.0_ID_IDN"}
+                },
+            },
+            doc_pages,
+            recs,
+        )
+        num_row = next(r for r in rows if r["field"] == "Nomor Dokumen")
+        self.assertEqual(num_row["status"], "MATCH")
+        self.assertEqual(num_row["observed"], "HSE_GDL_009_Dokumen Sistem Manajemen_1.0_ID_IDN")
+        inst_row = next(r for r in rows if r["field"] == "Nama Instansi")
+        self.assertEqual(inst_row["status"], "MATCH")
+
+        # Short base code on form vs full code with title/version suffix -> REVIEW (not MISMATCH 0%)
+        from app.protection.matching import compare
+
+        status, score, _ = compare(
+            "HSE_GDL_009", "HSE_GDL_009_Dokumen Sistem Manajemen_1.0_ID_IDN", "number"
+        )
+        self.assertEqual(status, "REVIEW")
+        self.assertGreater(score, 0)
+        # Different trailing digit without separator must remain MISMATCH 0%
+        self.assertEqual(compare("HSE_GDL_009", "HSE_GDL_0091", "number")[:2], ("MISMATCH", 0))
+
 
 if __name__ == "__main__":
     unittest.main()
