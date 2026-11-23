@@ -100,7 +100,6 @@ export function SectionTopicSplitView({
                     documentId: row.document_id,
                     page,
                     title: row.field,
-                    imageOnly: row.detail?.group === 'Pengesahan',
                   })
                 }
               />

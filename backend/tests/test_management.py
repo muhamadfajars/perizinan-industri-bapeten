@@ -99,10 +99,20 @@ class ManagementTests(unittest.TestCase):
             + "Pelatihan pekerja dan pelaporan kejadian dilakukan secara berkala untuk memperbaiki proses keselamatan. "
             * 4
         )
-        topics = culture_evidence([page(body, 7)])
+        # Without dedicated chapter/subchapter heading, passing mentions are ignored
+        self.assertFalse(any(t["found"] for t in culture_evidence([page(body, 7)])))
+        self.assertFalse(any(t["found"] for t in culture_evidence([page("BAB IV PELATIHAN\n" + body, 7)])))
+
+        # With dedicated chapter/subchapter heading, explanation is extracted
+        safety_chapter = "BAB I BUDAYA KESELAMATAN\n" + body
+        topics = culture_evidence([page(safety_chapter, 7)])
         self.assertTrue(topics[0]["found"])
         self.assertFalse(topics[1]["found"])
-        both = body.replace("Budaya keselamatan", "Budaya keselamatan dan budaya keamanan")
+
+        both = (
+            "BAB I BUDAYA KESELAMATAN DAN BUDAYA KEAMANAN\n"
+            + body.replace("Budaya keselamatan", "Budaya keselamatan dan budaya keamanan")
+        )
         self.assertTrue(all(t["found"] for t in culture_evidence([page(both, 8)])))
 
     def test_culture_sections_exclude_unrelated_chapters(self):

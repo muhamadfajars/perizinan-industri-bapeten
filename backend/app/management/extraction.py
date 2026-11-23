@@ -105,12 +105,12 @@ def culture_sections(pages):
     """Prefer dedicated culture sections; keep separate safety/security headings."""
     bare_heading = (
         r"Budaya[ \t]+(?:Keselamatan|Keamanan)"
-        r"(?:[ \t]+dan[ \t]+(?:Budaya[ \t]+)?(?:Keselamatan|Keamanan))?"
-        r"(?:[ \t]+(?:Radiasi|Sumber(?:[ \t]+Radiasi)?|Kerja|Perusahaan))*"
+        r"(?:[ \t]+(?:dan|&|dan/atau)[ \t]+(?:Budaya[ \t]+)?(?:Keselamatan|Keamanan))?"
+        r"(?:[ \t]+(?:Radiasi|Sumber(?:[ \t]+Radiasi)?(?:[ \t]+Pengion)?|Kerja|Perusahaan|Fasilitas))*"
         r"[ \t]*:?[ \t]*$"
     )
     heading = re.compile(
-        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)[ \t]*\n+[ \t]*{bare_heading}|(?:BAB\s+(?:[IVXLCDM]+|\d+)\s*[-–:.]?|[IVXLCDM]+\.\d+(?:\.\d+)*\.?|\d+(?:\.\d+)*\.?|[A-Z][.)])\s+Budaya[ \t]+(?:Keselamatan|Keamanan)(?![^\n]*\b(?:adalah|merupakan|telah|akan|wajib)\b)[^\n]{{0,60}}$|{bare_heading})"
+        rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)\s*[-–:.]?[ \t\r]*\n+[ \t]*{bare_heading}|(?:BAB\s+(?:[IVXLCDM]+|\d+)\s*[-–:.]?|[IVXLCDM]+\.\d+(?:\.\d+)*\.?|\d+(?:\.\d+)*\.?|[A-Z][.)])\s+Budaya[ \t]+(?:Keselamatan|Keamanan)(?![^\n]*\b(?:adalah|merupakan|telah|akan|wajib)\b)[^\n]{{0,100}}$|{bare_heading})"
     )
     boundary = re.compile(
         rf"(?im)^[ \t]*(?:BAB\s+(?:[IVXLCDM]+|\d+)\b|[IVXLCDM]+\.\d+(?:\.\d+)*\.?\s+|\d+(?:\.\d+)+\.?\s+|[A-Z][.)]\s+|{bare_heading})"
@@ -143,7 +143,7 @@ def culture_sections(pages):
             active = next_active
         if active and active_start is not None and text[active_start:].strip():
             sections.append({**page, "text": text[active_start:]})
-    return sections or pages
+    return sections
 
 
 def culture_evidence(pages):

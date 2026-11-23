@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { InlineSourcePreview } from './Evidence';
 import { searchDocumentText, type DocumentSearchMatch } from '../api';
-import { ChevronDown, ChevronUp, ExternalLink, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, Maximize2, Minimize2, Search, X } from 'lucide-react';
 
 export function SourceDocumentViewer({
   documentId,
   imageOnly = false,
+  enableSearch = true,
+  enableMinimize = true,
+  showSubtitle = true,
   title,
   page,
   loadDocument,
@@ -14,6 +17,9 @@ export function SourceDocumentViewer({
 }: {
   documentId: string;
   imageOnly?: boolean;
+  enableSearch?: boolean;
+  enableMinimize?: boolean;
+  showSubtitle?: boolean;
   title: string;
   page?: number;
   loadDocument: (documentId: string) => Promise<Blob>;
@@ -23,6 +29,7 @@ export function SourceDocumentViewer({
   const dialog = useRef<HTMLDialogElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState('');
+  const [isImageBlob, setIsImageBlob] = useState(false);
   const [error, setError] = useState('');
   const [activePage, setActivePage] = useState(page ?? 1);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -31,6 +38,7 @@ export function SourceDocumentViewer({
   const [matches, setMatches] = useState<DocumentSearchMatch[]>([]);
   const [matchIndex, setMatchIndex] = useState(0);
   const [searchedQuery, setSearchedQuery] = useState('');
+  const [minimized, setMinimized] = useState(false);
 
   useEffect(() => {
     setActivePage(page ?? 1);
@@ -39,16 +47,20 @@ export function SourceDocumentViewer({
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (!minimized) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = previousOverflow;
+    }
     dialog.current?.showModal();
     return () => {
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
-  }, []);
+  }, [minimized]);
 
   useEffect(() => {
-    if (imageOnly) return;
+    if (imageOnly || minimized || !enableSearch) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
@@ -62,18 +74,20 @@ export function SourceDocumentViewer({
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [imageOnly]);
+  }, [imageOnly, minimized, enableSearch]);
 
   useEffect(() => {
     if (imageOnly) return;
     let disposed = false;
     let objectUrl = '';
     setUrl('');
+    setIsImageBlob(false);
     setError('');
     loadDocument(documentId)
       .then((blob) => {
         if (disposed) return;
         objectUrl = URL.createObjectURL(blob);
+        setIsImageBlob(blob.type.startsWith('image/'));
         setUrl(objectUrl);
       })
       .catch(() => {
@@ -120,17 +134,22 @@ export function SourceDocumentViewer({
   const currentMatch = matches[matchIndex];
 
   return (
-    <dialog ref={dialog} className="source-viewer" aria-labelledby="source-viewer-title" onCancel={close}>
+    <dialog
+      ref={dialog}
+      className={`source-viewer ${minimized ? 'source-viewer-minimized' : ''}`}
+      aria-labelledby="source-viewer-title"
+      onCancel={close}
+    >
       <div className="source-viewer-layout">
         <header className="source-viewer-header">
           <div className="source-viewer-caption">
             <h3 id="source-viewer-title" title={title}>
               {title}
             </h3>
-            <span>Dokumen sumber{activePage ? ` — Halaman ${activePage}` : ''}</span>
+            {showSubtitle && <span>Dokumen sumber{activePage ? ` — Halaman ${activePage}` : ''}</span>}
           </div>
           <div className="source-viewer-actions">
-            {!imageOnly && (
+            {enableSearch && !imageOnly && !minimized && (
               <button
                 type="button"
                 className="button button-source"
@@ -147,96 +166,119 @@ export function SourceDocumentViewer({
                 <Search size={16} /> Cari (Ctrl+F)
               </button>
             )}
-            <button className="button button-source" onClick={() => openExternal(documentId, activePage)}>
-              <ExternalLink size={16} /> Buka di tab baru
-            </button>
-            <button className="icon-button" aria-label="Tutup dokumen sumber" onClick={close}>
+            {!minimized && (
+              <button className="button button-source" onClick={() => openExternal(documentId, activePage)}>
+                <ExternalLink size={16} /> Buka di tab baru
+              </button>
+            )}
+            {enableMinimize && (
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={minimized ? 'Perbesar dokumen sumber' : 'Perkecil dokumen sumber'}
+                title={minimized ? 'Perbesar' : 'Perkecil (Minimize)'}
+                onClick={() => setMinimized(!minimized)}
+              >
+                {minimized ? <Maximize2 size={18} /> : <Minimize2 size={18} />}
+              </button>
+            )}
+            <button className="icon-button" aria-label="Tutup dokumen sumber" title="Tutup" onClick={close}>
               <X size={22} />
             </button>
           </div>
         </header>
-        {!imageOnly && searchOpen && (
-          <form
-            className="source-viewer-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runSearch();
-            }}
-          >
-            <Search size={15} className="source-viewer-search-icon" />
-            <input
-              ref={searchInput}
-              type="search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                if (event.target.value.trim() !== searchedQuery) {
-                  setMatches([]);
-                  setSearchedQuery('');
-                }
-              }}
-              placeholder="Cari teks dalam PDF (tekan Enter)…"
-              aria-label="Cari teks dalam dokumen sumber"
-            />
-            <button type="submit" className="button button-source" disabled={searching || query.trim().length < 2}>
-              {searching ? 'Mencari…' : 'Cari'}
-            </button>
-            {searchedQuery && (
-              <span className="source-viewer-search-status" role="status">
-                {matches.length > 0
-                  ? `${matchIndex + 1}/${matches.length} · Hal. ${currentMatch?.page}`
-                  : 'Tidak ditemukan'}
-              </span>
-            )}
-            {matches.length > 1 && (
-              <>
+        {!minimized && (
+          <>
+            {enableSearch && !imageOnly && searchOpen && (
+              <form
+                className="source-viewer-search"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void runSearch();
+                }}
+              >
+                <Search size={15} className="source-viewer-search-icon" />
+                <input
+                  ref={searchInput}
+                  type="search"
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    if (event.target.value.trim() !== searchedQuery) {
+                      setMatches([]);
+                      setSearchedQuery('');
+                    }
+                  }}
+                  placeholder="Cari teks dalam PDF (tekan Enter)…"
+                  aria-label="Cari teks dalam dokumen sumber"
+                />
+                <button type="submit" className="button button-source" disabled={searching || query.trim().length < 2}>
+                  {searching ? 'Mencari…' : 'Cari'}
+                </button>
+                {searchedQuery && (
+                  <span className="source-viewer-search-status" role="status">
+                    {matches.length > 0
+                      ? `${matchIndex + 1}/${matches.length} · Hal. ${currentMatch?.page}`
+                      : 'Tidak ditemukan'}
+                  </span>
+                )}
+                {matches.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Hasil sebelumnya"
+                      onClick={() => jumpToMatch(matches, matchIndex - 1)}
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Hasil berikutnya"
+                      onClick={() => jumpToMatch(matches, matchIndex + 1)}
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="icon-button"
-                  aria-label="Hasil sebelumnya"
-                  onClick={() => jumpToMatch(matches, matchIndex - 1)}
+                  aria-label="Tutup pencarian"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setQuery('');
+                    setMatches([]);
+                    setSearchedQuery('');
+                  }}
                 >
-                  <ChevronUp size={16} />
+                  <X size={16} />
                 </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Hasil berikutnya"
-                  onClick={() => jumpToMatch(matches, matchIndex + 1)}
-                >
-                  <ChevronDown size={16} />
-                </button>
-              </>
+              </form>
             )}
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Tutup pencarian"
-              onClick={() => {
-                setSearchOpen(false);
-                setQuery('');
-                setMatches([]);
-                setSearchedQuery('');
-              }}
-            >
-              <X size={16} />
-            </button>
-          </form>
-        )}
-        {imageOnly ? (
-          <div className="source-viewer-image">
-            <InlineSourcePreview documentId={documentId} page={activePage} />
-          </div>
-        ) : error ? (
-          <p className="source-viewer-message" role="alert">
-            {error}
-          </p>
-        ) : url ? (
-          <iframe key={`${url}-${activePage}`} title="Pratinjau dokumen sumber" src={`${url}#page=${activePage}`} />
-        ) : (
-          <p className="source-viewer-message" role="status">
-            Memuat dokumen sumber…
-          </p>
+            {imageOnly ? (
+              <div className="source-viewer-image">
+                <InlineSourcePreview documentId={documentId} page={activePage} />
+              </div>
+            ) : error ? (
+              <p className="source-viewer-message" role="alert">
+                {error}
+              </p>
+            ) : url ? (
+              isImageBlob ? (
+                <div className="source-viewer-image">
+                  <img src={url} alt={title} />
+                </div>
+              ) : (
+                <iframe key={`${url}-${activePage}`} title="Pratinjau dokumen sumber" src={`${url}#page=${activePage}`} />
+              )
+            ) : (
+              <p className="source-viewer-message" role="status">
+                Memuat dokumen sumber…
+              </p>
+            )}
+          </>
         )}
       </div>
     </dialog>

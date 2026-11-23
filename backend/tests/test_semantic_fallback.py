@@ -199,23 +199,33 @@ class SemanticFallbackTests(unittest.TestCase):
         self.assertEqual(len(warnings), 2)
 
     @patch("app.protection.llm.request_records")
-    def test_semantic_culture_without_budaya_heading(self, request):
-        safety = "Manajemen membangun komitmen keselamatan radiasi melalui pelatihan pekerja, pelaporan insiden tanpa hukuman, pembelajaran dari kejadian, dan evaluasi rutin perilaku kerja aman bersama seluruh petugas."
-        security = "Setiap petugas bertanggung jawab atas keamanan sumber radiasi, menjaga kerahasiaan akses, melaporkan perilaku mencurigakan kepada penanggung jawab, dan mengikuti latihan penanganan ancaman secara berkala."
+    def test_semantic_culture_requires_dedicated_heading_and_does_not_extract_unrelated_pages(self, request):
+        # Text inside chapter that uses unconventional phrasing not matched by extraction regex
+        safety = "Seluruh staf operasional mengutamakan prosedur kerja proteksi radiasi dan saling mengingatkan potensi bahaya kerja secara berkesinambungan tanpa henti pada instalasi."
+        security = "Penjagaan fasilitas radiasi mewajibkan seluruh staf mengawasi setiap orang yang memasuki area penyimpanan sumber dan segera menginformasikan ke penanggung jawab proteksi."
         request.return_value = [
             {"page": 7, "category": "safety", "quote": safety},
             {"page": 7, "category": "security", "quote": security},
         ]
-        pages = [page(safety + "\n" + security, 7)]
+        # Without culture heading (e.g. passing mentions in random pages/chapters), fallback is NOT called and nothing is extracted
+        unrelated_pages = [page("BAB IV PELATIHAN\n" + safety + "\n" + security, 7)]
+        topics, warnings = culture_fallback(unrelated_pages, culture_evidence(unrelated_pages))
+        self.assertFalse(any(t["found"] for t in topics))
+        self.assertTrue(all(t.get("review_required") for t in topics))
+        self.assertEqual(request.call_count, 0)
+
+        # With dedicated culture chapter heading, semantic recovery within that chapter succeeds
+        pages = [page("BAB I BUDAYA KESELAMATAN DAN KEAMANAN\n" + safety + "\n" + security, 7)]
         topics, _ = culture_fallback(pages, culture_evidence(pages))
         self.assertTrue(all(t["found"] for t in topics))
+        self.assertEqual(request.call_count, 1)
         row = management_rows("d", {}, pages, [], topics=topics)[-1]
         self.assertEqual(row["observed"], "Ditemukan")
         self.assertEqual(row["detail"]["pages"], [7])
 
     @patch("app.protection.llm.request_records", side_effect=TimeoutError)
     def test_timeout_is_review_not_absence(self, request):
-        pages = [page("Komitmen keselamatan dan keamanan perusahaan.")]
+        pages = [page("BAB I BUDAYA KESELAMATAN DAN BUDAYA KEAMANAN\nKomitmen keselamatan dan keamanan perusahaan.")]
         topics, warnings = culture_fallback(pages, culture_evidence(pages))
         row = management_rows("d", {}, pages, [], topics=topics)[-1]
         self.assertTrue(row["detail"]["review_required"])

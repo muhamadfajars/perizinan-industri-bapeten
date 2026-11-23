@@ -25,7 +25,6 @@ export function ManagementInformation({
           documentId={source.row.document_id}
           title={source.row.field}
           page={source.page}
-          imageOnly={source.row.detail?.group === 'Pengesahan'}
           loadDocument={loadSourceDocument}
           openExternal={openEvidence}
           close={() => setSource(null)}

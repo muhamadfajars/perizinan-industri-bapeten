@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -11,10 +12,11 @@ import {
 } from 'lucide-react';
 import { SectionHeading } from '../components/Common';
 import Glyph from '../components/Glyph';
+import { SourceDocumentViewer } from '../components/SourceDocumentViewer';
 import { CATEGORIES, categoryById } from '../data/categories';
 import type { EvaluationWorkspace } from '../hooks/useEvaluationWorkspace';
 import { sizeLabel } from '../lib/presentation';
-import type { CategoryId } from '../types/models';
+import type { CategoryId, UploadItem } from '../types/models';
 import { PERSONNEL_TYPES } from '../types/models';
 
 type Props = Pick<
@@ -42,6 +44,7 @@ type Props = Pick<
   | 'reviewItems'
   | 'updateItemCategory'
   | 'viewFile'
+  | 'loadSourceDocument'
   | 'removeFile'
   | 'analysisMessage'
   | 'progressMessage'
@@ -74,6 +77,7 @@ export function UploadPage({
   reviewItems,
   updateItemCategory,
   viewFile,
+  loadSourceDocument,
   removeFile,
   analysisMessage,
   progressMessage,
@@ -81,6 +85,17 @@ export function UploadPage({
   syncCount,
   job,
 }: Props) {
+  const [previewItem, setPreviewItem] = useState<UploadItem | null>(null);
+  const loadPreviewDocument = useCallback(async () => {
+    if (previewItem?.file && !previewItem.name.toLowerCase().endsWith('.docx')) {
+      return previewItem.file;
+    }
+    if (previewItem?.serverId) {
+      return loadSourceDocument(previewItem.serverId);
+    }
+    throw new Error('File belum tersedia untuk pratinjau.');
+  }, [previewItem, loadSourceDocument]);
+
   return (
     <section className="page-section" id="upload" hidden={active !== 'upload'}>
       <SectionHeading
@@ -302,7 +317,7 @@ export function UploadPage({
                               <button
                                 className="button button-soft button-sm"
                                 type="button"
-                                onClick={() => viewFile(item.file, item.serverId)}
+                                onClick={() => setPreviewItem(item)}
                                 aria-label={`Lihat ${item.name}`}
                               >
                                 <Eye size={16} aria-hidden="true" /> Lihat
@@ -381,6 +396,18 @@ export function UploadPage({
           </button>
         </div>
       </div>
+      {previewItem && (
+        <SourceDocumentViewer
+          documentId={previewItem.serverId ?? previewItem.id}
+          title={previewItem.name}
+          enableSearch={false}
+          enableMinimize={false}
+          showSubtitle={false}
+          loadDocument={loadPreviewDocument}
+          openExternal={() => viewFile(previewItem.file, previewItem.serverId)}
+          close={() => setPreviewItem(null)}
+        />
+      )}
     </section>
   );
 }

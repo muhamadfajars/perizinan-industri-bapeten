@@ -42,14 +42,16 @@ export function DashboardPage({
           </p>
         </div>
         <div className="hero-actions">
-          <button
-            className="button button-new-evaluation hero-button"
-            disabled={working || savingCategory}
-            onClick={() => resetDialog.current?.showModal()}
-          >
-            <RotateCcw size={17} aria-hidden="true" />
-            Mulai Evaluasi Baru
-          </button>
+          {(items.length > 0 || Boolean(result)) && (
+            <button
+              className="button button-new-evaluation hero-button"
+              disabled={working || savingCategory}
+              onClick={() => resetDialog.current?.showModal()}
+            >
+              <RotateCcw size={17} aria-hidden="true" />
+              Mulai Evaluasi Baru
+            </button>
+          )}
           <button className="button button-primary hero-button" onClick={() => goTo('upload')}>
             Upload Dokumen <ArrowRight size={17} />
           </button>

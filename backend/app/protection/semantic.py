@@ -173,7 +173,15 @@ def recover(task, pages, *, max_calls=3):
 def culture_fallback(pages, topics):
     if all(t["found"] for t in topics):
         return topics, []
-    evidence, warnings = recover("culture", pages)
+    from ..management.extraction import culture_sections
+
+    sections = culture_sections(pages)
+    if not sections:
+        return [
+            {**topic, "review_required": True}
+            for topic in topics
+        ], ["Bab/subbab khusus budaya keselamatan dan keamanan tidak ditemukan pada dokumen sumber."]
+    evidence, warnings = recover("culture", sections)
     result = []
     for topic, category in zip(topics, ("safety", "security")):
         found = topic["evidence"] or [e for e in evidence if e["category"] == category]
