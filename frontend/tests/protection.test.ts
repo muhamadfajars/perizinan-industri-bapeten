@@ -6,6 +6,7 @@ import {
   isManagementInformation,
   isSupportingInformation,
   personnelGroups,
+  splitRegulationTitle,
 } from '../src/lib/protectionDisplay.ts';
 import { administrationDocuments } from '../src/lib/presentation.ts';
 import type { MatchRow } from '../src/types/models.ts';
@@ -156,8 +157,41 @@ test('buildSectionTopicTabs organizes protection and management views for split 
     mgmtTabs.map((t) => [t.key, t.label, t.status, t.subtitle]),
     [
       ['perbandingan', 'Perbandingan Field', 'MATCH', '1/1 sesuai formulir'],
-      ['budaya', 'Budaya Keselamatan', 'REVIEW', '1/2 pokok bahasan'],
+      ['budaya', 'Budaya Keselamatan & Keamanan', 'REVIEW', 'Belum lengkap'],
       ['pengesahan', 'Lembar Pengesahan', 'INFO', 'Halaman ditemukan'],
     ],
   );
+});
+
+test('splitRegulationTitle separates compact law code from tentang subject', () => {
+  assert.deepEqual(
+    splitRegulationTitle('Dasar hukum: Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran'),
+    {
+      code: 'UU No. 10 Tahun 1997',
+      subject: 'tentang Ketenaganukliran',
+    },
+  );
+  assert.deepEqual(
+    splitRegulationTitle(
+      'Dasar hukum: Perba Nomor 1 Tahun 2026 tentang Sistem Proteksi Fisik Instalasi Nuklir dan Bahan Nuklir',
+    ),
+    {
+      code: 'Perba Nomor 1 Tahun 2026',
+      subject: 'tentang Sistem Proteksi Fisik Instalasi Nuklir dan Bahan Nuklir',
+    },
+  );
+  assert.deepEqual(
+    splitRegulationTitle(
+      'Dasar hukum: Perba Nomor 7 Tahun 2020 tentang Perubahan atas Peraturan BAPETEN Nomor 15 Tahun 2014 tentang Keselamatan Radiasi dalam Produksi Pesawat Sinar-X',
+    ),
+    {
+      code: 'Perba Nomor 7 Tahun 2020',
+      subject:
+        'tentang Perubahan atas Peraturan BAPETEN Nomor 15 Tahun 2014 tentang Keselamatan Radiasi dalam Produksi Pesawat Sinar-X',
+    },
+  );
+  assert.deepEqual(splitRegulationTitle('Dasar hukum: PP Nomor 5 Tahun 2021'), {
+    code: 'PP Nomor 5 Tahun 2021',
+    subject: '',
+  });
 });

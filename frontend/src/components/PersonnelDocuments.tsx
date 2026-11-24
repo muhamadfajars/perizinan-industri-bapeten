@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { ExternalLink, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Users } from 'lucide-react';
 import type { MatchRow, MatchSection, MatchStatus } from '../types/models';
 import { isPersonnelInformation } from '../lib/matching';
 import {
@@ -7,7 +7,7 @@ import {
   findDuplicatePersonnelTabIds,
   stripUploadTimestamp,
 } from '../lib/matchingDisplay';
-import { EvidenceStatus } from './EvidenceStatus';
+import { SourceActionButton } from './ProtectionEvidence';
 import { SourceDocumentViewer } from './SourceDocumentViewer';
 
 interface DocGroup {
@@ -290,23 +290,28 @@ export function PersonnelDocuments({
 
         {/* Informasi Pendukung (Field yang tidak dicocokkan dengan formulir, misal: Masa Berlaku, Pengesahan) */}
         {informationRows.length > 0 && (
-          <section className="protection-information" aria-label="Informasi Pendukung Dokumen">
-            <h3>Informasi Pendukung Dokumen</h3>
-            {informationRows.map((row) => (
-              <PersonnelEvidenceCard
-                key={row.id}
-                row={row}
-                documentId={row.document_id || activeGroup.documentId}
-                openSource={(documentId, page) =>
-                  setSource({
-                    documentId,
-                    title: `${activeGroup.headerTitle} — ${row.field}`,
-                    page,
-                  })
-                }
-              />
-            ))}
-          </section>
+          <div className="law-group law-group-personnel" aria-label="Informasi Pendukung Dokumen">
+            <div className="law-group-header">
+              <h4 className="law-group-title">Informasi Pendukung Dokumen</h4>
+              <span className="law-group-count">{informationRows.length} item</span>
+            </div>
+            <ul className="law-list">
+              {informationRows.map((row) => (
+                <PersonnelEvidenceCard
+                  key={row.id}
+                  row={row}
+                  documentId={row.document_id || activeGroup.documentId}
+                  openSource={(documentId, page) =>
+                    setSource({
+                      documentId,
+                      title: `${activeGroup.headerTitle} — ${row.field}`,
+                      page,
+                    })
+                  }
+                />
+              ))}
+            </ul>
+          </div>
         )}
       </section>
 
@@ -344,20 +349,16 @@ function PersonnelEvidenceCard({
 
   const review = Boolean(row.detail?.review_required || row.status === 'REVIEW');
   const found = pages.length > 0 && !row.observed?.startsWith('Belum');
+  const confirmed = found && !review;
   const periodItems = isPeriodePemakaian && found ? extractUsagePeriods(row) : [];
   const hideGenericPeriodNote =
     isPeriodePemakaian &&
     found &&
     !review &&
     row.note === 'Periode pemakaian ditampilkan sebagai informasi dokumen.';
-  const foundLabel = isPengesahan
-    ? 'Halaman pengesahan ditemukan'
-    : isMasaBerlaku
-      ? 'Masa berlaku teridentifikasi'
-      : 'Ditemukan';
 
   const defaultNote = isPengesahan
-    ? 'Periksa tanda tangan pada dokumen sumber.'
+    ? 'Periksa keberadaan tanda tangan pada dokumen sumber.'
     : isMasaBerlaku
       ? 'Pastikan masa berlaku dokumen masih aktif saat permohonan diajukan.'
       : undefined;
@@ -366,72 +367,80 @@ function PersonnelEvidenceCard({
   const targetPage = pages.length > 0 ? pages[pageIndex] : undefined;
 
   return (
-    <article className="protection-evidence protection-evidence-compact">
-      <h4>{row.field}</h4>
-      <EvidenceStatus found={found} review={review} foundLabel={foundLabel} />
+    <li className={`law-item ${confirmed ? '' : 'law-item-missing'}`.trim()}>
+      <span
+        className={`law-item-icon ${confirmed ? 'is-found' : 'is-missing'}`}
+        aria-hidden="true"
+      >
+        {confirmed ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />}
+      </span>
+      <div className="law-item-body">
+        <div className="law-item-head">
+          <span className="law-item-code">{row.field}</span>
+          {!confirmed && (
+            <span className="law-status-missing">
+              {review ? 'Perlu diperiksa' : 'Belum ditemukan'}
+            </span>
+          )}
+        </div>
 
-      {!isPengesahan &&
-        (periodItems.length > 0 ? (
-          <ul className="personnel-period-list">
-            {periodItems.map((item, idx) => (
-              <li key={`${item.page ?? 'p'}-${idx}`} className="personnel-period-item">
-                {item.page != null && <span className="personnel-period-page">Hal. {item.page}</span>}
-                <span className="personnel-period-value">{item.value}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          row.observed &&
-          row.observed !== '—' && (
-            <p className="protection-value" style={{ margin: '6px 0', fontWeight: 600 }}>
-              {row.observed}
-            </p>
-          )
-        ))}
+        {!isPengesahan &&
+          (periodItems.length > 0 ? (
+            <ul className="personnel-period-list">
+              {periodItems.map((item, idx) => (
+                <li key={`${item.page ?? 'p'}-${idx}`} className="personnel-period-item">
+                  {item.page != null && <span className="personnel-period-page">Hal. {item.page}</span>}
+                  <span className="personnel-period-value">{item.value}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            row.observed &&
+            row.observed !== '—' && <p className="law-item-value">{row.observed}</p>
+          ))}
 
-      {row.detail?.review_required && row.detail.review_reason && (
-        <p className="protection-note">{row.detail.review_reason}</p>
-      )}
+        {row.detail?.review_required && row.detail.review_reason && (
+          <p className="law-item-reason">{row.detail.review_reason}</p>
+        )}
 
-      {isPengesahan ? (
-        <p className="protection-note">{defaultNote}</p>
-      ) : !hideGenericPeriodNote &&
-        row.note &&
-        row.note !== row.observed &&
-        row.note !== row.detail?.review_reason ? (
-        <p className="protection-note">{row.note}</p>
-      ) : defaultNote ? (
-        <p className="protection-note">{defaultNote}</p>
-      ) : null}
+        {isPengesahan ? (
+          <p className="law-item-subject">{defaultNote}</p>
+        ) : !hideGenericPeriodNote &&
+          row.note &&
+          row.note !== row.observed &&
+          row.note !== row.detail?.review_reason ? (
+          <p className="law-item-subject">{row.note}</p>
+        ) : defaultNote ? (
+          <p className="law-item-subject">{defaultNote}</p>
+        ) : null}
 
-      <div className="protection-source">
-        {pages.length > 1 ? (
-          <div className="protection-page-control">
-            <label>
-              Halaman sumber{' '}
-              <select value={pageIndex} onChange={(e) => setPageIndex(Number(e.target.value))}>
+        {(pages.length > 0 || targetDocId) && (
+          <div className="law-item-actions">
+            {pages.length > 1 && (
+              <select
+                className="law-page-select"
+                aria-label={`Pilih halaman sumber ${row.field}`}
+                value={pageIndex}
+                onChange={(e) => setPageIndex(Number(e.target.value))}
+              >
                 {pages.map((p, i) => (
                   <option key={p} value={i}>
                     Halaman {p}
                   </option>
                 ))}
               </select>
-            </label>
+            )}
+            <SourceActionButton
+              documentId={targetDocId}
+              page={targetPage ?? 1}
+              found={confirmed}
+              hasPages={pages.length > 0}
+              multiPageLabel={pages.length > 1 ? 'Lihat halaman terpilih' : undefined}
+              onOpen={openSource}
+            />
           </div>
-        ) : pages.length === 1 ? (
-          <p className="protection-page-label">Halaman {pages[0]}</p>
-        ) : null}
-
-        {targetDocId && (
-          <button
-            type="button"
-            className="button button-source"
-            onClick={() => openSource(targetDocId, targetPage)}
-          >
-            <ExternalLink size={16} /> Lihat dokumen sumber
-          </button>
         )}
       </div>
-    </article>
+    </li>
   );
 }

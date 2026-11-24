@@ -423,6 +423,51 @@ class SemanticFallbackTests(unittest.TestCase):
         sem_public, _ = protection_fallback(public_conflict)
         self.assertTrue(sem_public["dose_review"])
 
+    @patch("app.protection.llm.request_records")
+    def test_llm_hourly_dose_rate_quote_still_requires_review(self, request):
+        quote = (
+            "Didesain agar laju dosis di area operator sangat rendah "
+            "(<2.5 Sv/jam atau disesuaikan dengan target pembatasan dosis tahunan)."
+        )
+        request.return_value = [{"page": 46, "category": "dose", "quote": quote}]
+        pages = [page(quote, 46)]
+        semantic, _ = protection_fallback(pages)
+        self.assertTrue(semantic["dose_review"])
+        row = next(
+            r
+            for r in build_rows("d", {}, pages, {}, semantic=semantic)
+            if r["field"] == "Pembatas Dosis"
+        )
+        self.assertTrue(row["detail"].get("review_required"))
+
+    @patch("app.protection.llm.request_records")
+    def test_active_fraction_nbd_with_parenthetical_spelling_preferred_over_konstruksi_table(
+        self, request
+    ):
+        table_row = (
+            "Tahapan Operasional Pembatas Dosis Konstruksi "
+            "Menggunakan pembatas dosis sebesar 3/10 Nilai Batas Dosis (6 mSv/tahun)."
+        )
+        active_stmt = (
+            "CV MULIA PERBAIKAN GARANSI saat ini berada pada Masa Operasi Tahap 1 (0–2 tahun), "
+            "sehingga pembatas dosis operasional yang digunakan adalah 3/10 (tiga per sepuluh) "
+            "dari Nilai Batas Dosis Pekerja Radiasi, yaitu 6 mSv/tahun sebagai target "
+            "pengendalian dan optimisasi paparan radiasi."
+        )
+        pages = [page(table_row + "\n" + active_stmt, 45)]
+        semantic, _ = protection_fallback(pages)
+        request.assert_not_called()
+        self.assertFalse(semantic.get("dose_review"))
+        row = next(
+            r
+            for r in build_rows("d", {}, pages, {}, semantic=semantic)
+            if r["field"] == "Pembatas Dosis"
+        )
+        self.assertFalse(row["detail"].get("review_required"))
+        quote = row["detail"]["evidence"][0]["quote"]
+        self.assertIn("saat ini berada pada Masa Operasi Tahap 1", quote)
+        self.assertNotIn("Konstruksi", quote)
+
 
 if __name__ == "__main__":
     unittest.main()

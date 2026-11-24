@@ -1147,6 +1147,262 @@ class ProtectionTests(unittest.TestCase):
         self.assertNotIn("identity", [c.args[0] for c in llm_mock.call_args_list])
         self.assertEqual(warns, [])
 
+    def test_zone_ranking_prefers_dedicated_section_and_zoning_diagram_caption(self):
+        pages = [
+            {
+                "page": 10,
+                "text": "1.5 Definisi\nDaerah Pengendalian : Daerah kerja khusus keselamatan radiasi.",
+                "method": "text",
+                "has_visual": False,
+            },
+            {
+                "page": 14,
+                "text": "Gambar 1. Struktur Organisasi\nPPR mengawasi akses ke Daerah Pengendalian dan Daerah Supervisi.",
+                "method": "text",
+                "has_visual": True,
+            },
+            {
+                "page": 24,
+                "text": "D. Prosedur Pengendalian Akses\nPenetapan Daerah Pengendalian membatasi akses personel.",
+                "method": "text",
+                "has_visual": False,
+            },
+            {
+                "page": 45,
+                "text": (
+                    "6.1 Desain Pembagian Daerah Kerja\n"
+                    "Daerah Pengendalian: area dengan potensi dosis di atas 6 mSv/tahun.\n"
+                    "Daerah Pengawasan (Supervised Area): dosis potensial 1 mSv hingga 6 mSv/tahun."
+                ),
+                "method": "text",
+                "has_visual": False,
+            },
+        ]
+        rows = information(
+            pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        ctrl = next(r for r in rows if r["field"] == "Daerah Pengendalian")
+        supv = next(r for r in rows if r["field"] == "Daerah Pengawasan / Supervisi")
+        self.assertEqual(ctrl["detail"]["pages"], [45])
+        self.assertEqual(supv["detail"]["pages"], [45])
+
+        diagram_pages = [
+            {
+                "page": 38,
+                "text": "Gambar 2. Denah Ruang Alat\nArea di sekitar ruang uji dan Daerah Pengendalian.",
+                "method": "text",
+                "has_visual": True,
+            },
+            {
+                "page": 41,
+                "text": "Gambar 3. Pembagian Daerah Kerja\nDaerah Pengendalian dan Daerah Supervisi fasilitas.",
+                "method": "text",
+                "has_visual": True,
+            },
+        ]
+        d_rows = information(
+            diagram_pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        d_ctrl = next(r for r in d_rows if r["field"] == "Daerah Pengendalian")
+        self.assertEqual(d_ctrl["detail"]["pages"][0], 41)
+
+    def test_other_laws_extract_tentang_subject_while_required_laws_stay_canonical(self):
+        pages = [
+            page(
+                "1.6 Dasar Hukum / Referensi\n"
+                "1. UU No. 10 Tahun 1997 tentang Tenaga Atom\n"
+                "2. Perka BAPETEN Nomor 4 Tahun 2013 tentang Proteksi dan Keselamatan Radiasi dalam Pemanfaatan Tenaga Nuklir, "
+                "serta Peraturan BAPETEN Nomor 6 Tahun 2023 tentang Sistem Manajemen Fasilitas dan Kegiatan Pemanfaatan Tenaga Nuklir.\n"
+                "g) Peraturan BAPETEN Nomor 1 Tahun 2026 tentang Sistem Proteksi Fisik Instalasi Nuklir dan\n"
+                "Bahan Nuklir: Rujukan terbaru untuk aspek keamanan.\n"
+                "Menggantikan PP No. 5 Tahun 2021, peraturan ini mengatur tentang tata cara perizinan.\n"
+                "3. Peraturan Pemerintah Nomor 33 Tahun 2007 tentang Keselamatan Radiasi Pengion dan Keamanan Sumber Radioaktif "
+                "(Lembaran Negara Republik Indonesia Tahun 2007 Nomor 74).\n"
+                "4. Peraturan BAPETEN Nomor 7 Tahun 2020 tentang Perubahan atas Peraturan BAPETEN Nomor 15 Tahun 2014 "
+                "tentang Keselamatan Radiasi dalam Produksi Pesawat Sinar-X.",
+                4,
+            ),
+            page(
+                "1.6 Referensi Lanjutan\n"
+                "2. Peraturan BAPETEN Nomor 8 Tahun 2019 tentang Keselamatan Radiasi dalam\n"
+                "Penggunaan Pesawat Sinar-X\n"
+                "Mengatur penyelenggaraan keselamatan radiasi di lapangan.\n"
+                "1. Peraturan BAPETEN Nomor 9 Tahun 2021 tentang Pemantauan Dosis Pekerja 2. Peraturan BAPETEN Nomor 10 Tahun 2022 tentang Klasifikasi Radiasi.",
+                5,
+            ),
+        ]
+        # Test page 4 and page 5 together via legal_section override so both pages are inspected cleanly.
+        rows = information(
+            pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": pages, "dose": []},
+        )
+        laws = [r for r in rows if r["detail"]["group"] == "Dasar hukum"]
+        by_field = {r["field"]: r for r in laws}
+
+        # Required law title remains canonical (hardcoded REQUIRED_LAW_TITLES), ignoring document's altered 'tentang Tenaga Atom'
+        self.assertIn("Dasar hukum: Undang-Undang Nomor 10 Tahun 1997 tentang Ketenaganukliran", by_field)
+        self.assertNotIn("Dasar hukum: Undang-Undang Nomor 10 Tahun 1997 tentang Tenaga Atom", by_field)
+
+        # Prose comma-separated pair
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 4 Tahun 2013 tentang Proteksi dan Keselamatan Radiasi dalam Pemanfaatan Tenaga Nuklir",
+            by_field,
+        )
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 6 Tahun 2023 tentang Sistem Manajemen Fasilitas dan Kegiatan Pemanfaatan Tenaga Nuklir",
+            by_field,
+        )
+        # Wrapped multi-line title with colon annotation
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 1 Tahun 2026 tentang Sistem Proteksi Fisik Instalasi Nuklir dan Bahan Nuklir",
+            by_field,
+        )
+        # Mention without direct 'tentang' after regulation keeps bare title
+        self.assertIn("Dasar hukum: PP Nomor 5 Tahun 2021", by_field)
+        self.assertFalse(any("tata cara perizinan" in k for k in by_field))
+        # Gazette parenthetical trimmed
+        self.assertIn(
+            "Dasar hukum: PP Nomor 33 Tahun 2007 tentang Keselamatan Radiasi Pengion dan Keamanan Sumber Radioaktif",
+            by_field,
+        )
+        # Amendment keeps full subject across inner regulation
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 7 Tahun 2020 tentang Perubahan atas Peraturan BAPETEN Nomor 15 Tahun 2014 tentang Keselamatan Radiasi dalam Produksi Pesawat Sinar-X",
+            by_field,
+        )
+        # Multi-line followed by unpunctuated explanatory prose stops before Mengatur
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 8 Tahun 2019 tentang Keselamatan Radiasi dalam Penggunaan Pesawat Sinar-X",
+            by_field,
+        )
+        # Same-line numbered items do not leave trailing item number
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 9 Tahun 2021 tentang Pemantauan Dosis Pekerja",
+            by_field,
+        )
+        self.assertIn(
+            "Dasar hukum: Perba Nomor 10 Tahun 2022 tentang Klasifikasi Radiasi",
+            by_field,
+        )
+
+    def test_approval_detects_iso_table_headings_and_reversed_signature_columns(self):
+        from app.protection.evidence import approval_evidence
+
+        # Case A: Page 1 has Catatan Revisi only; Page 2 has Catatan Pemeriksaan & Pengesahan Dokumen
+        pages_iso = [
+            page("Catatan Revisi:\nRev 00 | Naskah Awal | Tanggal", 1),
+            page(
+                "Catatan Pemeriksaan & Pengesahan Dokumen\n"
+                "Rev | Pengesahan | Nama & Jabatan | Tanda Tangan | Tanggal\n"
+                "03 | Pembuat | Rizki - QHSE | 10 Juli 2026\n"
+                "Pemeriksa | Sinta - GM of QHSE | 10 Juli 2026\n"
+                "Pengesah | Sinta - GM of QHSE | 10 Juli 2026",
+                2,
+            ),
+        ]
+        self.assertEqual([item["page"] for item in approval_evidence(pages_iso)], [2])
+
+        # Case B: Headingless approval table with Nama & Jabatan before Tanda Tangan and role nouns
+        pages_no_heading = [
+            page("Isi dokumen biasa", 1),
+            page(
+                "Rev | Pengesahan | Nama & Jabatan | Tanda Tangan | Tanggal\n"
+                "Pembuat | Budi | 10/07/2026\n"
+                "Pemeriksa | Sari | 10/07/2026\n"
+                "Pengesah | Andi - Direktur | 10/07/2026",
+                3,
+            ),
+        ]
+        self.assertEqual([item["page"] for item in approval_evidence(pages_no_heading)], [3])
+
+        # Case C: English ISO approval block
+        pages_en = [
+            page("Table of contents / Intro", 1),
+            page("Prepared by | Checked by | Approved by | Signature\nBudi | Sari | Andi", 4),
+        ]
+        self.assertEqual([item["page"] for item in approval_evidence(pages_en)], [4])
+
+        # Case D: Revision-only page with Pemohon/Penyetuju and no signature column must NOT trigger
+        pages_rev_only = [
+            page(
+                "REKAMAN REVISI DOKUMEN\n"
+                "No. Revisi | Hal | Perubahan Bab | Tanggal Berlaku | Versi | Pemohon | Penyetuju",
+                3,
+            ),
+        ]
+        self.assertEqual(approval_evidence(pages_rev_only), [])
+
+    def test_zone_option_a_uses_dedicated_subsection_when_diagram_omits_zone_label(self):
+        pages = [
+            {
+                "page": 10,
+                "text": "Gambar 3.1 Denah Ruang XRF dan Pembagian area kerja\nArea Pengendalian\nJarak 1 m",
+                "method": "text",
+                "has_visual": True,
+            },
+            {
+                "page": 12,
+                "text": (
+                    "3.2.1 Pembagian daerah kerja\n"
+                    "Terbagi atas Daerah Pengendalian dan Daerah Supervisi.\n"
+                    "3.2.1.1 Daerah Pengendalian\n"
+                    "Potensi paparan > 3/10 NBD pekerja radiasi."
+                ),
+                "method": "text",
+                "has_visual": False,
+            },
+            {
+                "page": 13,
+                "text": (
+                    "3.2.1.2 Daerah Supervisi\n"
+                    "Potensi paparan < 3/10 NBD pekerja radiasi; menandai dan membatasi Daerah Supervisi "
+                    "serta memasang tanda titik akses masuk."
+                ),
+                "method": "text",
+                "has_visual": False,
+            },
+        ]
+        rows = information(
+            pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        ctrl = next(r for r in rows if r["field"] == "Daerah Pengendalian")
+        supv = next(r for r in rows if r["field"] == "Daerah Pengawasan / Supervisi")
+        self.assertEqual(ctrl["detail"]["pages"], [10])
+        self.assertFalse(ctrl["detail"].get("review_required"))
+        self.assertEqual(supv["detail"]["pages"], [13])
+        self.assertFalse(supv["detail"].get("review_required"))
+
+        # Glossary definition must NOT override an unconfirmed diagram candidate
+        glossary_vs_diagram = [
+            {
+                "page": 5,
+                "text": "1.4 Definisi\nDaerah Supervisi\nDaerah Supervisi adalah daerah kerja dengan paparan rendah.",
+                "method": "text",
+                "has_visual": False,
+            },
+            {
+                "page": 10,
+                "text": "Gambar 3.1 Denah Ruang XRF dan Pembagian area kerja\nArea Pengendalian",
+                "method": "text",
+                "has_visual": True,
+            },
+        ]
+        g_rows = information(
+            glossary_vs_diagram,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        g_supv = next(r for r in g_rows if r["field"] == "Daerah Pengawasan / Supervisi")
+        self.assertEqual(g_supv["detail"]["pages"], [10])
+        self.assertTrue(g_supv["detail"].get("review_required"))
+
 
 if __name__ == "__main__":
     unittest.main()

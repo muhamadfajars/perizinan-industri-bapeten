@@ -10,7 +10,7 @@ _NBD_TERM_RE = re.compile(
     re.I,
 )
 _FRACTION_NBD_RE = re.compile(
-    r"(?:\b\d+\s*/\s*\d+|\b\d+(?:[.,]\d+)?\s*%|\bsetengah\b|\bseper\w+)\s*(?:dari\s+)?(?:nilai\s+batas\s+dosis|\bNBD\b)",
+    r"(?:\b\d+\s*/\s*\d+|\b\d+(?:[.,]\d+)?\s*%|\bsetengah\b|\bseper\w+)\s*(?:\([^()]{1,40}\)\s*)?(?:dari\s+)?(?:nilai\s+batas\s+dosis|\bNBD\b)",
     re.I,
 )
 _ABBREV_PREFIX_RE = re.compile(

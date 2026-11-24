@@ -265,28 +265,184 @@ def legal_section(pages):
     return _legal_prose_fallback(pages)
 
 
+_ZONE_HEADING_RE = re.compile(
+    r"(?m)^\s*(?:(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*|[A-Z]\.|[IVXLCDM]+\.)\s+)?"
+    r"(?:(?:desain|penetapan|klasifikasi|pengelompokan)\s+)?"
+    r"(?:pembagian|klasifikasi|penetapan|zonasi)\s+(?:daerah|area|zona)\s+(?:kerja|radiasi)\b",
+    re.I,
+)
+
+_TENTANG_START_RE = re.compile(
+    r"^[ \t]*(?:\n[ \t]*)?(?:\([^()\n]{1,35}\)[ \t]*)?(?:[,:-][ \t]*)?tentang\b[ \t]*(?:[:,-][ \t]*)?(?:\n[ \t]*)?",
+    re.I,
+)
+_AMENDMENT_PREFIX_RE = re.compile(r"\b(?:atas|terhadap|penetapan|pencabutan|pelaksanaan)\s+$", re.I)
+_TRAILING_NEXT_LAW_NOISE_RE = re.compile(
+    r"(?:"
+    r"(?:[.;:\n][ \t]*(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxlcdmIVXLCDM]+)[.)])"
+    r"|(?:[ \t\n]+(?:\d+(?:\.\d+)*[.)]|[a-z][.)]|[A-Z]\)|\(\d+\)|\([a-zA-Z]\)|[-•*▪●◦]))"
+    r"|(?:,\s*(?:(?i:dan|serta))?|\s+(?i:dan|serta))"
+    r")\s*$"
+)
+_NEW_BLOCK_LINE_RE = re.compile(
+    r"^(?:"
+    r"(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxlcdmIVXLCDM]+)[.)]\s+"
+    r"|\((?:\d+|[a-zA-Z])\)\s+"
+    r"|[-•*▪●◦–—]\s+"
+    r"|(?i:BAB)\s+(?:(?i:[IVXLCDM]+)|\d+)\b"
+    r"|(?i:Rujukan|Standar\s+Internasional|Dokumen\s+Internal|Manual\s+Book|Daftar\s+)"
+    r"|(?i:Page|Halaman|Hal\.?)\s*\d+"
+    r"|(?i:No\.?|Nomor|Rev(?:isi|ision)?|Date|Tanggal)\s*:"
+    r"|[:|]"
+    r")"
+)
+_EXPLANATORY_LINE_RE = re.compile(
+    r"^(?:Mengatur|Merupakan|Menjadi|Menetapkan|Memuat|Menjelaskan|Mencakup|Bertujuan|"
+    r"Digunakan|Berisi|Berlaku|Menggantikan|Diubah|Sebagaimana|Meliputi|Menyatakan|"
+    r"Memberikan|Peraturan\s+ini|Undang[\s-]*undang\s+ini|Ketentuan\s+ini|Keputusan\s+ini|"
+    r"Pedoman\s+ini|Sebagai\s+(?:pedoman|acuan|dasar|landasan|rujukan))\b(?:\s+[a-z]|[,:;])"
+)
+_DANGLING_CONNECTOR_RE = re.compile(
+    r"(?:\b(?:dan|atau|dan/atau|pada|dalam|di|ke|dari|untuk|tentang|atas|terhadap|serta|bagi|oleh|dengan|sektor|bidang|sebagai|menjadi)|[,-])\s*$",
+    re.I,
+)
+_INLINE_STOP_RE = re.compile(
+    r"(?:"
+    r"[;:|?!]"
+    r"|\s+[–—-]\s+"
+    r"|(?<!\bNo)(?<!\bTh)(?<!\bThn)(?<!\bUU)(?<!\bPP)(?<!\bPT)(?<!\bCV)(?<!\bRI)(?<!\bSt)(?<!\bdll)(?<!\bdsb)\.(?=\s|$)"
+    r"|\(\s*(?:Lembaran\s+Negara|Berita\s+Negara|Tambahan\s+Lembaran|LN\b|BN\b|TLN\b|sebagaimana\b|telah\s+(?:diubah|dicabut)|dicabut\b|diubah\b|menggantikan\b|terakhir\s+diubah)"
+    r"|,\s*(?:yang\s+(?:mengatur|memuat|menetapkan|menjadi|merupakan|berlaku|digunakan|mewajibkan|menjelaskan)|sebagaimana\b|(?:dan|serta)\s+(?:standar|pedoman|dokumen|peraturan|ketentuan|undang|keputusan|manual|rekomendasi|publikasi|iaea|icrp|iso)\b|antara\s+lain\b|meliputi\b|termasuk\b|peraturan\s+ini\b|dimana\b|di\s+mana\b)"
+    r"|\s+(?:Peraturan\s+ini|Undang[\s-]*undang\s+ini|Ketentuan\s+ini|Keputusan\s+ini|Pedoman\s+ini)\b"
+    r")",
+    re.I,
+)
+
+
+def _extract_law_subject(raw_text: str, matches: list, idx: int) -> str:
+    """Dynamically extract a regulation's 'tentang ...' subject from document text."""
+    match = matches[idx]
+    tail_start = match.end()
+    limit = min(len(raw_text), tail_start + 450)
+    cut_at_next_law = False
+    for nxt in matches[idx + 1 :]:
+        if nxt.start() >= limit:
+            break
+        if _AMENDMENT_PREFIX_RE.search(raw_text[tail_start : nxt.start()]):
+            continue
+        limit = nxt.start()
+        cut_at_next_law = True
+        break
+
+    tail = raw_text[tail_start:limit]
+    if cut_at_next_law:
+        for _ in range(3):
+            cleaned = _TRAILING_NEXT_LAW_NOISE_RE.sub("", tail)
+            if cleaned == tail:
+                break
+            tail = cleaned
+
+    tmatch = _TENTANG_START_RE.match(tail)
+    if not tmatch:
+        return ""
+    rest = tail[tmatch.end() :]
+    if rest.startswith("\n"):
+        return ""
+
+    kept = []
+    lines = rest.splitlines()
+    for li, line in enumerate(lines):
+        stripped = line.strip()
+        if li > 0:
+            if not stripped:
+                break
+            if _NEW_BLOCK_LINE_RE.match(stripped):
+                break
+            if li + 1 < len(lines) and lines[li + 1].lstrip().startswith(":"):
+                break
+            if kept and not _DANGLING_CONNECTOR_RE.search(kept[-1]) and _EXPLANATORY_LINE_RE.match(stripped):
+                break
+        stop = _INLINE_STOP_RE.search(stripped)
+        if stop:
+            part = stripped[: stop.start()].strip()
+            if part:
+                kept.append(part)
+            break
+        if stripped:
+            kept.append(stripped)
+
+    if not kept:
+        return ""
+    joined = ""
+    for part in kept:
+        if not joined:
+            joined = part
+        elif joined.endswith("-"):
+            joined += part
+        else:
+            joined += " " + part
+    body = re.sub(r"\s+", " ", joined).strip()
+    if cut_at_next_law:
+        body = re.sub(r"(?:,\s*(?:dan|serta)?|\s+(?:dan|serta))\s*$", "", body, flags=re.I).strip()
+    body = body.strip(" \t\r\n,;:.-–—")
+    if len(body) >= 2 and (
+        (body[0] == '"' and body[-1] == '"')
+        or (body[0] == "“" and body[-1] == "”")
+        or (body[0] == "'" and body[-1] == "'")
+    ):
+        body = body[1:-1].strip()
+    if body.count("(") > body.count(")"):
+        body = body[: body.rfind("(")].rstrip(" ,;:.-–—")
+    if len(body) > 240:
+        body = body[:240].rsplit(" ", 1)[0].rstrip(" ,;:.-–—")
+    if len(re.findall(r"[A-Za-z]", body)) < 3:
+        return ""
+    return f"tentang {body}"
+
+
+def _pick_best_law_subject(candidates: list[str]) -> str:
+    """Choose the fullest dynamically extracted regulation subject."""
+    if not candidates:
+        return ""
+    return max(candidates, key=lambda s: (len(s), -candidates.index(s)))
+
+
 def information(pages, make_row, *, semantic=None):
     from .dose import dose_statements
 
     semantic = semantic or {}
+    page_by_num = {p["page"]: p for p in pages}
     laws = {}
+    law_subjects = {}
     reference_pages = semantic.get("legal_sections", legal_section(pages))
     for page in reference_pages:
         if toc(page["text"]):
             continue
-        text = compact(page["text"])
-        for match in LAW.finditer(text):
-            laws.setdefault(law_key(*match.groups()), []).append(
+        raw_text = str(page["text"] or "").replace("\r\n", "\n").replace("\r", "\n")
+        matches = list(LAW.finditer(raw_text))
+        for idx, match in enumerate(matches):
+            key = law_key(*match.groups())
+            quote = compact(raw_text[match.start() : match.end() + 300])[: len(compact(match.group(0))) + 220]
+            laws.setdefault(key, []).append(
                 {
                     "page": page["page"],
-                    "quote": text[match.start() : match.end() + 220],
+                    "quote": quote,
                     "method": page.get("method", "text"),
                 }
             )
+            if key not in REQUIRED_LAWS:
+                subject = _extract_law_subject(raw_text, matches, idx)
+                if subject:
+                    law_subjects.setdefault(key, []).append(subject)
     rows = []
     for key in [*REQUIRED_LAWS, *(k for k in laws if k not in REQUIRED_LAWS)]:
         found = laws.get(key, [])
-        title = REQUIRED_LAW_TITLES.get(key, f"{key[0]} Nomor {key[1]} Tahun {key[2]}")
+        if key in REQUIRED_LAWS:
+            title = REQUIRED_LAW_TITLES[key]
+        else:
+            base_title = f"{key[0]} Nomor {key[1]} Tahun {key[2]}"
+            subject = _pick_best_law_subject(law_subjects.get(key, []))
+            title = f"{base_title} {subject}" if subject else base_title
         note = (
             "Tercantum pada bagian Dasar Hukum / Referensi."
             if found
@@ -327,6 +483,63 @@ def information(pages, make_row, *, semantic=None):
         confirmed = []
         text_only_fallback = False
         if visual:
+            specific_subheading_re = re.compile(
+                rf"(?im)^\s*(?:(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*[.)]?|[A-Za-z][.)]|[IVXLCDM]+[.)])\s+)?"
+                rf"(?:{pattern})(?:\s*\([^)\n]{{1,40}}\))?\s*:?\s*$"
+            )
+
+            def _zone_meta(item):
+                ptext = page_by_num.get(item["page"], {}).get("text", "")
+                has_zone_heading = bool(_ZONE_HEADING_RE.search(ptext))
+                is_glossary_heading = not has_zone_heading and bool(
+                    re.search(
+                        r"(?m)^\s*(?:\d+(?:\.\d+)*[.)]?\s+)?(?:definisi|daftar\s+istilah|pengertian|singkatan)\b",
+                        ptext,
+                        re.I,
+                    )
+                )
+                has_specific_subheading = not is_glossary_heading and bool(
+                    specific_subheading_re.search(ptext)
+                )
+                is_glossary = not has_zone_heading and bool(
+                    (
+                        re.search(
+                            r"^\s*(?:adalah|merupakan)\b|\b(?:pengertian|definisi|daftar\s+istilah|singkatan)\b",
+                            item["quote"],
+                            re.I,
+                        )
+                        or is_glossary_heading
+                    )
+                    and not re.search(
+                        r"mSv|µSv|uSv|\d/\d+\s*NBD|pembagian\s+daerah",
+                        item["quote"],
+                        re.I,
+                    )
+                )
+                has_detail = bool(
+                    re.search(
+                        r"pembagian\s+daerah|klasifikasi\s+daerah|penetapan\s+daerah|laju\s+dosis|ambang|NBD|mSv|µSv|uSv|Sv|tanda\s+radiasi|tanda\s+(?:peringatan|titik\s+akses|bahaya)|trefoil|akses|pembatas|membatasi|menandai",
+                        item["quote"],
+                        re.I,
+                    )
+                )
+                return has_specific_subheading, has_zone_heading, is_glossary, has_detail
+
+            def _zone_rank(item):
+                has_specific_subheading, has_zone_heading, is_glossary, has_detail = _zone_meta(item)
+                return (
+                    not has_specific_subheading,
+                    not has_zone_heading,
+                    is_glossary,
+                    not has_detail,
+                    not item.get("has_visual"),
+                    item["page"],
+                )
+
+            def _is_dedicated_zone_text(item):
+                has_specific_subheading, has_zone_heading, is_glossary, has_detail = _zone_meta(item)
+                return not is_glossary and has_detail and (has_specific_subheading or has_zone_heading)
+
             zone_by_page = {item["page"]: item["quote"] for item in text_zones}
             diagrams = snippets(
                 pages,
@@ -347,41 +560,46 @@ def information(pages, make_row, *, semantic=None):
                     )
                     confirmed_pages.add(item["page"])
             if confirmed:
+                confirmed.sort(
+                    key=lambda item: (
+                        not re.search(
+                            r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:Pembagian\s+(?:Daerah|Area|Zona)\s+Kerja|Zonasi)|pembagian\s+(?:daerah|area|zona)\s+kerja",
+                            page_by_num.get(item["page"], {}).get("text", item["quote"]),
+                            re.I,
+                        ),
+                        not re.search(
+                            pattern,
+                            page_by_num.get(item["page"], {}).get("text", item["quote"]),
+                            re.I,
+                        ),
+                        item["page"],
+                    )
+                )
                 for item in candidates:
                     if item["page"] not in confirmed_pages and (item["page"] - 1) in confirmed_pages:
                         confirmed.append(item)
                         confirmed_pages.add(item["page"])
-            found = confirmed or candidates
+            if confirmed:
+                found = confirmed
+            elif candidates:
+                # Opsi A: if an unlabeled diagram omits this zone, prefer a dedicated subsection if present.
+                dedicated_text_zones = [item for item in text_zones if _is_dedicated_zone_text(item)]
+                if dedicated_text_zones:
+                    found = sorted(dedicated_text_zones, key=_zone_rank)[:1]
+                    text_only_fallback = True
+                else:
+                    found = candidates
+            else:
+                found = []
             if not found and text_zones:
                 text_only_fallback = True
-                ranked_zones = sorted(
-                    text_zones,
-                    key=lambda item: (
-                        not item.get("has_visual"),
-                        not re.search(
-                            r"pembagian\s+daerah|klasifikasi\s+daerah|penetapan\s+daerah|laju\s+dosis|ambang|NBD|mSv|µSv|uSv|Sv|tanda\s+radiasi|trefoil|akses|pembatas",
-                            item["quote"],
-                            re.I,
-                        ),
-                        bool(
-                            re.search(
-                                r"^\s*(?:adalah|merupakan)\b|\b(?:pengertian|definisi|daftar\s+istilah|singkatan)\b",
-                                item["quote"],
-                                re.I,
-                            )
-                            and not re.search(
-                                r"mSv|µSv|uSv|\d/\d+\s*NBD|pembagian\s+daerah",
-                                item["quote"],
-                                re.I,
-                            )
-                        ),
-                        item["page"],
-                    ),
-                )
-                found = ranked_zones[:3]
+                ranked_zones = sorted(text_zones, key=_zone_rank)
+                found = ranked_zones[:1]
                 found_pages = {item["page"] for item in found}
-                anchor_pages = {item["page"] for item in ranked_zones[:2]}
+                anchor_pages = {ranked_zones[0]["page"]}
                 for p in pages:
+                    if len(found) >= 2:
+                        break
                     if not p.get("has_visual") or p["page"] <= 2 or p["page"] in found_pages or toc(p["text"]):
                         continue
                     ptext = p["text"]
@@ -408,7 +626,7 @@ def information(pages, make_row, *, semantic=None):
                         quote = compact(ptext)[:240] or "Lampiran gambar/denah fasilitas"
                         found.append({"page": p["page"], "quote": quote, "has_visual": True})
                         found_pages.add(p["page"])
-                        if len(found) >= 5:
+                        if len(found) >= 2:
                             break
         if not visual and not semantic.get("dose_review"):
             found = found[:1]
@@ -463,18 +681,45 @@ def approval_evidence(pages):
         if toc(text):
             continue
         sheet_match = re.search(
-            r"(?im)^\s*(?:(?:\d+(?:\.\d+)*[.)]?|[A-Z][.)])\s+)?(?:lembar|halaman)\s+pengesahan\b[^\n]{0,40}$",
+            r"(?im)^\s*(?:(?:\d+(?:\.\d+)*[.)]?|[A-Z][.)])\s+)?"
+            r"(?:"
+            r"(?:lembar|halaman|catatan|daftar|tabel|kolom|form(?:ulir)?)\s+"
+            r"(?:(?:pemeriksaan|tinjauan|review|persetujuan|pengendalian)\s*(?:&|dan|/)\s*)*"
+            r"(?:pengesahan|persetujuan)\b[^\n]{0,45}$"
+            r"|(?:(?:pemeriksaan|tinjauan|persetujuan)\s*(?:&|dan|/)\s*)?"
+            r"(?:pengesahan|persetujuan)\s+(?:dokumen|program|prosedur|sistem\s+manajemen)\b[^\n]{0,40}$"
+            r"|(?:document\s+)?(?:review\s*(?:&|and)\s*)?(?:approval|sign[\s-]*off|authorization)"
+            r"(?:\s+(?:sheet|page|record|table))?\s*$"
+            r")",
             raw_text,
         )
         has_sheet_heading = bool(sheet_match) and not re.search(
-            r"\b(?:dalam|pada|di|bagian|revisi|perubahan)\s+(?:lembar|halaman)\s+pengesahan\b",
+            r"\b(?:dalam|pada|di|bagian|revisi|perubahan|lihat|sesuai|tercantum)\s+"
+            r"(?:lembar|halaman|catatan)\s+(?:pengesahan|persetujuan)\b",
             sheet_match.group(0),
             re.I,
         )
-        has_sig_block = bool(
+        has_approval_role_cue = bool(
             re.search(
-                r"(?:disetujui|disahkan|mengetahui|ditetapkan)\s+oleh\b.*?(?:nama|jabatan|direktur|director|pimpinan|kepala|manajer|manager|pemegang\s+izin|penanggung\s+jawab)"
-                r"|tanda\s+tangan.*?(?:nama|jabatan)",
+                r"\b(?:pengesahan|persetujuan|pembuat|penyusun|pemeriksa|peninjau|pengesah|penyetuju|"
+                r"dibuat|disusun|diperiksa|disetujui|disahkan|mengetahui|ditetapkan|direktur|director|"
+                r"pimpinan|manajer|manager|gm|pemegang\s+izin|penanggung\s+jawab|"
+                r"prepared\s+by|checked\s+by|reviewed\s+by|approved\s+by|authorized\s+by)\b",
+                text,
+                re.I,
+            )
+        )
+        has_sig_marker = bool(
+            re.search(r"\b(?:tanda\s+tangan\b|paraf\b|ttd\b\.?|signature\b)", text, re.I)
+        )
+        is_revision_only_page = (
+            bool(re.search(r"(?im)^\s*(?:rekaman|catatan|riwayat|daftar|tabel)\s+revisi\b", raw_text))
+            and not has_sig_marker
+            and not has_sheet_heading
+        )
+        has_passive_oleh_block = bool(
+            re.search(
+                r"(?:disetujui|disahkan|mengetahui|ditetapkan)\s+oleh\b.*?(?:nama|jabatan|direktur|director|pimpinan|kepala|manajer|manager|pemegang\s+izin|penanggung\s+jawab)",
                 text,
                 re.I,
             )
@@ -483,6 +728,34 @@ def approval_evidence(pages):
                 and re.search(r"(?:disetujui|disahkan|mengetahui|ditetapkan)\s+oleh\b", text, re.I)
             )
         )
+        has_bidirectional_sig_header = bool(
+            re.search(r"tanda\s+tangan.{0,120}(?:nama|jabatan)", text, re.I)
+            or (
+                has_approval_role_cue
+                and re.search(r"(?:nama|jabatan).{0,80}tanda\s+tangan", text, re.I)
+            )
+        )
+        has_role_table_block = not is_revision_only_page and bool(
+            (
+                re.search(r"\b(?:pembuat|penyusun|pemeriksa|peninjau)\b", text, re.I)
+                and re.search(r"\b(?:pengesah|penyetuju)\b", text, re.I)
+                and (has_sig_marker or re.search(r"\b(?:nama|jabatan|pengesahan|persetujuan)\b", text, re.I))
+            )
+            or (
+                re.search(r"\b(?:prepared|drafted|checked|reviewed|verified)\s+by\b", text, re.I)
+                and re.search(r"\b(?:approved|authorized)\s+by\b", text, re.I)
+            )
+            or (
+                re.search(r"\b(?:dibuat|disusun|diperiksa|pembuat|penyusun|pemeriksa)\b", text, re.I)
+                and re.search(
+                    r"\b(?:disetujui|disahkan|mengetahui|ditetapkan|pengesah|penyetuju)\b",
+                    text,
+                    re.I,
+                )
+                and has_sig_marker
+            )
+        )
+        has_sig_block = has_passive_oleh_block or has_bidirectional_sig_header or has_role_table_block
         has_fallback = bool(
             re.search(
                 r"(?<!dalam\s)(?<!pada\s)\blembar\s+pengesahan\b"
@@ -499,6 +772,6 @@ def approval_evidence(pages):
             tier = 2
         else:
             continue
-        approval.append({"page": page["page"], "quote": text[:1800], "tier": tier})
-    approval.sort(key=lambda item: (item["tier"], item["page"]))
+        approval.append({"page": page["page"], "quote": text[:1800], "tier": tier, "has_sig": has_sig_block})
+    approval.sort(key=lambda item: (item["tier"], not item["has_sig"], item["page"]))
     return [{"page": item["page"], "quote": item["quote"]} for item in approval[:1]]

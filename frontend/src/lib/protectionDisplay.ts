@@ -108,6 +108,13 @@ export function regulationDisplayTitle(field: string): string {
     .replace(/^Peraturan (?:Badan Pengawas Tenaga Nuklir|BAPETEN) Nomor /, 'Perba No. ');
 }
 
+export function splitRegulationTitle(field: string): { code: string; subject: string } {
+  const title = regulationDisplayTitle(field).trim();
+  const match = title.match(/^(.*?)\s+(tentang\s+.+)$/i);
+  if (!match) return { code: title, subject: '' };
+  return { code: match[1].trim(), subject: match[2].trim() };
+}
+
 export function isManagementInformation(row: MatchRow): boolean {
   return row.detail?.type === 'management' && ['Pengesahan', 'Budaya'].includes(row.detail.group ?? '');
 }
@@ -227,7 +234,7 @@ export function buildSectionTopicTabs(
     {
       key: 'budaya',
       group: 'Budaya',
-      label: 'Budaya Keselamatan',
+      label: 'Budaya Keselamatan & Keamanan',
       headerTitle: 'Budaya Keselamatan dan Keamanan',
     },
     {
@@ -246,8 +253,12 @@ export function buildSectionTopicTabs(
       groupRows.some((r) => r.detail?.review_required || r.status === 'REVIEW');
     const firstTopics = groupRows[0]?.detail?.topics;
     const subtitle =
-      def.key === 'budaya' && firstTopics?.length
-        ? `${firstTopics.filter((t) => t.found).length}/${firstTopics.length} pokok bahasan`
+      def.key === 'budaya'
+        ? foundCount === 1 && !hasReview
+          ? 'Ditemukan'
+          : firstTopics?.some((t) => t.found)
+            ? 'Belum lengkap'
+            : 'Belum ditemukan'
         : groupRows.length === 1
           ? foundCount === 1
             ? 'Halaman ditemukan'

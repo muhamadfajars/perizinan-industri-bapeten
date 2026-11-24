@@ -48,7 +48,8 @@ TASKS = {
         "Jika dokumen hanya menyebut satu ketetapan pembatas dosis operasional tanpa tahapan berbeda, "
         "pilih pernyataan tersebut. Penetapan terpisah untuk pekerja radiasi dan anggota masyarakat "
         "dalam satu atau dua pernyataan bukan merupakan konflik. Bukan Nilai Batas Dosis umum, dosis terukur, "
-        "target konstruksi atau rencana masa depan. Harus jelas angka, satuan dan kaitannya dengan pembatas dosis operasional. "
+        "laju dosis per jam (seperti µSv/jam atau Sv/jam) pada desain perisai/area kerja, target konstruksi atau "
+        "rencana masa depan. Harus jelas angka, satuan dan kaitannya dengan pembatas dosis operasional. "
         "Jika ada beberapa tahapan dan tahap aktif tidak dapat ditentukan, records kosong. Jika ada dua pernyataan aktif "
         "yang bertentangan, keluarkan keduanya; jangan menyelesaikan konflik sendiri. "
         "category dose; quote kalimat utuh maksimal 1800 karakter. Jangan menghitung angka baru.",
@@ -345,8 +346,11 @@ def protection_fallback(pages):
         fatal_notes = [n for n in notes if "belum selesai" in n or "terlalu panjang" in n]
         unique_evidence = {e["quote"] for e in evidence}
         unique_active = {e["quote"] for e in active}
+        evidence_has_annual_constraint = bool(evidence) and all(
+            _annual_constraint_values(e["quote"]) for e in evidence
+        )
         resolved_by_llm = (
-            bool(evidence)
+            evidence_has_annual_constraint
             and not fatal_notes
             and (len(unique_evidence) == 1 or _is_unambiguous_operational_dose(evidence))
         )

@@ -232,7 +232,7 @@ export function MatchingSection({
                     const radius = 26;
                     const circumference = 2 * Math.PI * radius;
                     const dashOffset = circumference - (pct / 100) * circumference;
-                    const tone = pct >= 80 ? 'green' : pct >= 50 ? 'amber' : 'red';
+                    const tone = pct >= 80 ? 'green' : pct >= 20 ? 'amber' : 'red';
                     return (
                       <div className={`matching-summary-ring tone-${tone}`} aria-hidden="true">
                         <svg viewBox="0 0 64 64">
