@@ -1403,6 +1403,62 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(g_supv["detail"]["pages"], [10])
         self.assertTrue(g_supv["detail"].get("review_required"))
 
+    def test_zone_handles_radiasi_diagram_numbered_heading_trailing_dot_and_duty_bullet(self):
+        # 1. Diagram captioned "Gambar 7. Pembagian daerah radiasi" with page 17 context and page 9 duty bullet
+        pages_with_diagram = [
+            page("II.2 Tugas PPR\n10) Melakukan kendali akses di Daerah Pengendalian.", 9),
+            page(
+                "2. Pembagian Daerah Radiasi\n"
+                "Pengusaha instalasi harus membagi daerah kerja menjadi:\n"
+                "1) Daerah Pengawasan\n"
+                "Daerah Pengawasan memungkinkan pekerja menerima > 1 mSv/tahun hingga 6 mSv/tahun.\n"
+                "2) Daerah Pengendalian.\n"
+                "Daerah Pengendalian memungkinkan pekerja menerima > 6 mSv/tahun atau 3 µSv/jam.",
+                17,
+            ),
+            page(
+                "Batas daerah Pengendalian 6 mSv/Tahun atau 3 µSv/jam\n"
+                "Gambar 7. Pembagian daerah radiasi",
+                18,
+            ),
+        ]
+        rows = information(
+            pages_with_diagram,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        ctrl = next(r for r in rows if r["field"] == "Daerah Pengendalian")
+        supv = next(r for r in rows if r["field"] == "Daerah Pengawasan / Supervisi")
+        self.assertEqual(ctrl["detail"]["pages"], [18])
+        self.assertEqual(supv["detail"]["pages"], [18])
+        self.assertFalse(ctrl["detail"].get("review_required"))
+        self.assertFalse(supv["detail"].get("review_required"))
+
+        # 2. Text-only fallback (no diagram): page 17 numbered heading + trailing dot beats page 9 duty bullet
+        text_only_pages = pages_with_diagram[:2]
+        t_rows = information(
+            text_only_pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        t_ctrl = next(r for r in t_rows if r["field"] == "Daerah Pengendalian")
+        t_supv = next(r for r in t_rows if r["field"] == "Daerah Pengawasan / Supervisi")
+        self.assertEqual(t_ctrl["detail"]["pages"][0], 17)
+        self.assertEqual(t_supv["detail"]["pages"][0], 17)
+
+        # 3. Headingless prose tie-break: quantitative description beats duty bullet mentioning "akses"
+        headingless_pages = [
+            page("10) Melakukan kendali akses di Daerah Pengendalian.", 9),
+            page("Daerah Pengendalian memiliki potensi paparan lebih dari 6 mSv/tahun.", 15),
+        ]
+        h_rows = information(
+            headingless_pages,
+            lambda *args, **kwargs: make_row("d", *args, **kwargs),
+            semantic={"legal_sections": [], "dose": []},
+        )
+        h_ctrl = next(r for r in h_rows if r["field"] == "Daerah Pengendalian")
+        self.assertEqual(h_ctrl["detail"]["pages"][0], 15)
+
 
 if __name__ == "__main__":
     unittest.main()

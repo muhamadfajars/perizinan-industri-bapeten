@@ -87,3 +87,9 @@ export function extractUsagePeriods(row: MatchRow): { page?: number; value: stri
     value,
   }));
 }
+
+export function summaryRingTone(pct: number): 'green' | 'amber' | 'red' {
+  if (pct > 70) return 'green';
+  if (pct >= 20) return 'amber';
+  return 'red';
+}

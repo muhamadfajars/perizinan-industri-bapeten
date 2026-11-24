@@ -266,7 +266,7 @@ def legal_section(pages):
 
 
 _ZONE_HEADING_RE = re.compile(
-    r"(?m)^\s*(?:(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*|[A-Z]\.|[IVXLCDM]+\.)\s+)?"
+    r"(?m)^\s*(?:(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*[.)]?|[A-Za-z][.)]|[IVXLCDM]+[.)])\s+)?"
     r"(?:(?:desain|penetapan|klasifikasi|pengelompokan)\s+)?"
     r"(?:pembagian|klasifikasi|penetapan|zonasi)\s+(?:daerah|area|zona)\s+(?:kerja|radiasi)\b",
     re.I,
@@ -485,7 +485,7 @@ def information(pages, make_row, *, semantic=None):
         if visual:
             specific_subheading_re = re.compile(
                 rf"(?im)^\s*(?:(?:BAB\s+[IVXLCDM\d]+|\d+(?:\.\d+)*[.)]?|[A-Za-z][.)]|[IVXLCDM]+[.)])\s+)?"
-                rf"(?:{pattern})(?:\s*\([^)\n]{{1,40}}\))?\s*:?\s*$"
+                rf"(?:{pattern})(?:\s*\([^)\n]{{1,40}}\))?\s*[:.]?\s*$"
             )
 
             def _zone_meta(item):
@@ -511,39 +511,51 @@ def information(pages, make_row, *, semantic=None):
                         or is_glossary_heading
                     )
                     and not re.search(
-                        r"mSv|µSv|uSv|\d/\d+\s*NBD|pembagian\s+daerah",
+                        r"mSv|[µμu\uf06d]Sv|\d/\d+\s*NBD|pembagian\s+daerah",
                         item["quote"],
                         re.I,
                     )
                 )
-                has_detail = bool(
+                has_strong_detail = bool(
                     re.search(
-                        r"pembagian\s+daerah|klasifikasi\s+daerah|penetapan\s+daerah|laju\s+dosis|ambang|NBD|mSv|µSv|uSv|Sv|tanda\s+radiasi|tanda\s+(?:peringatan|titik\s+akses|bahaya)|trefoil|akses|pembatas|membatasi|menandai",
+                        r"pembagian\s+(?:daerah|area|zona)|klasifikasi\s+(?:daerah|area|zona)|penetapan\s+(?:daerah|area|zona)|laju\s+dosis|ambang|\bNBD\b|mSv|[µμu\uf06d]Sv|\b\d+(?:[.,]\d+)?\s*Sv\b",
                         item["quote"],
                         re.I,
                     )
                 )
-                return has_specific_subheading, has_zone_heading, is_glossary, has_detail
+                has_detail = has_strong_detail or bool(
+                    re.search(
+                        r"tanda\s+radiasi|tanda\s+(?:peringatan|titik\s+akses|bahaya)|trefoil|akses|pembatas|membatasi|menandai",
+                        item["quote"],
+                        re.I,
+                    )
+                )
+                return has_specific_subheading, has_zone_heading, is_glossary, has_strong_detail, has_detail
 
             def _zone_rank(item):
-                has_specific_subheading, has_zone_heading, is_glossary, has_detail = _zone_meta(item)
+                has_specific_subheading, has_zone_heading, is_glossary, has_strong_detail, has_detail = _zone_meta(
+                    item
+                )
                 return (
                     not has_specific_subheading,
                     not has_zone_heading,
                     is_glossary,
+                    not has_strong_detail,
                     not has_detail,
                     not item.get("has_visual"),
                     item["page"],
                 )
 
             def _is_dedicated_zone_text(item):
-                has_specific_subheading, has_zone_heading, is_glossary, has_detail = _zone_meta(item)
+                has_specific_subheading, has_zone_heading, is_glossary, _has_strong_detail, has_detail = _zone_meta(
+                    item
+                )
                 return not is_glossary and has_detail and (has_specific_subheading or has_zone_heading)
 
             zone_by_page = {item["page"]: item["quote"] for item in text_zones}
             diagrams = snippets(
                 pages,
-                r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:Pembagian\s+(?:Daerah|Area|Zona)\s+Kerja|(?:Daerah|Area|Zona|Zonasi)\s+(?:Pengendalian|Supervisi|Pengawasan|Kerja|Radiasi))|\b(?:Denah|Layout)\s+(?:Ruang(?:an)?|Fasilitas\s+Radiasi|Area\s+Kerja)\b",
+                r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:(?:Pembagian|Klasifikasi|Zonasi)\s+(?:Daerah|Area|Zona)\s+(?:Kerja|Radiasi)|(?:Daerah|Area|Zona|Zonasi)\s+(?:Pengendalian|Supervisi|Pengawasan|Kerja|Radiasi))|\b(?:Denah|Layout)\s+(?:Ruang(?:an)?|Fasilitas\s+Radiasi|Area\s+Kerja)\b",
             )
             candidates = [item for item in diagrams if item["has_visual"]]
             # A generic floor plan is a candidate, unless the diagram page or immediate context confirms this zone.
@@ -563,7 +575,7 @@ def information(pages, make_row, *, semantic=None):
                 confirmed.sort(
                     key=lambda item: (
                         not re.search(
-                            r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:Pembagian\s+(?:Daerah|Area|Zona)\s+Kerja|Zonasi)|pembagian\s+(?:daerah|area|zona)\s+kerja",
+                            r"(?:Gambar|Denah|Layout|Peta|Sketsa)\s*(?:[A-Z0-9.-]+[.\s:]+)?(?:(?:Pembagian|Klasifikasi|Zonasi)\s+(?:Daerah|Area|Zona)\s+(?:Kerja|Radiasi)|Zonasi)|(?:pembagian|klasifikasi)\s+(?:daerah|area|zona)\s+(?:kerja|radiasi)",
                             page_by_num.get(item["page"], {}).get("text", item["quote"]),
                             re.I,
                         ),
