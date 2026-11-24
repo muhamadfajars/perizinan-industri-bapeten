@@ -260,6 +260,39 @@ class ManagementTests(unittest.TestCase):
         # Different trailing digit without separator must remain MISMATCH 0%
         self.assertEqual(compare("HSE_GDL_009", "HSE_GDL_0091", "number")[:2], ("MISMATCH", 0))
 
+    def test_culture_targets_chapter_start_page_when_evidence_found(self):
+        doc_pages = [
+            page("DAFTAR ISI\nBAB I BUDAYA KESELAMATAN DAN BUDAYA KEAMANAN ........ 3", 2),
+            page(
+                "BAB I\nBUDAYA KESELAMATAN DAN BUDAYA KEAMANAN\n"
+                "A. UMUM\n1.1. LATAR BELAKANG\n"
+                "Pemanfaatan pesawat sinar-X portabel untuk analisis material dilakukan secara terkendali.",
+                3,
+            ),
+            page("Lanjutan latar belakang dan dasar peraturan perusahaan.", 4),
+            page(
+                "Budaya keselamatan dan budaya keamanan merupakan prioritas perusahaan yang diwujudkan melalui "
+                "pelatihan pekerja radiasi secara berkala, pelaporan insiden tanpa rasa takut akan sanksi, "
+                "pembelajaran dari setiap kejadian, evaluasi berkesinambungan terhadap prosedur operasional, "
+                "serta pengendalian akses dan pengamanan seluruh fasilitas sumber radiasi pengion secara ketat setiap hari.",
+                5,
+            ),
+        ]
+        rows = build_rows("d", {}, doc_pages, [])
+        culture = next(r for r in rows if r["field"] == "Budaya Keselamatan dan Keamanan")
+        self.assertEqual(culture["observed"], "Ditemukan")
+        self.assertEqual(culture["page"], 3)
+        self.assertEqual(culture["detail"]["pages"][0], 3)
+
+        # Empty culture chapter heading without explanation must stay Belum ditemukan with no pages
+        empty_heading_pages = [
+            page("BAB I\nBUDAYA KESELAMATAN DAN BUDAYA KEAMANAN\nA. UMUM\n1.1. LATAR BELAKANG\nTeks alat saja.", 3)
+        ]
+        empty_rows = build_rows("d", {}, empty_heading_pages, [])
+        empty_culture = next(r for r in empty_rows if r["field"] == "Budaya Keselamatan dan Keamanan")
+        self.assertEqual(empty_culture["observed"], "Belum ditemukan")
+        self.assertEqual(empty_culture["detail"]["pages"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

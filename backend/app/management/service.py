@@ -6,7 +6,7 @@ from ..protection.extraction import metadata, norm
 from ..protection.matching import choose
 from ..protection.service import make_row, mark_unread_information
 from ..protection.evidence import approval_evidence
-from .extraction import identities, culture_evidence
+from .extraction import identities, culture_evidence, culture_sections
 
 
 def build_rows(document_id, application, pages, records, *, topics=None):
@@ -69,6 +69,15 @@ def build_rows(document_id, application, pages, records, *, topics=None):
         "Status menunjukkan ditemukannya uraian, bukan penilaian kecukupan penerapan budaya.",
         group="Budaya",
     )
+    if evidence:
+        sections = culture_sections(pages)
+        if sections:
+            start_page = sections[0]["page"]
+            culture["page"] = start_page
+            culture["detail"]["pages"] = [
+                start_page,
+                *[p for p in culture["detail"]["pages"] if p != start_page],
+            ]
     culture["detail"]["topics"] = [{"label": t["label"], "found": t["found"]} for t in topics]
     if any(t.get("review_required") for t in topics):
         culture["detail"].update(

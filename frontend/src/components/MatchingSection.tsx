@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, XCircle } from 'lucide-react';
 import { Fragment, useMemo, useState } from 'react';
 import { categoryById } from '../data/categories';
 import { matchingTotals } from '../lib/matching';
@@ -225,36 +225,81 @@ export function MatchingSection({
         <div className="match-section-content">
           <div className="matching-summary" aria-label="Ringkasan kecocokan dengan formulir">
             <div className="matching-summary-main">
-              <p className="matching-summary-title">
-                {stats.compared ? (
-                  <>
-                    <strong>
-                      {stats.percentage}%
-                    </strong>
-                    <span>total field sesuai</span>
-                  </>
-                ) : (
-                  'Tidak ada data yang dibandingkan dengan formulir'
-                )}
-              </p>
+              {stats.compared ? (
+                <>
+                  {(() => {
+                    const pct = Math.max(0, Math.min(100, Number(stats.percentage) || 0));
+                    const radius = 26;
+                    const circumference = 2 * Math.PI * radius;
+                    const dashOffset = circumference - (pct / 100) * circumference;
+                    const tone = pct >= 80 ? 'green' : pct >= 50 ? 'amber' : 'red';
+                    return (
+                      <div className={`matching-summary-ring tone-${tone}`} aria-hidden="true">
+                        <svg viewBox="0 0 64 64">
+                          <circle className="ring-track" cx="32" cy="32" r={radius} />
+                          <circle
+                            className="ring-progress"
+                            cx="32"
+                            cy="32"
+                            r={radius}
+                            strokeDasharray={circumference}
+                            strokeDashoffset={dashOffset}
+                          />
+                        </svg>
+                        <span className="matching-summary-ring-value">{stats.percentage}%</span>
+                      </div>
+                    );
+                  })()}
+                  <p className="matching-summary-title">
+                    <strong>Total field sesuai</strong>
+                    <span>
+                      {stats.match} dari {stats.compared} field
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <p className="matching-summary-title">
+                  <span>Tidak ada data yang dibandingkan dengan formulir</span>
+                </p>
+              )}
             </div>
             <ul className="matching-summary-counts" aria-label="Jumlah hasil per status">
               <li>
-                <strong>{stats.match}</strong>
-                <span>Match</span>
+                <span className="summary-icon-badge tone-green" aria-hidden="true">
+                  <CheckCircle2 size={20} />
+                </span>
+                <div className="summary-count-text">
+                  <strong>{stats.match}</strong>
+                  <span>Match</span>
+                </div>
               </li>
               <li>
-                <strong>{stats.review}</strong>
-                <span>Review</span>
+                <span className="summary-icon-badge tone-amber" aria-hidden="true">
+                  <Clock size={20} />
+                </span>
+                <div className="summary-count-text">
+                  <strong>{stats.review}</strong>
+                  <span>Review</span>
+                </div>
               </li>
               <li>
-                <strong>{stats.mismatch}</strong>
-                <span>Mismatch</span>
+                <span className="summary-icon-badge tone-red" aria-hidden="true">
+                  <XCircle size={20} />
+                </span>
+                <div className="summary-count-text">
+                  <strong>{stats.mismatch}</strong>
+                  <span>Mismatch</span>
+                </div>
               </li>
               {stats.missing > 0 && (
                 <li>
-                  <strong>{stats.missing}</strong>
-                  <span>Missing</span>
+                  <span className="summary-icon-badge tone-muted" aria-hidden="true">
+                    <AlertCircle size={20} />
+                  </span>
+                  <div className="summary-count-text">
+                    <strong>{stats.missing}</strong>
+                    <span>Missing</span>
+                  </div>
                 </li>
               )}
             </ul>

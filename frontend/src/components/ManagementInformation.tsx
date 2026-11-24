@@ -42,7 +42,6 @@ function managementCardLabel(row: MatchRow) {
 
 export function ManagementCard({ row, open }: { row: MatchRow; open: (page: number) => void }) {
   const pages = [...new Set(row.detail?.pages ?? [])];
-  const [index, setIndex] = useState(0);
   const topics = row.detail?.topics;
   const found = topics?.length ? topics.every((topic) => topic.found) : pages.length > 0;
   const partial = !found && !!topics?.some((topic) => topic.found);
@@ -63,24 +62,9 @@ export function ManagementCard({ row, open }: { row: MatchRow; open: (page: numb
       </p>
       {(pages.length > 0 || row.document_id) && (
         <div className="protection-source">
-          {pages.length > 1 ? (
-            <div className="protection-page-control">
-              <label>
-                Halaman sumber{' '}
-                <select value={index} onChange={(event) => setIndex(Number(event.target.value))}>
-                  {pages.map((page, i) => (
-                    <option key={page} value={i}>
-                      Halaman {page}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : (
-            <p className="protection-page-label">Halaman {pages[0] ?? 1}</p>
-          )}
+          <p className="protection-page-label">Halaman {pages[0] ?? 1}</p>
           {row.document_id && (
-            <button type="button" className="button button-source" onClick={() => open(pages[index] ?? 1)}>
+            <button type="button" className="button button-source" onClick={() => open(pages[0] ?? 1)}>
               <ExternalLink size={16} /> Lihat dokumen sumber
             </button>
           )}
