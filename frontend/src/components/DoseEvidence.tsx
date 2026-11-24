@@ -23,15 +23,20 @@ export function DoseEvidence({
           : 'Pernyataan pembatas dosis operasional dalam dokumen:'}
       </p>
       <p className="protection-value">
-        {statement.split(/(\d+(?:[.,]\d+)?\s*(?:mSv|µSv|μSv|uSv|Sv)\s*(?:\/\s*(?:tahun|thn\.?)|per\s+tahun))/gi).map((part, index) =>
-          index % 2 ? (
-            <mark className="dose-highlight" key={index}>
-              {part}
-            </mark>
-          ) : (
-            part
-          ),
-        )}
+        {statement
+          .split(
+            /(\d+(?:[.,]\d+)?\s*(?:mSv|µSv|μSv|uSv|Sv)(?:\s*\([^()]{1,40}\))?\s*(?:\/\s*(?:tahun|thn\.?|th\.?)|per\s+tahun))/gi,
+          )
+          .map((part, index, parts) => {
+            if (index % 2 === 0) return part;
+            const trailing = parts.slice(index + 1, index + 3).join('');
+            if (/^\s*=\s*\d/.test(trailing)) return part;
+            return (
+              <mark className="dose-highlight" key={index}>
+                {part}
+              </mark>
+            );
+          })}
       </p>
       {(pages.length > 0 || row.document_id) && (
         <div className="protection-source">

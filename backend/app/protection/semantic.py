@@ -46,8 +46,9 @@ TASKS = {
         r"pembatas(?:an)?\s+dosis|kendala\s+dosis|dose\s+constraint|target.*?dosis",
         "Pilih pernyataan pembatas dosis yang diterapkan untuk operasi instansi saat ini. "
         "Jika dokumen hanya menyebut satu ketetapan pembatas dosis operasional tanpa tahapan berbeda, "
-        "pilih pernyataan tersebut. Bukan Nilai Batas Dosis umum, dosis terukur, target konstruksi atau "
-        "rencana masa depan. Harus jelas angka, satuan dan kaitannya dengan pembatas dosis operasional. "
+        "pilih pernyataan tersebut. Penetapan terpisah untuk pekerja radiasi dan anggota masyarakat "
+        "dalam satu atau dua pernyataan bukan merupakan konflik. Bukan Nilai Batas Dosis umum, dosis terukur, "
+        "target konstruksi atau rencana masa depan. Harus jelas angka, satuan dan kaitannya dengan pembatas dosis operasional. "
         "Jika ada beberapa tahapan dan tahap aktif tidak dapat ditentukan, records kosong. Jika ada dua pernyataan aktif "
         "yang bertentangan, keluarkan keduanya; jangan menyelesaikan konflik sendiri. "
         "category dose; quote kalimat utuh maksimal 1800 karakter. Jangan menghitung angka baru.",
@@ -202,13 +203,24 @@ _DOSE_AMBIGUOUS_STAGE_RE = re.compile(
     re.I,
 )
 _DOSE_ESTABLISHED_RE = re.compile(
-    r"ditetapkan|digunakan|diterapkan|berlaku|sebesar|penetapan|menggunakan|pekerja\s+radiasi|anggota\s+masyarakat|masyarakat",
+    r"ditetapkan|digunakan|diterapkan|berlaku|sebesar|penetapan|menggunakan|"
+    r"tidak\s+melebihi|maksimal|paling\s+tinggi|pekerja\s+radiasi|anggota\s+masyarakat|masyarakat",
     re.I,
 )
 _ANNUAL_DOSE_RE = re.compile(
-    r"(\d[\d.,]*)\s*(mSv|µSv|μSv|uSv|Sv)\s*(?:/\s*(?:tahun|thn\.?|th\.?|year|yr)|per\s+tahun)\b",
+    r"(\d[\d.,]*)\s*(mSv|µSv|μSv|uSv|Sv)(?:\s*\([^()]{1,40}\))?\s*(?:/\s*(?:tahun|thn\.?|th\.?|year|yr)|per\s+tahun)\b",
     re.I,
 )
+_DOSE_WORKER_RE = re.compile(
+    r"\b(?:pekerja\s+radiasi|petugas\s+proteksi\s+radiasi|\bPPR\b|operator|personel|karyawan|pekerja)\b",
+    re.I,
+)
+_DOSE_PUBLIC_RE = re.compile(
+    r"\b(?:anggota\s+masyarakat|masyarakat\s+umum|masyarakat|publik|lingkungan\s+sekitar|pengunjung)\b",
+    re.I,
+)
+_FORMULA_LEFT_OP_RE = re.compile(r"(?:[×xX*]|\bdari\b)\s*$", re.I)
+_FORMULA_EQUALS_RESULT_RE = re.compile(r"^\s*=\s*\d")
 
 
 def _normalize_dose_number(raw: str) -> str:
@@ -218,20 +230,44 @@ def _normalize_dose_number(raw: str) -> str:
     return val.rstrip("0").rstrip(".") if "." in val else val
 
 
-def _annual_constraint_values(quote: str) -> set[tuple[str, str]]:
+def _categorized_annual_constraint_values(quote: str) -> dict[str, set[tuple[str, str]]]:
     from .dose import _DOSE_CUE_RE, _FRACTION_NBD_RE, _NBD_TERM_RE
 
-    values = set()
+    by_category: dict[str, set[tuple[str, str]]] = {
+        "worker": set(),
+        "public": set(),
+        "general": set(),
+    }
+    prev_end = 0
     for match in _ANNUAL_DOSE_RE.finditer(quote):
         before = quote[max(0, match.start() - 100) : match.start()]
         nbd_pos = max((m.start() for m in _NBD_TERM_RE.finditer(before)), default=-1)
         if nbd_pos >= 0:
             cue_pos = max((m.start() for m in _DOSE_CUE_RE.finditer(before)), default=-1)
             if not (cue_pos > nbd_pos or _FRACTION_NBD_RE.search(before)):
+                prev_end = match.end()
                 continue
+        after = quote[match.end() : match.end() + 24]
+        if _FORMULA_LEFT_OP_RE.search(before) and _FORMULA_EQUALS_RESULT_RE.match(after):
+            continue
+        local_before = quote[max(prev_end, match.start() - 120) : match.start()]
+        w_pos = max((m.start() for m in _DOSE_WORKER_RE.finditer(local_before)), default=-1)
+        p_pos = max((m.start() for m in _DOSE_PUBLIC_RE.finditer(local_before)), default=-1)
+        if p_pos > w_pos:
+            category = "public"
+        elif w_pos >= 0:
+            category = "worker"
+        else:
+            category = "general"
         unit = match.group(2).replace("μ", "µ").lower()
-        values.add((_normalize_dose_number(match.group(1)), unit))
-    return values
+        by_category[category].add((_normalize_dose_number(match.group(1)), unit))
+        prev_end = match.end()
+    return by_category
+
+
+def _annual_constraint_values(quote: str) -> set[tuple[str, str]]:
+    cats = _categorized_annual_constraint_values(quote)
+    return cats["worker"] | cats["public"] | cats["general"]
 
 
 def _is_unambiguous_operational_dose(doses) -> bool:
@@ -243,10 +279,23 @@ def _is_unambiguous_operational_dose(doses) -> bool:
     first_quote = doses[0]["quote"]
     if not (_DOSE_ESTABLISHED_RE.search(first_quote) and _ANNUAL_DOSE_RE.search(first_quote)):
         return False
-    value_sets = [frozenset(_annual_constraint_values(d["quote"])) for d in doses]
-    if any(not vs for vs in value_sets):
+    merged: dict[str, set[tuple[str, str]]] = {
+        "worker": set(),
+        "public": set(),
+        "general": set(),
+    }
+    for d in doses:
+        cat_vals = _categorized_annual_constraint_values(d["quote"])
+        if not any(cat_vals.values()):
+            return False
+        for key in merged:
+            merged[key] |= cat_vals[key]
+    if len(merged["worker"]) > 1 or len(merged["public"]) > 1 or len(merged["general"]) > 1:
         return False
-    return len(set(value_sets)) == 1
+    specific = merged["worker"] | merged["public"]
+    if merged["general"] and specific and not merged["general"].issubset(specific):
+        return False
+    return bool(specific or merged["general"])
 
 
 def protection_fallback(pages):
@@ -296,16 +345,24 @@ def protection_fallback(pages):
         fatal_notes = [n for n in notes if "belum selesai" in n or "terlalu panjang" in n]
         unique_evidence = {e["quote"] for e in evidence}
         unique_active = {e["quote"] for e in active}
-        resolved_by_llm = len(unique_evidence) == 1 and not fatal_notes
+        resolved_by_llm = (
+            bool(evidence)
+            and not fatal_notes
+            and (len(unique_evidence) == 1 or _is_unambiguous_operational_dose(evidence))
+        )
         resolved_deterministically = (
             not evidence
             and not fatal_notes
             and _is_unambiguous_operational_dose(doses)
         )
+        active_conflict = len(unique_active) > 1 and not _is_unambiguous_operational_dose(active)
+        evidence_conflict = (
+            len(unique_evidence) > 1 and not _is_unambiguous_operational_dose(evidence)
+        )
         # Multiple candidates cannot be resolved by arbitrarily choosing the first.
         result["dose_review"] = (
-            len(unique_active) > 1
-            or len(unique_evidence) > 1
+            active_conflict
+            or evidence_conflict
             or not (resolved_by_llm or resolved_deterministically)
         )
         if result["dose_review"] or fatal_notes:

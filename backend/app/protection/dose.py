@@ -92,7 +92,8 @@ def dose_statements(pages):
                 for pattern, weight in (
                     (r"saat\s+ini|saat\s+sekarang|saat\s+beroperasi", 40),
                     (r"operasional|operasi", 10),
-                    (r"digunakan|ditetapkan|sebesar|menggunakan", 5),
+                    (r"digunakan|ditetapkan|sebesar|menggunakan|tidak\s+melebihi|maksimal", 5),
+                    (r"pekerja\s+radiasi|anggota\s+masyarakat", 3),
                     (r"tahap", 3),
                 )
                 if re.search(pattern, quote, re.I)

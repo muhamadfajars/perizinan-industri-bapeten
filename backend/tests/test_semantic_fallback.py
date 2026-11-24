@@ -357,6 +357,72 @@ class SemanticFallbackTests(unittest.TestCase):
         self.assertEqual(request.call_count, 1)
         self.assertEqual(request.call_args.args[1], "Analisis bagian dose")
 
+    @patch("app.protection.llm.request_records", return_value=[])
+    def test_formula_result_with_parenthetical_spelling_confirmed(self, request):
+        formula_stmt = (
+            "Pembatas dosis efektif untuk seluruh pekerja radiasi "
+            "(petugas proteksi radiasi, operator, dan petugas perawatan) "
+            "ditetapkan sebesar 3/10 × 20 mSv/tahun = 6 mSv (enam milisievert) per tahun."
+        )
+        semantic_single, _ = protection_fallback([page(formula_stmt, 34)])
+        self.assertFalse(semantic_single["dose_review"])
+        row = next(
+            r
+            for r in build_rows("d", {}, [page(formula_stmt, 34)], {}, semantic=semantic_single)
+            if r["field"] == "Pembatas Dosis"
+        )
+        self.assertFalse(row["detail"].get("review_required"))
+
+        pages_multi = [
+            page(formula_stmt, 34),
+            page("Pembatas dosis pekerja radiasi ditetapkan sebesar 6 mSv/tahun.", 12),
+        ]
+        semantic_multi, _ = protection_fallback(pages_multi)
+        self.assertFalse(semantic_multi["dose_review"])
+
+    @patch("app.protection.llm.request_records")
+    def test_worker_and_public_categories_confirmed_without_conflict(self, request):
+        combined = (
+            "Dari data tersebut ditetapkan bahwa pembatas dosis untuk pekerja radiasi "
+            "tidak melebihi 8 mSv/tahun sedangkan untuk anggota masyarakat tidak melebihi 0.3 mSv/tahun."
+        )
+        request.return_value = []
+        sem_single, _ = protection_fallback([page(combined, 37)])
+        self.assertFalse(sem_single["dose_review"])
+
+        sem_multi, _ = protection_fallback(
+            [
+                page(combined, 37),
+                page("Pembatas dosis pekerja radiasi ditetapkan sebesar 8 mSv/tahun.", 14),
+            ]
+        )
+        self.assertFalse(sem_multi["dose_review"])
+
+        worker_stmt = "Pembatas dosis pekerja radiasi ditetapkan sebesar 8 mSv/tahun."
+        public_stmt = "Pembatas dosis anggota masyarakat ditetapkan sebesar 0.3 mSv/tahun."
+        request.return_value = [
+            {"page": 14, "category": "dose", "quote": worker_stmt},
+            {"page": 15, "category": "dose", "quote": public_stmt},
+        ]
+        sem_split, _ = protection_fallback([page(worker_stmt, 14), page(public_stmt, 15)])
+        self.assertFalse(sem_split["dose_review"])
+
+    @patch("app.protection.llm.request_records", return_value=[])
+    def test_conflict_within_same_recipient_category_requires_review(self, request):
+        worker_conflict = [
+            page("Pembatas dosis untuk pekerja radiasi ditetapkan sebesar 4 mSv/tahun.", 5),
+            page("Pembatas dosis untuk pekerja radiasi ditetapkan sebesar 8 mSv/tahun.", 9),
+        ]
+        sem_worker, _ = protection_fallback(worker_conflict)
+        self.assertTrue(sem_worker["dose_review"])
+
+        public_conflict = [
+            page("Pembatas dosis untuk anggota masyarakat tidak melebihi 0.3 mSv/tahun.", 6),
+            page("Pembatas dosis untuk anggota masyarakat tidak melebihi 0.5 mSv/tahun.", 10),
+        ]
+        sem_public, _ = protection_fallback(public_conflict)
+        self.assertTrue(sem_public["dose_review"])
+
 
 if __name__ == "__main__":
     unittest.main()
