@@ -30,7 +30,7 @@ GENERIC = {
     "-",
     "null",
 }
-DOCUMENT_TYPES = ("personel", "surat izin", "surat penunjukan", "petugas tld")
+DOCUMENT_TYPES = ("personel", "surat izin", "surat penunjukan")
 
 
 def _text(value):

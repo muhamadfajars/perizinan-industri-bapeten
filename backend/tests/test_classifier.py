@@ -96,7 +96,9 @@ class TestClassifier(unittest.TestCase):
             ("Formulir_Permohonan-116843.26.pdf", "formulir", None),
             ("PROGRAM PROTEKSI RADIASI RSH kepanjen FIX SIP.pdf", "proteksi", None),
             ("Dok Sistem manajemen fasilitas rs hermina.pdf", "manajemen", None),
-            ("DOKUMEN TEKNIS RSH KEPANJEN.pdf", "teknis", None),
+            ("Sertifikat Uji Mutu XRF.pdf", "mutu", None),
+            ("Sertifikat Kalibrasi Alat.pdf", "kalibrasi", None),
+            ("Calibration_Certificate_XRF.pdf", "kalibrasi", None),
             ("SIB New zi.pdf", "personel", "Surat Izin Bekerja (SIB)"),
             (
                 "SK Penunjukan dan Pengangkatan Siti Azizah PPR.pdf",
@@ -130,7 +132,6 @@ class TestClassifier(unittest.TestCase):
             ("Brochure_uDR 566i_EN_HD.pdf", "spesifikasi", None),
             ("Foto label tube uDR 566i.jpeg", "label", None),
             ("Persetujuan Impor UDR566i-A.pdf", "impor", None),
-            ("250169011_KTUN_Sertifikat_UK jiwa aceh.pdf", "kesesuaian", None),
             ("Hasil Uji Fungsi RS Tk4 Pku.pdf", "fungsi", None),
             ("UPAR XRAY20260714.pdf", "paparan", None),
             ("UJI KEBOCORAN TABUNG ALAT X-RAY FDR NANO.pdf", "kebocoran", None),
@@ -149,6 +150,11 @@ class TestClassifier(unittest.TestCase):
                 "Surat Penunjukan Tugas",
             ),
             ("dokumen perawatan Fasilitas Radiodiagnostik.pdf", "unknown", None),
+            ("DOKUMEN TEKNIS RSH KEPANJEN.pdf", "unknown", None),
+            ("Daftar Pemakai TLD.pdf", "unknown", None),
+            ("Petugas TLD.pdf", "unknown", None),
+            ("250169011_KTUN_Sertifikat_UK jiwa aceh.pdf", "unknown", None),
+            ("LHU Uji Kesesuaian.pdf", "unknown", None),
             ("SIP dokter.pdf", "unknown", None),
         ]
         for name, category, subtype in cases:
@@ -159,6 +165,10 @@ class TestClassifier(unittest.TestCase):
             "Untuk melaksanakan program proteksi dan keselamatan radiasi, petugas ditunjuk.",
             "Memastikan seluruh fungsi alat bekerja sesuai spesifikasi pabrikan.",
             "DOKUMEN PROGRAM PERAWATAN FASILITAS RADIOLOGI",
+            "DOKUMEN TEKNIS FASILITAS",
+            "DAFTAR PEMAKAI TLD",
+            "SERTIFIKAT UJI KESESUAIAN",
+            "LEMBAR HASIL UJI",
             "SURAT IZIN PRAKTIK",
         ):
             with self.subTest(text=text):
@@ -223,6 +233,7 @@ class TestClassifier(unittest.TestCase):
             "LAPORAN DOSIS TLD",
             "HASIL PEMBACAAN DOSIS OSL",
             "LAPORAN HASIL EVALUASI DOSIS",
+            "PEMANTAUAN DOSIS PERORANGAN DENGAN LENCANA TLD",
             "DOSIS AWAL",
         ):
             with self.subTest(title=title):
@@ -234,6 +245,13 @@ class TestClassifier(unittest.TestCase):
                     classify_by_content("NUKLINDOLAB\nLENCANA OSL\n" + title)[:2],
                     ("personel", "Evaluasi Dosis / Zero Check"),
                 )
+        for name, expected in (
+            ("LHU DOSIS MARET-MEI 2026.pdf", ("personel", "Evaluasi Dosis / Zero Check")),
+            ("LHU TLD.pdf", ("personel", "Evaluasi Dosis / Zero Check")),
+            ("Pemantauan Dosis Perorangan.pdf", ("personel", "Evaluasi Dosis / Zero Check")),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(classify_by_filename(name)[:2], expected)
         for title in (
             "DAFTAR PEMAKAI TLD",
             "DAFTAR PENGGUNA LENCANA OSL",
@@ -241,13 +259,16 @@ class TestClassifier(unittest.TestCase):
             "KEPESERTAAN PEMANTAUAN OSL",
         ):
             with self.subTest(title=title):
-                self.assertEqual(classify_by_filename(title + ".pdf")[0], "tld")
-                self.assertEqual(classify_by_content(title)[0], "tld")
+                self.assertIsNone(classify_by_filename(title + ".pdf")[0])
+                self.assertIsNone(classify_by_content(title)[0])
         for title in ("LENCANA OSL", "TLD BETA GAMMA", "NUKLINDOLAB", "dosimeter"):
             self.assertIsNone(classify_by_filename(title + ".pdf")[0])
             self.assertIsNone(classify_by_content(title)[0])
-        self.assertIsNone(classify_by_filename("Laporan Dosis dan Daftar Pemakai TLD.pdf")[0])
-        self.assertIsNone(classify_by_content("LAPORAN DOSIS\nDAFTAR PEMAKAI TLD")[0])
+        self.assertEqual(
+            classify_by_filename("Laporan Dosis dan Daftar Pemakai TLD.pdf")[:2],
+            ("personel", "Evaluasi Dosis / Zero Check"),
+        )
+        self.assertIsNone(classify_by_content("LAPORAN DOSIS\nPROGRAM PROTEKSI RADIASI")[0])
 
     def test_hermina_initial_dose_sample_by_name_and_content(self):
         path = (

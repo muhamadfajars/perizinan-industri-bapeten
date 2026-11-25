@@ -12,7 +12,6 @@ import {
   findDuplicatePersonnelTabIds,
   matchingSectionTitle,
   stripUploadTimestamp,
-  summaryRingTone,
 } from '../src/lib/matchingDisplay.ts';
 import type { CategoryId, MatchRow, MatchSection } from '../src/types/models.ts';
 
@@ -20,13 +19,12 @@ const order: CategoryId[] = [
   'proteksi',
   'manajemen',
   'personel',
-  'tld',
-  'teknis',
   'spesifikasi',
   'label',
   'impor',
-  'kesesuaian',
   'fungsi',
+  'mutu',
+  'kalibrasi',
   'paparan',
   'kebocoran',
 ];
@@ -112,14 +110,14 @@ test('matching follows the agreed category order regardless of upload order with
 test('multiple sections stay together and filtering preserves category order', () => {
   const personnelA = section('personel');
   const personnelB = { ...section('personel'), id: 'personel-b' };
-  const sorted = sortMatchingSections([section('teknis'), personnelA, section('proteksi'), personnelB]);
+  const sorted = sortMatchingSections([section('kalibrasi'), personnelA, section('proteksi'), personnelB]);
   assert.deepEqual(
     sorted.map((item) => item.id),
-    ['proteksi', 'personel', 'personel-b', 'teknis'],
+    ['proteksi', 'personel', 'personel-b', 'kalibrasi'],
   );
   assert.deepEqual(
     sorted.filter((item) => item.category !== 'personel').map((item) => item.category),
-    ['proteksi', 'teknis'],
+    ['proteksi', 'kalibrasi'],
   );
 });
 
@@ -280,15 +278,4 @@ test('extractUsagePeriods prefers structured page evidence and falls back cleanl
     { page: 1, value: 'Mei - Juli 2026' },
     { page: 2, value: 'Agustus - Oktober 2026' },
   ]);
-});
-
-test('summaryRingTone keeps values above 70 percent green', () => {
-  assert.equal(summaryRingTone(100), 'green');
-  assert.equal(summaryRingTone(75), 'green');
-  assert.equal(summaryRingTone(70.1), 'green');
-  assert.equal(summaryRingTone(70), 'amber');
-  assert.equal(summaryRingTone(50), 'amber');
-  assert.equal(summaryRingTone(20), 'amber');
-  assert.equal(summaryRingTone(19.9), 'red');
-  assert.equal(summaryRingTone(0), 'red');
 });

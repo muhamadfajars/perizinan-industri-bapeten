@@ -7,73 +7,8 @@ import unicodedata
 from .. import storage
 
 
-from .rows import _from_match, _row, _text
+from .rows import _row, _text
 from .constants import FIELDS
-
-
-def _suitability(doc, app, ref):
-    from src.extraction.suitability_test import parse_suitability_test
-    from src.matching.suitability_matcher import match_suitability
-
-    parsed = parse_suitability_test(str(storage.file_path(doc)))
-    if not app.get("equipment"):
-        return [
-            _row(
-                "Data peralatan",
-                "Ada peralatan pada formulir",
-                "",
-                "REVIEW",
-                document_id=doc["id"],
-            )
-        ]
-    # One suitability certificate may describe only one device. Do not fabricate rows for other devices.
-    results = [match_suitability(app, parsed, i) for i in range(len(app.get("equipment") or []))]
-    statuses = {"MATCH": 3, "REVIEW": 2, "MISMATCH": 1, "MISSING": 0}
-    # Conservative: select strong serial match only, else first device with REVIEW label.
-    confirmed = [
-        i for i, r in enumerate(results) if r["unit"]["nomor_seri"].get("status") == "MATCH"
-    ]
-    idx = confirmed[0] if len(confirmed) == 1 else 0
-    result = results[idx]
-    equipment = app["equipment"][idx]
-    rows = [
-        _from_match(
-            "Nama Fasilitas",
-            result["instansi"].get("expected"),
-            result["instansi"],
-            doc["id"],
-        ),
-        _from_match(
-            "Alamat Fasilitas",
-            ref["alamat_proyek"],
-            {**result["alamat"], "observed": parsed.get("alamat")},
-            doc["id"],
-        ),
-    ]
-    for section, prefix in [("unit", "unit"), ("tabung", "tabung")]:
-        for f, key in [
-            ("merk", "merk"),
-            ("tipe", "tipe"),
-            ("nomor_seri", "nomor_seri"),
-        ]:
-            formkey = {"merk": "merk", "tipe": "tipe", "nomor_seri": "nomor_seri"}[f] + "_" + prefix
-            match = result[section][f]
-            rows.append(
-                _from_match(
-                    f"Alat {idx + 1}: {FIELDS.get(formkey, formkey)}",
-                    equipment.get(formkey),
-                    {**match, "observed": (parsed.get(section) or {}).get(f)},
-                    doc["id"],
-                )
-            )
-    if len(confirmed) != 1 and len(results) > 1:
-        for row in rows[2:]:
-            row.update(
-                status="REVIEW",
-                note="Pemilihan peralatan ambigu; nomor seri unit tidak unik",
-                score=None,
-            )
-    return rows
 
 
 def _functional(doc, app, ref):

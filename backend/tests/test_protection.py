@@ -254,6 +254,72 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(compare("Siti Hermawati", "Siti Hermawan")[0], "REVIEW")
         self.assertEqual(compare("ABC123", "ABC128", "serial")[0], "MISMATCH")
 
+    def test_compare_address_distinguishes_mismatch_from_review_and_match(self):
+        self.assertEqual(
+            compare(
+                "Jl. Tekno Raya Blok H1 No.8, Setu , Kota Tangerang Selatan Banten 15314",
+                "Jl. Mesjid Darul Falah No. 17, RT013 RW002 Kel. Petukangan Utara, Kec. Pesanggrahan, Kota Jakarta Selatan DKI Jakarta 12260",
+                "address",
+            )[0],
+            "MISMATCH",
+        )
+        self.assertEqual(
+            compare(
+                "Jl. Tekno Raya Blok H1 No. 8, Setu, Kota Tangerang Selatan, Banten 15314",
+                "Jl. Pahlawan Seribu No. 25, Serpong, Kota Tangerang Selatan, Banten 15310",
+                "address",
+            )[0],
+            "MISMATCH",
+        )
+        self.assertEqual(
+            compare(
+                "Kawasan Industri Jababeka Blok A No. 1, Cikarang, Bekasi, Jawa Barat 17530",
+                "Komplek Perkantoran Sudirman Kav. 52, Kebayoran Baru, Jakarta Selatan 12190",
+                "address",
+            )[0],
+            "MISMATCH",
+        )
+        self.assertEqual(
+            compare(
+                "Jl. Tekno Raya No. 8, Setu, Tangerang Selatan",
+                "Jl. Tekno Raya No. 18, Setu, Tangerang Selatan",
+                "address",
+            )[0],
+            "REVIEW",
+        )
+        self.assertEqual(
+            compare(
+                "Jl. Jend. Sudirman No. 10, Jakarta Pusat 10220",
+                "Jl. Jenderal Sudirman No. 10, Jakarta Pusat 10220",
+                "address",
+            )[0],
+            "REVIEW",
+        )
+        self.assertEqual(
+            compare(
+                "Jl. Tekno Raya Blok H1 No. 8, Setu, Kota Tangerang Selatan",
+                "Setu, Tangerang Selatan",
+                "address",
+            )[0],
+            "REVIEW",
+        )
+        self.assertEqual(
+            compare(
+                "Jl. Tekno Raya Blok H1 No. 8, Kawasan Tekno, Setu, Tangerang Selatan",
+                "Kawasan Tekno Blok H1 No. 8, Tangerang Selatan",
+                "address",
+            )[0],
+            "REVIEW",
+        )
+        self.assertEqual(
+            compare(
+                "Jl. Tekno Raya Blok H1 No. 8, Setu, Tangerang Selatan",
+                "Jl. Tekno Raya Blok H1 No. 8, Kel. Setu, Kec. Setu, Kota Tangerang Selatan, Banten",
+                "address",
+            )[0],
+            "MATCH",
+        )
+
     def test_missing_reference_is_display_only(self):
         self.assertEqual(make_row("d", "Nomor Dokumen", "", "PPR-1", [])["status"], "INFO")
 

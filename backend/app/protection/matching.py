@@ -147,6 +147,28 @@ _ADMIN_STOPWORDS = {
     "khusus",
 }
 
+_ADDRESS_GENERIC_TOKENS = _ADMIN_STOPWORDS | {
+    "jalan",
+    "nomor",
+    "blok",
+    "rt",
+    "rw",
+    "gang",
+    "kavling",
+    "lantai",
+    "gedung",
+    "komplek",
+    "ruko",
+    "kawasan",
+    "utara",
+    "selatan",
+    "barat",
+    "timur",
+    "tengah",
+    "pusat",
+    "raya",
+}
+
 
 def address_tokens(value):
     text = value.lower()
@@ -180,16 +202,16 @@ def compare_address(expected, observed):
             r"\b(?:jl[n]?\.?|jalan)\s+(.+?)(?=,|\bno(?:mor)?\.?\s*\d|$)", normalized, re.I
         )
         if hit:
-            return ("street", norm(hit.group(1)))
+            return ("street", norm(hit.group(1)), hit.group(1))
         landmark = re.search(
             r"\b(?:komplek|kawasan|gedung|ruko|blok)\s+(.+?)(?=,|\bno(?:mor)?\.?\s*\d|$)",
             normalized,
             re.I,
         )
-        return ("landmark", norm(landmark.group(1))) if landmark else ("", "")
+        return ("landmark", norm(landmark.group(1)), landmark.group(1)) if landmark else ("", "", "")
 
-    a_kind, a = street(expected)
-    b_kind, b = street(observed)
+    a_kind, a, a_raw = street(expected)
+    b_kind, b, b_raw = street(observed)
     numbers_a = {s for s in left if s[0].isdigit()}
     numbers_b = {s for s in right if s[0].isdigit()}
     conflict = bool(numbers_a and numbers_b and numbers_a != numbers_b)
@@ -216,6 +238,30 @@ def compare_address(expected, observed):
                 effective_score,
                 "Komponen utama alamat sesuai; dokumen mencantumkan rincian wilayah (desa/kecamatan) yang lebih lengkap.",
             )
+
+    loc_a = left - _ADDRESS_GENERIC_TOKENS
+    loc_b = right - _ADDRESS_GENERIC_TOKENS
+    min_loc = min(len(loc_a), len(loc_b))
+    loc_overlap = len(loc_a & loc_b) / max(1, min_loc) if min_loc else 0.0
+    street_tokens_a = address_tokens(a_raw) - _ADDRESS_GENERIC_TOKENS if a_raw else set()
+    street_tokens_b = address_tokens(b_raw) - _ADDRESS_GENERIC_TOKENS if b_raw else set()
+    street_shared = bool(street_tokens_a & street_tokens_b)
+    street_sim = SequenceMatcher(None, a, b).ratio() if (a and b) else 0.0
+
+    clearly_different_street = (
+        bool(a and b)
+        and min_loc >= 3
+        and not street_shared
+        and street_sim < 0.55
+        and loc_overlap < 0.35
+    )
+    zero_location_overlap = min_loc >= 3 and loc_overlap == 0.0 and score < 35.0
+    if clearly_different_street or zero_location_overlap:
+        return (
+            "MISMATCH",
+            score,
+            "Alamat pada dokumen menunjukkan lokasi yang berbeda dari Alamat Proyek pada formulir.",
+        )
 
     return (
         "REVIEW",

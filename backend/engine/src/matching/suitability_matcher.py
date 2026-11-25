@@ -1,4 +1,4 @@
-"""Conservative field matching compatible with app.py suitability UI."""
+"""Conservative shared institution, address, and equipment comparison helpers."""
 
 import re
 from difflib import SequenceMatcher
@@ -39,13 +39,6 @@ def _street_number(s):
     t = " ".join(_words(s))
     nums = re.findall(r"\b(?:nomor|no)\s*(\d+[a-z]?)\b", t)
     return nums[0] if nums else None
-
-
-def _facility_from_project(project):
-    if not project:
-        return None
-    head = str(project).split(",")[0].strip()
-    return head if re.search(r"(?i)\b(?:rs\.?|rumah sakit|rumkit|klinik)\b", head) else None
 
 
 def compare_institution(form_value, suitability_value):
@@ -134,95 +127,3 @@ def compare_equipment_value(left, right, kind="type"):
     if kind == "type" and len(aa) >= 5 and len(bb) >= 5 and (aa in bb or bb in aa):
         return _result("MATCH", 100)
     return _result("MATCH" if score >= 95 else "REVIEW" if score >= 65 else "MISMATCH", score)
-
-
-def summarize_suitability_match(result):
-    statuses = [
-        result.get("instansi", {}).get("status"),
-        result.get("alamat", {}).get("status"),
-    ]
-    for section in ("unit", "tabung"):
-        statuses += [
-            result.get(section, {}).get(k, {}).get("status") for k in ("merk", "tipe", "nomor_seri")
-        ]
-    # Incomplete evidence cannot support a conclusive mismatch for the document.
-    if "MISSING" in statuses:
-        overall = "INCOMPLETE"
-    elif "MISMATCH" in statuses:
-        overall = "MISMATCH"
-    elif "REVIEW" in statuses:
-        overall = "REVIEW"
-    else:
-        overall = "VALID"
-    return {
-        "status": overall,
-        "total_fields": len(statuses),
-        "match": statuses.count("MATCH"),
-        "review": statuses.count("REVIEW"),
-        "mismatch": statuses.count("MISMATCH"),
-        "missing": statuses.count("MISSING"),
-    }
-
-
-def match_suitability(application, suitability, equipment_index=0):
-    equipment = application.get("equipment") or []
-    if not equipment:
-        raise ValueError("Formulir tidak memiliki data peralatan.")
-    if not 0 <= equipment_index < len(equipment):
-        raise IndexError("equipment_index di luar rentang")
-    form = equipment[equipment_index]
-    general = application.get("general") or {}
-    project = general.get("alamat_proyek")
-    facility = _facility_from_project(project)
-    # Compare against facility candidate from project, not only corporate applicant.
-    candidate_names = [x for x in (facility, general.get("instansi")) if x]
-    document_names = [
-        x for x in (suitability.get("nama_fasilitas"), suitability.get("instansi")) if x
-    ]
-    comparisons = [
-        (candidate, doc_name, compare_institution(candidate, doc_name))
-        for candidate in candidate_names
-        for doc_name in document_names
-    ]
-    if comparisons:
-        # Match status dominates fuzzy similarity. Prefer a facility-to-facility comparison.
-        priority = {"MATCH": 3, "REVIEW": 2, "MISMATCH": 1, "MISSING": 0}
-        form_name, doc_name, name_result = max(
-            comparisons,
-            key=lambda item: (
-                priority.get(item[2]["status"], 0),
-                item[2]["score"],
-                item[0] == facility,
-            ),
-        )
-        name_result = dict(name_result, expected=form_name, actual=doc_name)
-    else:
-        name_result = _result("MISSING")
-        name_result.update(
-            expected=facility or general.get("instansi"),
-            actual=suitability.get("nama_fasilitas") or suitability.get("instansi"),
-        )
-    unit = suitability.get("unit") or {}
-    tube = suitability.get("tabung") or {}
-    result = {
-        "instansi": name_result,
-        "alamat": compare_address(project, suitability.get("alamat")),
-        "unit": {
-            k: compare_equipment_value(form.get(form_field), unit.get(k), kind)
-            for k, form_field, kind in [
-                ("merk", "merk_unit", "brand"),
-                ("tipe", "tipe_unit", "type"),
-                ("nomor_seri", "nomor_seri_unit", "serial"),
-            ]
-        },
-        "tabung": {
-            k: compare_equipment_value(form.get(form_field), tube.get(k), kind)
-            for k, form_field, kind in [
-                ("merk", "merk_tabung", "brand"),
-                ("tipe", "tipe_tabung", "type"),
-                ("nomor_seri", "nomor_seri_tabung", "serial"),
-            ]
-        },
-    }
-    result["summary"] = summarize_suitability_match(result)
-    return result

@@ -1,4 +1,4 @@
-"""Evidence-only matching for TLD and radiation exposure/leakage documents.
+"""Evidence-only matching for radiation exposure and tube leakage documents.
 
 No test outcome is inferred, and presence of signoff is not signature authenticity.
 Parsers are independent of a particular PDF template; avoid comparing the
@@ -69,8 +69,8 @@ def _first_page_roi(path, kind):
         if not pdf:
             return ""
         page = pdf[0]
-        # Letterhead is excluded from TLD; equipment/identity table from paparan.
-        bounds = (0.07, 0.21, 0.73, 0.395) if kind == "tld_upload" else (0.09, 0.11, 0.88, 0.49)
+        # Scope to equipment/identity table from radiation exposure / tube leakage reports.
+        bounds = (0.09, 0.11, 0.88, 0.49)
         box = fitz.Rect(
             page.rect.width * bounds[0],
             page.rect.height * bounds[1],
@@ -191,143 +191,6 @@ def _field(label, expected="", observed="", status="REVIEW", score=None, page=No
     }
 
 
-def _tld_recipient(pages, expected_name, expected_address):
-    """Only recipient block, never supplier letterhead/Attn/worker names."""
-    from src.matching.suitability_matcher import compare_institution
-
-    for pg in pages[:3]:
-        lines = (pg.get("text") or "").splitlines()
-        begin = next(
-            (i for i, v in enumerate(lines) if re.search(r"(?i)\bkepada\s*[:,]?", v)),
-            None,
-        )
-        if begin is None:
-            continue
-        portion = lines[begin + 1 : begin + 13]
-        portion = portion[
-            : next(
-                (
-                    i
-                    for i, l in enumerate(portion)
-                    if re.search(r"(?i)\b(?:bersama\s+ini|atas\s+nama|nomor\s+surat)\b", l)
-                ),
-                len(portion),
-            )
-        ]
-        strip_lines = [space(x) for x in portion if space(x)]
-        facility = ""
-        for item in strip_lines:
-            if re.search(r"(?i)\b(?:RS(?:UD)?\b|rumah\s+sakit|rumkit|klinik|puskesmas)\b", item):
-                facility = item.strip(" :|")
-                break
-        address_lines = []
-        seen_street = False
-        for item in strip_lines:
-            if re.match(r"(?i)^\s*(?:Jl|Jalan|JI|J1)\s*[.]?\s+", item):
-                seen_street = True
-            if seen_street:
-                if re.match(r"(?i)^(?:Telp|Attn|Fax|HP|No\s+Telp|Email)\b", item):
-                    break
-                address_lines.append(item)
-                if len(address_lines) >= 5:
-                    break
-        found_addr = space(" ".join(address_lines))
-        found_addr = re.sub(r"(?i)\b(?:Ji|J1)\.(?=\s)", "Jl.", found_addr)
-        name_status = "REVIEW"
-        name_score = None
-        if facility:
-            # Number 01.07.04 is a military administrative identifier, not a different hospital.
-            def core(v):
-                val = space(v).casefold()
-                val = re.sub(r"\b(?:rumah\s+sakit|rs|rumkit|tentara|tk|tingkat)\b", " ", val)
-                val = re.sub(r"(?<!\w)\d+(?:\.\d+){2,}(?!\w)", " ", val)
-                val = re.sub(r"[^a-z0-9]+", " ", val)
-                return " ".join(x for x in val.split() if x not in ("iv", "4"))
-
-            c1, c2 = core(expected_name), core(facility)
-            same = (
-                c1
-                and c1 == c2
-                and any(
-                    city in c1
-                    for city in (
-                        "pekanbaru",
-                        "aceh",
-                        "malang",
-                        "jakarta",
-                        "semarang",
-                        "balikpapan",
-                    )
-                )
-            )
-            if not same and (
-                "pekanbaru" in c1
-                and "pekanbaru" in c2
-                and ("iv" in facility.lower() or " 4" in facility)
-                and re.search(r"(?i)\b(?:rs|rumkit|tentara)\b", facility)
-            ):
-                same = True
-            if same:
-                name_status, name_score = "MATCH", 100.0
-            else:
-                match = compare_institution(expected_name, facility)
-                name_status = (
-                    match.get("status", "REVIEW") if match.get("score", 0) >= 75 else "REVIEW"
-                )
-                name_score = match.get("score")
-        addr_status = "REVIEW"
-        addr_score = None
-        if found_addr:
-            # Require same exact street, building number and city; don't equate distinct roads.
-            def street(v):
-                v = space(v).lower()
-                m = re.search(
-                    r"\b(?:jl|jalan|ji|j1)\.?\s+(.+?)(?=,|\b(?:kampung|kota|kec|kel|pekanbaru|riau)\b|$)",
-                    v,
-                )
-                if not m:
-                    return ""
-                v = m.group(1)
-                return re.sub(r"[^a-z0-9]", "", re.sub(r"\b(?:no|nomor)\b", "", v))
-
-            a, b = street(expected_address), street(found_addr)
-            exp_cities = [
-                c
-                for c in (
-                    "pekanbaru",
-                    "banda aceh",
-                    "malang",
-                    "balikpapan",
-                    "semarang",
-                    "jakarta",
-                )
-                if c in expected_address.lower()
-            ]
-            if a and b and a == b and all(c in found_addr.lower() for c in exp_cities):
-                addr_status, addr_score = "MATCH", 100.0
-        return (
-            _field(
-                "Nama Fasilitas",
-                expected_name,
-                facility,
-                name_status,
-                name_score,
-                pg["page"],
-                facility,
-            ),
-            _field(
-                "Alamat Fasilitas",
-                expected_address,
-                found_addr,
-                addr_status,
-                addr_score,
-                pg["page"],
-                found_addr,
-            ),
-        )
-    return None
-
-
 def _find_licensee(pages, expected, kind):
     """Find hospital/clinic in licensee 'Data Instansi' or 'Kepada' block.
 
@@ -399,21 +262,12 @@ def _address(pages, expected, kind=None):
     scoped = []
     for pg in pages[:4]:
         text = pg.get("text") or ""
-        if kind == "tld_upload":
-            begin = re.search(r"(?i)\bKepada\b", text)
-            if not begin:
-                continue
-            text = text[begin.end() :]
-            end = re.search(r"(?i)\b(?:Bersama\s+ini|Lamp\s*:|Demikian)\b", text)
-            if end:
-                text = text[: end.start()]
-        else:
-            end = re.search(
-                r"(?i)\b(?:Data\s+Penguji|Supplier|Importir|Data\s+Alat\s+Ukur)\b", text
-            )
-            if end:
-                text = text[: end.start()]
-        if pg.get("source") == "ocr" or kind == "tld_upload":
+        end = re.search(
+            r"(?i)\b(?:Data\s+Penguji|Supplier|Importir|Data\s+Alat\s+Ukur)\b", text
+        )
+        if end:
+            text = text[: end.start()]
+        if pg.get("source") == "ocr":
             text = re.sub(r"(?i)\bJi\.\s+(?=[A-Z])", "Jl. ", text)
         if text.strip():
             scoped.append(dict(pg, text=text))
@@ -447,13 +301,6 @@ def _signoff(pages, kind):
     for pg in reversed(pages):
         text = pg.get("text") or ""
         hits = [space(line) for line in text.splitlines() if re.search(phrases, line)]
-        if kind == "tld_upload" and not hits:
-            # OCR reads the signed institutional footer even where the handwritten
-            # signature itself is not legible: this is signoff *presence* only.
-            end = re.search(r"(?i)\bDemikian\b", text)
-            tail = text[end.end() :] if end else text[len(text) // 2 :]
-            if re.search(r"(?is)NuklindoLab.{0,90}(?:Koperasi|Jasa.{0,25}Radiasi)", tail):
-                hits = ["Blok penutup NuklindoLab"]
         if hits:
             return _field(
                 "Pengesahan",
@@ -465,122 +312,6 @@ def _signoff(pages, kind):
                 hits[0][:180],
             )
     return _field("Pengesahan", "Blok persetujuan/tanda tangan pada dokumen")
-
-
-def _person_core(value):
-    """Ignore professional titles/degrees for person roster matching only."""
-    value = space(value)
-    value = re.sub(r"(?i)^(?:(?:dr|drg|prof|dokter)\.?\s+)+", "", value)
-    value = re.split(r"(?i),?\s+(?:Sp\.?\s*Rad|Sp\.?|A\.?\s*Md\.?|S\.?\s*Kom|M\.?\s*Kes)\b", value)[
-        0
-    ]
-    return space(value.strip(" ,;"))
-
-
-def _tld_names(pages, reference, path=None):
-    """Treat TLD Kontrol as equipment, never as a person's name."""
-    text = "\n".join(p["text"] for p in pages)
-    # Candidate TLD rows are between the roster heading and its period/closing.
-    start = re.search(r"(?i)\b(?:nama\s+pemakai\s+tld|atas\s+nama|daftar\s+petugas)\b", text)
-    stop = re.search(
-        r"(?i)\b(?:untuk\s+pemakaian|periode\s+pemakaian|demikian|tembusan)\b",
-        text[start.end() :] if start else text,
-    )
-    roster = text[start.end() :] if start else text
-    if stop:
-        roster = roster[: stop.start()]
-    roster_lines = [space(l) for l in roster.splitlines() if space(l)]
-    # TLD roster tables in a scanned one-page letter are often badly OCR'd
-    # because row borders intersect names. A second *table ROI* pass with
-    # sparse-text layout restores exact names. Never use text outside roster.
-    if path and path.lower().endswith(".pdf") and any(p.get("source") == "ocr" for p in pages):
-        try:
-            import fitz
-
-            pytesseract = _fix_tesseract_location()
-            from PIL import Image
-
-            with fitz.open(path) as doc:
-                for page in list(doc)[:2]:
-                    if len(norm(page.get_text())) > 150:
-                        continue
-                    clip = fitz.Rect(
-                        page.rect.width * 0.13,
-                        page.rect.height * 0.35,
-                        page.rect.width * 0.93,
-                        page.rect.height * 0.65,
-                    )
-                    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), clip=clip, alpha=False)
-                    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                    roi = _tess_ocr(pytesseract, image, config="--psm 11")
-                    at = re.search(r"(?i)Nama\s+Pemakai\s+TLD", roi)
-                    if not at:
-                        continue
-                    roi = roi[at.end() :]
-                    cut = re.search(r"(?i)(?:TLD\s*Kontrol|Untuk\s+pemakaian)", roi)
-                    if cut:
-                        roi = roi[: cut.start()]
-                    roster_lines.extend(space(l) for l in roi.splitlines() if space(l))
-        except Exception:
-            # The main OCR result remains usable without optional Tesseract.
-            pass
-    rows = []
-    for person in reference.get("personnel", []):
-        name = space(person.get("nama"))
-        if not name:
-            continue
-        core = _person_core(name)
-        matching = []
-        fuzzy = []
-        for line in roster_lines:
-            if re.search(
-                r"(?i)\b(?:tld\s+kontrol|tld\s+control|keterangan|no\.|jumlah|atas\s+nama)\b",
-                line,
-            ):
-                continue
-            search = re.search(
-                r"(?i)(?<![A-Za-z])"
-                + r"\s*[- ]?\s*".join(map(re.escape, core.split()))
-                + r"(?![A-Za-z])",
-                line,
-            )
-            if search:
-                matching.append((search.group(), line))
-            else:
-                tokens = re.sub(r"(?i)^\s*(?:\||\d{1,2}\s*[.)|]|[\[\]*/\\]+)", "", line)
-                tokens = re.sub(r"\s*\([^)]*\)\s*$", "", tokens).strip(" |,:;")
-                ratio = SequenceMatcher(None, norm(core), norm(tokens)).ratio()
-                if ratio > 0.64:
-                    fuzzy.append((ratio, line))
-        if matching:
-            actual, source_line = matching[0]
-            rows.append(
-                _field(
-                    "Petugas: " + name,
-                    name,
-                    actual,
-                    "MATCH",
-                    100,
-                    pages[0]["page"],
-                    source_line,
-                )
-            )
-        elif fuzzy:
-            ratio, ln = max(fuzzy)
-            rows.append(
-                _field(
-                    "Petugas: " + name,
-                    name,
-                    ln,
-                    "REVIEW",
-                    round(ratio * 100, 1),
-                    pages[0]["page"],
-                    ln,
-                )
-            )
-        else:
-            rows.append(_field("Petugas: " + name, name))
-    return rows
 
 
 def _equipment_for_document(path, pages, ref_list, kind):
@@ -875,47 +606,39 @@ def _select_exposure_equipment(path, pages, references, kind):
 
 
 def analyze(path, kind, reference):
-    if kind not in ("tld_upload", "radiation_exposure_upload", "tube_leakage_upload"):
+    if kind not in ("radiation_exposure_upload", "tube_leakage_upload"):
         raise ValueError("Jenis dokumen tidak didukung")
     pages = _pages(path, kind)
     scoped_pages = _roi_field(pages, kind, path)
     general = reference.get("general") or {}
     institution = general.get("instansi") or general.get("nama_fasilitas") or ""
     addr = general.get("alamat_proyek") or general.get("alamat") or ""
-    recipient = _tld_recipient(scoped_pages, institution, addr) if kind == "tld_upload" else None
-    rows = (
-        list(recipient)
-        if recipient
-        else [
-            _find_licensee(scoped_pages, institution, kind),
-            _address(scoped_pages, addr, kind),
-        ]
-    )
-    if kind == "tld_upload":
-        rows.extend(_tld_names(pages, reference, path))
+    rows = [
+        _find_licensee(scoped_pages, institution, kind),
+        _address(scoped_pages, addr, kind),
+    ]
+    refs = reference.get("equipment") or []
+    chosen = _select_exposure_equipment(path, scoped_pages, refs, kind)
+    if isinstance(chosen, tuple):
+        groups = [(chosen[0] + 1, chosen[1])]
+    elif chosen is None and len(refs) > 1:
+        rows.append(_field("Pemilihan Peralatan", "Nomor seri unit unik", "", "REVIEW"))
+        groups = []
     else:
-        refs = reference.get("equipment") or []
-        chosen = _select_exposure_equipment(path, scoped_pages, refs, kind)
-        if isinstance(chosen, tuple):
-            groups = [(chosen[0] + 1, chosen[1])]
-        elif chosen is None and len(refs) > 1:
-            rows.append(_field("Pemilihan Peralatan", "Nomor seri unit unik", "", "REVIEW"))
-            groups = []
-        else:
-            groups = list(enumerate(chosen or [], 1))
-        for i, group in groups:
-            for item in group:
-                rows.append(
-                    _field(
-                        f"Alat {i}: {FIELD_LABELS.get(item['field'], item['field'])}",
-                        item.get("expected"),
-                        item.get("observed"),
-                        item.get("status", "REVIEW"),
-                        item.get("score"),
-                        (item.get("evidence") or [{}])[0].get("page"),
-                        (item.get("evidence") or [{}])[0].get("quote"),
-                    )
+        groups = list(enumerate(chosen or [], 1))
+    for i, group in groups:
+        for item in group:
+            rows.append(
+                _field(
+                    f"Alat {i}: {FIELD_LABELS.get(item['field'], item['field'])}",
+                    item.get("expected"),
+                    item.get("observed"),
+                    item.get("status", "REVIEW"),
+                    item.get("score"),
+                    (item.get("evidence") or [{}])[0].get("page"),
+                    (item.get("evidence") or [{}])[0].get("quote"),
                 )
+            )
     rows.append(_signoff(pages, kind))
     return {
         "kind": kind,

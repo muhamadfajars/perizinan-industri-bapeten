@@ -494,43 +494,55 @@
 
 .category-formulir,
 .category-label {
-  background: #e8f1ff;
-  color: #2675df;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .category-proteksi,
-.category-spesifikasi,
-.category-tld {
-  background: #e7f8ee;
-  color: #22a663;
+.category-spesifikasi {
+  background: #dcfce7;
+  color: #15803d;
 }
 
-.category-kesesuaian,
 .category-fungsi {
-  background: #fff4dc;
-  color: #e79504;
+  background: #fef3c7;
+  color: #b45309;
 }
 
 .category-manajemen {
-  background: #f1eaff;
-  color: #8d55d5;
+  background: #f3e8ff;
+  color: #7e22ce;
 }
 
-.category-teknis,
 .category-impor {
-  background: #edf3fc;
-  color: #528cde;
+  background: #e0f2fe;
+  color: #0369a1;
 }
 
 .category-personel {
-  background: #e9f0ff;
-  color: #377dd7;
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.category-mutu {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.category-kalibrasi {
+  background: #ffedd5;
+  color: #c2410c;
 }
 
 .category-paparan,
 .category-kebocoran {
-  background: #f8eaf7;
-  color: #ad55a6;
+  background: #fce7f3;
+  color: #be185d;
+}
+
+.category-unclassified {
+  background: #fef3c7;
+  color: #b45309;
 }
 
 .category-title {

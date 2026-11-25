@@ -23,11 +23,6 @@
       "subtype": null
     },
     {
-      "pattern": "dokumen[\\s_-]*teknis|rencana[\\s_-]*teknis|gedung[\\s_-]*penahan|penahan[\\s_-]*radiasi|denah[\\s_-]*ruang",
-      "category": "teknis",
-      "subtype": null
-    },
-    {
       "pattern": "surat[\\s_-]*keterangan[\\s_-]*kerja|skk\\b",
       "category": "personel",
       "subtype": "Surat Keterangan Kerja"
@@ -53,14 +48,9 @@
       "subtype": "Surat Izin Bekerja (SIB)"
     },
     {
-      "pattern": "evaluasi[\\s_-]*dosis|pembacaan[\\s_-]*dosis|laporan[\\s_-]*dosis|dosis[\\s_-]*awal|zero[\\s_-]*check|zerocheck|zero[\\s_-]*cek",
+      "pattern": "evaluasi[\\s_-]*dosis|pembacaan[\\s_-]*dosis|pemantauan[\\s_-]*dosis|laporan[\\s_-]*dosis|dosis[\\s_-]*awal|(?:lhu|hasil[\\s_-]*uji)[\\s_-]*(?:pemantauan[\\s_-]*)?(?:dosis|tld|osl)|zero[\\s_-]*check|zerocheck|zero[\\s_-]*cek",
       "category": "personel",
       "subtype": "Evaluasi Dosis / Zero Check"
-    },
-    {
-      "pattern": "petugas[\\s_-]*(?:tld|osl)\\b|daftar[\\s_-]*(?:pemakai|pengguna|peserta)[\\s_-]*(?:lencana[\\s_-]*)?(?:tld|osl|dosimeter)\\b|(?:administrasi|kepesertaan)[\\s_-]*(?:(?:pemantauan|layanan)[\\s_-]*)?(?:tld|osl|dosimeter)\\b",
-      "category": "tld",
-      "subtype": null
     },
     {
       "pattern": "spesifikasi|brochure|brosur|manual[\\s_-]*book|datasheet|data[\\s_-]*sheet",
@@ -73,18 +63,18 @@
       "subtype": null
     },
     {
-      "pattern": "uji[\\s_-]*kesesuaian|sertifikat[\\s_-]*uk|ktun.*uk|lhu\\b|resume[\\s_-]*bapeten",
-      "category": "kesesuaian",
-      "subtype": null
-    },
-    {
       "pattern": "uji[\\s_-]*fungsi|ujifungsi|acceptance[\\s_-]*test|accepatance|caf\\b|bauf\\b|bast\\b|service[\\s_-]*report|installation.*record|installation.*verification",
       "category": "fungsi",
       "subtype": null
     },
     {
-      "pattern": "sertifikat[\\s_-]*(?:uji[\\s_-]*)?mutu|uji[\\s_-]*mutu|sertifikat[\\s_-]*kalibrasi|calibration[\\s_-]*cert|quality[\\s_-]*(?:control[\\s_-]*)?cert|factory[\\s_-]*(?:test|qc)[\\s_-]*cert|certificate[\\s_-]*of[\\s_-]*(?:quality|calibration|conformity)",
+      "pattern": "sertifikat[\\s_-]*(?:uji[\\s_-]*)?mutu|uji[\\s_-]*mutu|quality[\\s_-]*(?:control[\\s_-]*)?cert|factory[\\s_-]*(?:test|qc)[\\s_-]*cert|certificate[\\s_-]*of[\\s_-]*(?:quality|conformity)",
       "category": "mutu",
+      "subtype": null
+    },
+    {
+      "pattern": "sertifikat[\\s_-]*kalibrasi|calibration[\\s_-]*cert|certificate[\\s_-]*of[\\s_-]*(?:[a-z]+[\\s_-]+(?:and|dan)[\\s_-]+)?calibration",
+      "category": "kalibrasi",
       "subtype": null
     },
     {
@@ -105,9 +95,6 @@
   ],
   "weakNameHints": [
     "sib",
-    "tld",
-    "osl",
-    "dosimeter",
     "proteksi radiasi",
     "keselamatan radiasi"
   ]

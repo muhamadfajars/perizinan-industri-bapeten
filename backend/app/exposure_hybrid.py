@@ -325,6 +325,46 @@ def _run_tesseract_png(png_bytes: bytes) -> str:
     return ""
 
 
+def _ocr_embedded_images_pdf(doc, page) -> str:
+    """Fallback OCR directly on embedded images when framed page rendering yields empty text."""
+    import io
+    from PIL import Image, ImageOps
+
+    candidates = []
+    seen_xrefs: set[int] = set()
+    for info in page.get_images():
+        xref = info[0]
+        if xref in seen_xrefs:
+            continue
+        seen_xrefs.add(xref)
+        try:
+            raw = doc.extract_image(xref)
+        except Exception:
+            continue
+        if not raw or not raw.get("image"):
+            continue
+        width = int(raw.get("width") or 0)
+        height = int(raw.get("height") or 0)
+        if min(width, height) < 200:
+            continue
+        candidates.append((width * height, raw["image"]))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    chunks: list[str] = []
+    for _, img_bytes in candidates[:2]:
+        try:
+            with Image.open(io.BytesIO(img_bytes)) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im.thumbnail((2400, 2400))
+                buf = io.BytesIO()
+                im.save(buf, format="PNG")
+                txt = _run_tesseract_png(buf.getvalue())
+        except Exception:
+            continue
+        if txt:
+            chunks.append(txt)
+    return "\n".join(chunks)
+
+
 def read_exposure_pages(path: str) -> list[dict]:
     """Read exposure/leakage/functional document pages (PDF or image) with OCR fallback."""
     lower = str(path).lower()
@@ -375,6 +415,10 @@ def read_exposure_pages(path: str) -> list[dict]:
                 try:
                     png = page.get_pixmap(dpi=180, alpha=False).tobytes("png")
                     ocr_txt = _run_tesseract_png(png)
+                    if len(re.sub(r"\s+", "", ocr_txt)) < 10 and page.get_images():
+                        emb_txt = _ocr_embedded_images_pdf(doc, page)
+                        if len(re.sub(r"\s+", "", emb_txt)) > len(re.sub(r"\s+", "", ocr_txt)):
+                            ocr_txt = emb_txt
                     if ocr_txt:
                         text = _merge_native_and_ocr(native, ocr_txt)
                         source = "ocr"

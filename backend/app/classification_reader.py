@@ -28,6 +28,39 @@ def ocr(image):
     return text
 
 
+def _ocr_embedded_images(doc, page):
+    """OCR large embedded images directly when full-page rendering drops photo scans."""
+    candidates = []
+    seen_xrefs = set()
+    for info in page.get_images():
+        xref = info[0]
+        if xref in seen_xrefs:
+            continue
+        seen_xrefs.add(xref)
+        try:
+            raw = doc.extract_image(xref)
+        except Exception:
+            continue
+        if not raw or not raw.get("image"):
+            continue
+        width = int(raw.get("width") or 0)
+        height = int(raw.get("height") or 0)
+        if min(width, height) < 200:
+            continue
+        candidates.append((width * height, raw["image"]))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    chunks = []
+    for _, img_bytes in candidates[:2]:
+        try:
+            with Image.open(io.BytesIO(img_bytes)) as img:
+                txt = ocr(img.copy()).strip()
+        except (RuntimeError, OSError, ValueError):
+            continue
+        if txt:
+            chunks.append(txt)
+    return "\n".join(chunks)
+
+
 def extract_document_text(filename, file_bytes, max_pages=6):
     """Inspect up to six opening pages; at most three OCR calls per upload.
 
@@ -55,6 +88,10 @@ def extract_document_text(filename, file_bytes, max_pages=6):
                     pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale))
                     try:
                         scanned = ocr(Image.open(io.BytesIO(pix.tobytes("png"))))
+                        if len("".join(scanned.split())) < 10 and page.get_images():
+                            embedded = _ocr_embedded_images(doc, page)
+                            if len("".join(embedded.split())) > len("".join(scanned.split())):
+                                scanned = embedded
                     except (RuntimeError, OSError, ValueError) as exc:
                         # Do not silently treat an OCR failure as successful verification.
                         raise ValueError("OCR belum berhasil; kategori perlu diperiksa") from exc

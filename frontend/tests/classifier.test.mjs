@@ -34,19 +34,34 @@ test('shared rules match the filename regression baseline', () => {
   }
 });
 
-test('dose reports are personnel documents, while explicit TLD administration stays separate', () => {
+test('dose reports remain personnel documents while removed categories stay unclassified', () => {
   for (const name of ['20260714134027-Laporan Dosis Awal RS Hermina Kepanjen Periode Oktober - Desember 2026.pdf',
     'Laporan_Dosis_OSL.pdf', 'Hasil Pembacaan Dosis TLD.pdf', 'Dosis Awal.pdf', 'Evaluasi Dosis OSL.pdf']) {
     assert.equal(classify(name)?.category, 'personel', name);
     assert.equal(classify(name)?.subtype, 'Evaluasi Dosis / Zero Check', name);
   }
-  for (const name of ['Daftar Pemakai TLD.pdf', 'Daftar Pengguna Lencana OSL.pdf', 'Petugas TLD.pdf', 'Kepesertaan Pemantauan OSL.pdf']) {
-    assert.equal(classify(name)?.category, 'tld', name);
-  }
-  for (const name of ['Lencana OSL.pdf', 'TLD.pdf', 'dosimeter.pdf', 'NUKLINDOLAB.pdf']) {
+  for (const name of [
+    'Daftar Pemakai TLD.pdf',
+    'Daftar Pengguna Lencana OSL.pdf',
+    'Petugas TLD.pdf',
+    'Kepesertaan Pemantauan OSL.pdf',
+    'DOKUMEN TEKNIS RSH KEPANJEN.pdf',
+    'Lencana OSL.pdf',
+    'TLD.pdf',
+    'dosimeter.pdf',
+    'NUKLINDOLAB.pdf',
+  ]) {
     assert.equal(classify(name), null, name);
   }
-  assert.equal(classify('Laporan Dosis dan Daftar Pemakai TLD.pdf')?.category, 'unknown');
+  assert.equal(classify('Sertifikat Kalibrasi Alat.pdf')?.category, 'kalibrasi');
+  assert.equal(classify('Certificate of Manufacture and Calibration XRF.pdf')?.category, 'kalibrasi');
+  assert.equal(classify('Sertifikat Uji Mutu.pdf')?.category, 'mutu');
+  for (const name of ['LHU DOSIS MARET-MEI 2026.pdf', 'LHU TLD.pdf', 'Pemantauan Dosis Perorangan.pdf']) {
+    assert.equal(classify(name)?.category, 'personel', name);
+    assert.equal(classify(name)?.subtype, 'Evaluasi Dosis / Zero Check', name);
+  }
+  assert.equal(classify('LHU Uji Kesesuaian.pdf'), null);
+  assert.equal(classify('250169011_KTUN_Sertifikat_UK jiwa aceh.pdf'), null);
 });
 
 test('tube label aliases resolve in the browser', () => {

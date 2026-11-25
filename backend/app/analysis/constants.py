@@ -4,29 +4,19 @@ from __future__ import annotations
 NAMES = {
     "proteksi": "Program Proteksi Radiasi",
     "manajemen": "Sistem Manajemen",
-    "teknis": "Dokumen Teknis",
     "personel": "Dokumen Personel",
-    "tld": "Dokumen Petugas TLD",
     "spesifikasi": "Spesifikasi Alat",
     "label": "Label Unit dan Tabung",
     "impor": "Persetujuan Impor",
-    "kesesuaian": "Uji Kesesuaian",
     "fungsi": "Uji Fungsi / Acceptance Test",
     "mutu": "Sertifikat Uji Mutu",
+    "kalibrasi": "Sertifikat Kalibrasi",
     "paparan": "Uji Paparan Radiasi",
     "kebocoran": "Uji Kebocoran Tabung",
 }
 
 
-PROG = {
-    "proteksi": "program_protection_upload",
-    "manajemen": "management_system_upload",
-    "teknis": "technical_documents_upload",
-}
-
-
 SUPP = {
-    "tld": "tld_upload",
     "paparan": "radiation_exposure_upload",
     "kebocoran": "tube_leakage_upload",
 }

@@ -2,7 +2,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, Clock, XCircle } from 'lucide-r
 import { Fragment, useMemo, useState } from 'react';
 import { categoryById } from '../data/categories';
 import { matchingTotals } from '../lib/matching';
-import { matchingSectionTitle, rowMatchesFilter, summaryRingTone } from '../lib/matchingDisplay';
+import { matchingSectionTitle, rowMatchesFilter } from '../lib/matchingDisplay';
 import type { MatchRow, MatchSection } from '../types/models';
 import { Filter } from '../types/workspace';
 import { ApprovalEvidence, MaintenanceEvidence } from './Evidence';
@@ -232,9 +232,8 @@ export function MatchingSection({
                     const radius = 26;
                     const circumference = 2 * Math.PI * radius;
                     const dashOffset = circumference - (pct / 100) * circumference;
-                    const tone = summaryRingTone(pct);
                     return (
-                      <div className={`matching-summary-ring tone-${tone}`} aria-hidden="true">
+                      <div className="matching-summary-ring" aria-hidden="true">
                         <svg viewBox="0 0 64 64">
                           <circle className="ring-track" cx="32" cy="32" r={radius} />
                           <circle

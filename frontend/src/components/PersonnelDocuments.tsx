@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { AlertCircle, CheckCircle2, Users } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, CheckCircle2, FileText, Users } from 'lucide-react';
 import type { MatchRow, MatchSection, MatchStatus } from '../types/models';
 import { isPersonnelInformation } from '../lib/matching';
 import {
@@ -155,30 +155,30 @@ export function PersonnelDocuments({
                     aria-hidden="true"
                   />
                   <span className="doc-tab-title">{group.docType}</span>
-                  {(group.isShared || group.status === 'REVIEW' || group.status === 'MISMATCH') && (
+                  {(group.status === 'REVIEW' || group.status === 'MISMATCH') && (
                     <span className="doc-tab-badges">
-                      {group.isShared && (
-                        <span
-                          className="doc-tab-badge-shared"
-                          title={
-                            group.owners.length > 1
-                              ? `Dokumen bersama: memuat ${group.owners.join(', ')}`
-                              : `Dokumen bersama: juga memuat ${group.coOwners.join(', ')}`
-                          }
-                        >
-                          Kolektif
-                        </span>
-                      )}
-                      {(group.status === 'REVIEW' || group.status === 'MISMATCH') && (
-                        <span className={`doc-tab-badge-status status-${group.status.toLowerCase()}`}>
-                          {group.status === 'MISMATCH' ? 'Mismatch' : 'Review'}
-                        </span>
-                      )}
+                      <span className={`doc-tab-badge-status status-${group.status.toLowerCase()}`}>
+                        {group.status === 'MISMATCH' ? 'Mismatch' : 'Review'}
+                      </span>
                     </span>
                   )}
                 </div>
-                <div className={ownerText ? 'doc-tab-owner' : 'doc-tab-owner doc-tab-owner-unknown'}>
-                  {ownerText ?? 'Pemilik belum terbaca'}
+                <div className="doc-tab-meta">
+                  <span className={ownerText ? 'doc-tab-owner' : 'doc-tab-owner doc-tab-owner-unknown'}>
+                    {ownerText ?? 'Pemilik belum terbaca'}
+                  </span>
+                  {group.isShared && (
+                    <span
+                      className="doc-tab-badge-shared"
+                      title={
+                        group.owners.length > 1
+                          ? `Dokumen bersama: memuat ${group.owners.join(', ')}`
+                          : `Dokumen bersama: juga memuat ${group.coOwners.join(', ')}`
+                      }
+                    >
+                      Kolektif
+                    </span>
+                  )}
                 </div>
                 {showDisambiguator && <div className="doc-tab-file">{group.shortFilename}</div>}
               </button>
@@ -341,7 +341,6 @@ function PersonnelEvidenceCard({
 }) {
   const rawPages = row.detail?.pages ?? (row.page != null ? [row.page] : []);
   const pages = [...new Set(rawPages)];
-  const [pageIndex, setPageIndex] = useState(0);
 
   const isPengesahan = row.field === 'Pengesahan' || row.detail?.group === 'Pengesahan';
   const isMasaBerlaku = row.field === 'Masa Berlaku';
@@ -364,7 +363,8 @@ function PersonnelEvidenceCard({
       : undefined;
 
   const targetDocId = row.document_id || documentId;
-  const targetPage = pages.length > 0 ? pages[pageIndex] : undefined;
+  const hasPerPeriodActions =
+    periodItems.length > 0 && Boolean(targetDocId) && periodItems.every((item) => item.page != null);
 
   return (
     <li className={`law-item ${confirmed ? '' : 'law-item-missing'}`.trim()}>
@@ -389,7 +389,19 @@ function PersonnelEvidenceCard({
             <ul className="personnel-period-list">
               {periodItems.map((item, idx) => (
                 <li key={`${item.page ?? 'p'}-${idx}`} className="personnel-period-item">
-                  {item.page != null && <span className="personnel-period-page">Hal. {item.page}</span>}
+                  {targetDocId && item.page != null ? (
+                    <button
+                      type="button"
+                      className="law-source-link law-source-link-compact"
+                      onClick={() => openSource(targetDocId, item.page)}
+                    >
+                      <FileText size={13} aria-hidden="true" />
+                      <span>{confirmed ? `Lihat · Hal. ${item.page}` : `Periksa · Hal. ${item.page}`}</span>
+                      <ArrowUpRight size={13.5} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    item.page != null && <span className="personnel-period-page">Hal. {item.page}</span>
+                  )}
                   <span className="personnel-period-value">{item.value}</span>
                 </li>
               ))}
@@ -414,30 +426,28 @@ function PersonnelEvidenceCard({
           <p className="law-item-subject">{defaultNote}</p>
         ) : null}
 
-        {(pages.length > 0 || targetDocId) && (
+        {!hasPerPeriodActions && (pages.length > 0 || targetDocId) && (
           <div className="law-item-actions">
-            {pages.length > 1 && (
-              <select
-                className="law-page-select"
-                aria-label={`Pilih halaman sumber ${row.field}`}
-                value={pageIndex}
-                onChange={(e) => setPageIndex(Number(e.target.value))}
-              >
-                {pages.map((p, i) => (
-                  <option key={p} value={i}>
-                    Halaman {p}
-                  </option>
-                ))}
-              </select>
+            {pages.length > 1 ? (
+              pages.map((pageNum) => (
+                <SourceActionButton
+                  key={pageNum}
+                  documentId={targetDocId}
+                  page={pageNum}
+                  found={confirmed}
+                  hasPages
+                  onOpen={openSource}
+                />
+              ))
+            ) : (
+              <SourceActionButton
+                documentId={targetDocId}
+                page={pages[0] ?? 1}
+                found={confirmed}
+                hasPages={pages.length > 0}
+                onOpen={openSource}
+              />
             )}
-            <SourceActionButton
-              documentId={targetDocId}
-              page={targetPage ?? 1}
-              found={confirmed}
-              hasPages={pages.length > 0}
-              multiPageLabel={pages.length > 1 ? 'Lihat halaman terpilih' : undefined}
-              onOpen={openSource}
-            />
           </div>
         )}
       </div>

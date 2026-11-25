@@ -14,15 +14,13 @@ CATEGORIES = (
     "formulir",
     "proteksi",
     "manajemen",
-    "teknis",
     "personel",
-    "tld",
     "spesifikasi",
     "label",
     "impor",
-    "kesesuaian",
     "fungsi",
     "mutu",
+    "kalibrasi",
     "paparan",
     "kebocoran",
 )
@@ -59,12 +57,6 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
         "manajemen",
         None,
     ),
-    # Teknis
-    (
-        r"(?i)DOKUMEN\s+TEKNIS\s+FASILITAS|RENCANA\s+TEKNIS|BANGUNAN\s+GEDUNG\s+PENAHAN|DENAH\s+RUANG\s+RADIOLOGI",
-        "teknis",
-        None,
-    ),
     # Personel
     (r"(?i)SURAT\s+KETERANGAN\s+KERJA", "personel", "Surat Keterangan Kerja"),
     (
@@ -89,16 +81,9 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
         "Surat Izin Bekerja (SIB)",
     ),
     (
-        r"(?i)ZERO\s+CHECK|ZERO\s+CEK|(?:LAPORAN\s+)?(?:HASIL\s+)?(?:EVALUASI|PEMBACAAN)\s+DOSIS|LAPORAN\s+DOSIS|DOSIS\s+AWAL|DOSIS\s+RADIASI\s+TLD",
+        r"(?i)ZERO\s+CHECK|ZERO\s+CEK|(?:LAPORAN\s+)?(?:HASIL\s+(?:UJI\s+)?)?(?:EVALUASI|PEMBACAAN|PEMANTAUAN)\s+DOSIS(?:\s+(?:PERORANGAN|PEKERJA|RADIASI))?|LAPORAN\s+DOSIS|DOSIS\s+AWAL|DOSIS\s+RADIASI\s+(?:TLD|OSL)|PERSONAL\s+DOSIMETRY\s+REPORT|DOSE\s+REPORT",
         "personel",
         "Evaluasi Dosis / Zero Check",
-    ),
-    # TLD
-    # Technology names and laboratory branding alone do not identify administration.
-    (
-        r"(?i)DAFTAR\s+(?:PEMAKAI|PENGGUNA|PESERTA)\s+(?:LENCANA\s+)?(?:TLD|OSL|DOSIMETER)\b|PETUGAS\s+(?:TLD|OSL)\b|(?:ADMINISTRASI|KEPESERTAAN)\s+(?:(?:PEMANTAUAN|LAYANAN)\s+)?(?:TLD|OSL|DOSIMETER)\b",
-        "tld",
-        None,
     ),
     # Spesifikasi
     (
@@ -112,12 +97,6 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
         "impor",
         None,
     ),
-    # Kesesuaian
-    (
-        r"(?i)SERTIFIKAT\s+UJI\s+KESESUAIAN|HASIL\s+UJI\s+KESESUAIAN|LEMBAR\s+HASIL\s+UJI|DATA\s+PERMOHONAN\s+LHU",
-        "kesesuaian",
-        None,
-    ),
     # Fungsi
     (
         r"(?i)ACCEPTANCE\s+TEST|INSTALLATION\s+AND\s+VERIFICATION|SERVICE\s+REPORT|BERITA\s+ACARA\s+UJI\s+FUNGSI|HASIL\s+UJI\s+FUNGSI",
@@ -128,6 +107,12 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
     (
         r"(?i)SERTIFIKAT\s+(?:UJI\s+)?MUTU|QUALITY\s+(?:CONTROL\s+)?CERTIFICATE|CERTIFICATE\s+OF\s+(?:QUALITY|CONFORMITY)",
         "mutu",
+        None,
+    ),
+    # Sertifikat Kalibrasi
+    (
+        r"(?i)SERTIFIKAT\s+KALIBRASI|CALIBRATION\s+CERTIFICATE|CERTIFICATE\s+OF\s+(?:[A-Z]+\s+(?:AND|&)\s+)?CALIBRATION",
+        "kalibrasi",
         None,
     ),
     # Paparan & Kebocoran
@@ -149,14 +134,10 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
 WEAK_NAME_HINTS = set(_RULES["weakNameHints"])
 
 
-def classify_by_filename(
+def _classify_filename_detailed(
     filename: str,
-) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Match filename pattern against known document rules.
-
-    Returns:
-        (category, subtype, reason) or (None, None, None)
-    """
+) -> Tuple[Optional[str], Optional[str], Optional[str], bool]:
+    """Match filename pattern against known document rules, tracking weak hints."""
     clean_name = Path(filename).name
     matches = []
     for pattern, cat, subtype in NAME_PATTERNS:
@@ -171,11 +152,23 @@ def classify_by_filename(
             None,
             None,
             "Nama berkas mengarah ke beberapa kategori. Perlu Pilih Kategori.",
+            False,
         )
     if candidates:
-        cat, subtype, evidence, _ = candidates[0]
-        return cat, subtype, f"Pola nama berkas cocok: {evidence}"
-    return None, None, None
+        cat, subtype, evidence, is_strong = candidates[0]
+        return cat, subtype, f"Pola nama berkas cocok: {evidence}", not is_strong
+    return None, None, None, False
+
+
+def classify_by_filename(
+    filename: str,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Match filename pattern against known document rules.
+
+    Returns:
+        (category, subtype, reason) or (None, None, None)
+    """
+    return _classify_filename_detailed(filename)[:3]
 
 
 def classify_by_content(
@@ -269,6 +262,19 @@ def classify_by_content(
             "Judul dokumen mengarah ke beberapa kategori. Perlu Pilih Kategori.",
         )
     if (
+        re.search(r"(?i)\bHp\s*\(\s*(?:10|0[.,]07|3)\s*\)", text)
+        and re.search(
+            r"(?i)\b(?:no\.?\s*lencana|periode\s+pemakaian|tanggal\s+dosimeter|dosis\s+tara|badge\s+no\.?|wear\s+period)\b",
+            text,
+        )
+        and re.search(r"(?i)\b(?:lencana|dosimeter|tld|osl|pemantauan\s+dosis|evaluasi\s+dosis)\b", text)
+    ):
+        return (
+            "personel",
+            "Evaluasi Dosis / Zero Check",
+            "Laporan pemantauan dosis perorangan (Hp(10)/dosimeter) terdeteksi",
+        )
+    if (
         re.search(r"(?i)\btest(?:ing)?\s+report\b", text[:1500])
         and re.search(
             r"(?i)\b(?:radiation\s+protection\s+detection|(?:x[-\s]*[γy]\s+)?radiation\s+dose\s+rate)\b",
@@ -277,18 +283,11 @@ def classify_by_content(
         and not re.search(r"(?i)\b(?:uji\s+fungsi|functional\s+test|acceptance\s+test)\b", text)
     ):
         return "paparan", None, "Laporan pengujian laju dosis / proteksi radiasi terdeteksi"
-    if (
-        re.search(r"(?i)\b(?:calibration\s+certificate|sertifikat\s+kalibrasi)\b", text[:1200])
-        and re.search(
-            r"(?i)\b(?:name\s+of\s+product|instrument\s+serial|portable\s+xrf|handheld\s+xrf|x[\s-]*ray\s+(?:analyzer|unit|tube|equipment))\b",
-            text,
-        )
-        and not re.search(
-            r"(?i)\b(?:surveymeter|survey\s+meter|dose\s+rate\s+meter|dosimeter|tld|alat\s+ukur)\b",
-            text,
-        )
+    if re.search(
+        r"(?im)^\s*(?!(?:.*?\b(?:melampirkan|terlampir|lampiran|daftar|untuk|berikut|wajib|harus|belum|sudah|tidak)\b))(?:[A-Z0-9.,&/\- ]{0,40}\s+)?(?:calibration\s+certificate|certificate\s+of\s+(?:[a-z]+\s+(?:and|&)\s+)?calibration|sertifikat\s+kalibrasi)\b",
+        text[:1200],
     ):
-        return "mutu", None, "Sertifikat uji mutu / kalibrasi pabrikan peralatan sinar-X terdeteksi"
+        return "kalibrasi", None, "Sertifikat kalibrasi terdeteksi"
     if re.search(
         r"(?:CAUTION|DANGER|WARNING)\s+(?:X[\s-]*RAY|RADIATION)|"
         r"PRODUCES\s+RADIATION(?:\s+.*?)?\s+WHEN\s+ENERGIZED|"
@@ -311,7 +310,7 @@ def _is_photo_album_pdf(filename: str, file_bytes: bytes, ocr_text: str) -> bool
     if Path(filename).suffix.lower() != ".pdf":
         return False
     if re.search(
-        r"denah|lokasi|peta|layout|gedung|sertifikat|surat|formulir|laporan|uji|program|sistem|tld|osl",
+        r"denah|lokasi|peta|layout|gedung|sertifikat|surat|formulir|laporan|uji|program|sistem|dosis",
         filename,
         re.I,
     ):
@@ -347,7 +346,7 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
     clean_name = Path(filename).name
 
     # Filename-only calls remain available, but uploaded bytes are always inspected.
-    cat1, sub1, reason1 = classify_by_filename(clean_name)
+    cat1, sub1, reason1, weak1 = _classify_filename_detailed(clean_name)
     if cat1 and file_bytes is None:
         return {
             "filename": clean_name,
@@ -374,7 +373,9 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
             }
         cat2, sub2, reason2 = classify_by_content(text)
         conflict = (
-            (reason1 and not cat1) or (reason2 and not cat2) or (cat1 and cat2 and cat1 != cat2)
+            (reason1 and not cat1)
+            or (reason2 and not cat2)
+            or (cat1 and cat2 and cat1 != cat2 and not weak1)
         )
         if conflict:
             return {

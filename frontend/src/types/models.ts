@@ -4,15 +4,13 @@ export type CategoryId =
   | 'formulir'
   | 'proteksi'
   | 'manajemen'
-  | 'teknis'
   | 'personel'
-  | 'tld'
   | 'spesifikasi'
   | 'label'
   | 'impor'
-  | 'kesesuaian'
   | 'fungsi'
   | 'mutu'
+  | 'kalibrasi'
   | 'paparan'
   | 'kebocoran';
 
@@ -51,7 +49,7 @@ export type MatchRow = {
   document_id?: string;
   quote?: string;
   detail?: {
-    type: 'approval' | 'maintenance' | 'protection' | 'management' | 'personnel';
+    type: 'approval' | 'maintenance' | 'protection' | 'management' | 'personnel' | 'quality' | 'calibration';
     source_label?: string;
     source_filename?: string;
     topics?: { label: string; found: boolean }[];

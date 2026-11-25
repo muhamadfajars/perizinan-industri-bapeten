@@ -156,7 +156,7 @@ class ClassificationRobustnessTests(unittest.TestCase):
             classify_by_content(
                 "LANScientific Co., Ltd.\nCalibration Certificate\nName of Product: Handheld XRF analyzer\nInstrument Serial number: 1536367"
             )[0],
-            "mutu",
+            "kalibrasi",
         )
         self.assertEqual(
             classify_by_content("SERTIFIKAT UJI MUTU PERALATAN\nNomor Seri: SN-001")[0],
@@ -166,10 +166,15 @@ class ClassificationRobustnessTests(unittest.TestCase):
             classify_by_content("CERTIFICATE OF QUALITY\nModel: TrueX G5")[0],
             "mutu",
         )
-        # Surveymeter calibration certificate must never be mistaken for unit acceptance test
-        self.assertIsNone(
+        self.assertEqual(
             classify_by_content(
                 "Calibration Certificate\nName of Product: Digital Surveymeter Dose Rate Meter\nSerial: SM-123"
+            )[0],
+            "kalibrasi",
+        )
+        self.assertIsNone(
+            classify_by_content(
+                "Untuk melampirkan sertifikat kalibrasi alat ukur, lihat bab 5."
             )[0]
         )
         image = io.BytesIO()
@@ -179,3 +184,31 @@ class ClassificationRobustnessTests(unittest.TestCase):
                 classify_by_content(extract_document_text("scan.tiff", image.getvalue()))[0],
                 "personel",
             )
+
+    def test_dosimetry_lhu_overrides_weak_lhu_hint_and_structural_fallback(self):
+        lhu_text = (
+            "LABORATORIUM TEKNOLOGI RADIASI\n"
+            "Perihal : Laporan Hasil Uji\n"
+            "LAPORAN HASIL UJI\n"
+            "PEMANTAUAN DOSIS PERORANGAN DENGAN LENCANA TLD\n"
+            "Periode Pemakaian : Februari - April 2026\n"
+        )
+        with patch("app.classifier.extract_document_text", return_value=lhu_text):
+            res = classify_document("LHU 292932.pdf", b"pdf")
+        self.assertEqual(
+            (res["category"], res["subtype"], res["layer"]),
+            ("personel", "Evaluasi Dosis / Zero Check", 2),
+        )
+        self.assertEqual(
+            classify_by_content(
+                "No. Urut | No. Lencana | Nama | Hp(10) | Hp(0,07)\n"
+                "Periode Pemakaian : Mei - Juli 2026\nElemen TLD dibaca dengan TLD reader"
+            )[:2],
+            ("personel", "Evaluasi Dosis / Zero Check"),
+        )
+        # Statutory dose-limit citations mentioning Hp(10) and TLD without badge report fields stay None.
+        self.assertIsNone(
+            classify_by_content(
+                "Berdasarkan PERKA BAPETEN No. 4/2013, NBD untuk Hp(10): 20 mSv/tahun untuk pemakai TLD."
+            )[0]
+        )

@@ -134,7 +134,7 @@ def analyze_application(aid, progress):
     def record_support(index, d, group, detail):
         rows = (
             detail["rows"]
-            if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu")
+            if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu", "kalibrasi")
             else finalize_legacy_rows(detail["rows"], d)
         )
         timings.append(
@@ -284,7 +284,7 @@ def analyze_application(aid, progress):
     duration = round(time.perf_counter() - started, 3)
     return {
         "application_id": aid,
-        "result_version": "BAPETEN-v052-quality-parallel-label-docx-address",
+        "result_version": "BAPETEN-v054-remove-kesesuaian",
         "source": "backend",
         "form_reference": form,
         "matching_sections": sections,

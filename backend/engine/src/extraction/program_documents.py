@@ -23,7 +23,6 @@ CATEGORIES = {
     "program_protection_upload": "Program Proteksi Radiasi",
     "program_maintenance_upload": "Program Perawatan",
     "management_system_upload": "Sistem Manajemen",
-    "technical_documents_upload": "Dokumen Teknis",
 }
 FIELDS = (
     "merk_unit",
@@ -1013,10 +1012,6 @@ def analyze(path, category, reference=None):
         output["personnel"] = _extract_personnel(pages, reference.get("personnel", []))
         output["equipment"] = None  # computed by v43_program_robust
         output["consistency_warnings"] = consistency_warnings(pages, primary)
-    if category == "technical_documents_upload":
-        primary = select_primary_pages(pages, category)
-        output["equipment"] = None  # computed by v43_program_robust
-        output["consistency_warnings"] = consistency_warnings(pages, primary)
     # v44_program_robust: evidence-bound, subtype-aware matching.
     from src.extraction.program_matching import (
         facility_result as facility_result_current,
@@ -1035,7 +1030,7 @@ def analyze(path, category, reference=None):
             "expected": address,
             **address_result_current(pages, address, path),
         }
-    if category in ("program_protection_upload", "technical_documents_upload"):
+    if category == "program_protection_upload":
         output["equipment"] = match_equipment_current(path, pages, reference.get("equipment", []))
     if category == "program_maintenance_upload":
         output["maintenance"] = maintenance_sections_current(pages, output.get("maintenance"))

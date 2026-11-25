@@ -92,14 +92,14 @@ class TestBapetenApi(unittest.TestCase):
         uploaded = self.client.post(
             base + "/documents",
             headers=self.headers,
-            data={"category": "teknis"},
+            data={"category": "spesifikasi"},
             files={"file": ("scan.pdf", _make_synthetic_support_pdf(), "application/pdf")},
         )
         self.assertEqual(uploaded.status_code, 200)
         document = uploaded.json()["document"]
         url = base + "/documents/" + document["id"]
         jid = self.storage.create_job(aid)
-        self.storage.update_job(jid, status="completed", result={"old_category": "teknis"})
+        self.storage.update_job(jid, status="completed", result={"old_category": "spesifikasi"})
         response = self.client.patch(
             url,
             headers=self.headers,
@@ -115,7 +115,8 @@ class TestBapetenApi(unittest.TestCase):
         ]
         self.assertEqual(persisted, corrected)
         self.assertEqual(self.client.get(base + "/results", headers=self.headers).status_code, 404)
-        response = self.client.patch(url, headers=self.headers, json={"category": "teknis"})
+        response = self.client.patch(url, headers=self.headers, json={"category": "kalibrasi"})
+        self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()["document"]["subtype"])
 
     def test_category_correction_validation_and_active_analysis(self):
@@ -134,6 +135,11 @@ class TestBapetenApi(unittest.TestCase):
         url = base + "/documents/" + did
         for payload, status in [
             ({"category": "unknown"}, 422),
+            ({"category": "teknis"}, 422),
+            ({"category": "tld"}, 422),
+            ({"category": "kesesuaian"}, 422),
+            ({"category": "kalibrasi"}, 200),
+            ({"category": "label"}, 200),
             ({"category": "personel", "subtype": " "}, 422),
             ({"category": "formulir"}, 415),
         ]:
@@ -148,7 +154,7 @@ class TestBapetenApi(unittest.TestCase):
             self.client.patch(
                 f"/api/v1/applications/{other}/documents/{did}",
                 headers=self.headers,
-                json={"category": "teknis"},
+                json={"category": "kalibrasi"},
             ).status_code,
             404,
         )
@@ -158,7 +164,7 @@ class TestBapetenApi(unittest.TestCase):
                 self.storage.update_job(jid, status=status)
                 self.assertEqual(
                     self.client.patch(
-                        url, headers=self.headers, json={"category": "teknis"}
+                        url, headers=self.headers, json={"category": "kalibrasi"}
                     ).status_code,
                     409,
                 )
@@ -288,12 +294,12 @@ class TestBapetenApi(unittest.TestCase):
         self.assertEqual(form_doc["category"], "formulir")
         self.assertEqual(form_doc["filename"], "formulir.pdf")
 
-        # Upload synthetic maintenance PDF
+        # Upload synthetic support PDF
         maint_bytes = _make_synthetic_support_pdf()
         res_maint = self.client.post(
             f"/api/v1/applications/{aid}/documents",
-            data={"category": "teknis"},
-            files={"file": ("perawatan.pdf", maint_bytes, "application/pdf")},
+            data={"category": "kalibrasi"},
+            files={"file": ("kalibrasi.pdf", maint_bytes, "application/pdf")},
             headers=self.headers,
         )
         self.assertEqual(res_maint.status_code, 200)
@@ -364,8 +370,8 @@ class TestBapetenApi(unittest.TestCase):
         maint_bytes = _make_synthetic_support_pdf()
         self.client.post(
             f"/api/v1/applications/{aid}/documents",
-            data={"category": "teknis"},
-            files={"file": ("perawatan.pdf", maint_bytes, "application/pdf")},
+            data={"category": "kalibrasi"},
+            files={"file": ("kalibrasi.pdf", maint_bytes, "application/pdf")},
             headers=self.headers,
         )
 

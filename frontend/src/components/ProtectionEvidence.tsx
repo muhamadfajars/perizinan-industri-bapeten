@@ -45,7 +45,6 @@ export function SourceActionButton({
   hasPages,
   fullPagesTitle,
   onOpen,
-  multiPageLabel,
 }: {
   documentId?: string;
   page: number;
@@ -54,16 +53,13 @@ export function SourceActionButton({
   hasPages: boolean;
   fullPagesTitle?: string;
   onOpen: (documentId: string, page?: number) => void;
-  multiPageLabel?: string;
 }) {
   const displayPage = pageLabel ?? String(page);
-  const text = multiPageLabel
-    ? multiPageLabel
-    : found
-      ? `Lihat sumber · Halaman ${displayPage}`
-      : hasPages
-        ? `Periksa sumber · Halaman ${displayPage}`
-        : 'Periksa dokumen sumber';
+  const text = found
+    ? `Lihat sumber · Halaman ${displayPage}`
+    : hasPages
+      ? `Periksa sumber · Halaman ${displayPage}`
+      : 'Periksa dokumen sumber';
 
   if (documentId) {
     return (

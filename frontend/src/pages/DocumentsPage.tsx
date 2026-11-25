@@ -45,40 +45,45 @@ export function DocumentsPage({
           <EmptyDocuments goUpload={() => goTo('upload')} />
         ) : (
           <div className="documents-grid">
-            {visibleDocuments.map((item) => (
-              <article className="document-card" key={item.id}>
-                <div className="document-card-top">
-                  <span className={`document-file-icon category-${item.category}`}>
-                    <FileText size={25} />
+            {visibleDocuments.map((item) => {
+              const categoryClass = item.category ? `category-${item.category}` : 'category-unclassified';
+              return (
+                <article className="document-card" key={item.id}>
+                  <div className="document-card-top">
+                    <span className={`document-file-icon ${categoryClass}`}>
+                      <FileText size={25} />
+                    </span>
+                    <button
+                      className="icon-button doc-delete-button"
+                      aria-label={`Hapus ${item.name}`}
+                      title="Hapus dari daftar sementara"
+                      onClick={() => removeFile(item.id)}
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  </div>
+                  <strong title={item.name}>{item.name}</strong>
+                  <span className="document-type">
+                    {item.name.split('.').at(-1)?.toUpperCase()} · {sizeLabel(item.size)}
                   </span>
-                  <button
-                    className="icon-button"
-                    aria-label={`Hapus ${item.name}`}
-                    title="Hapus dari daftar sementara"
-                    onClick={() => removeFile(item.id)}
-                  >
-                    <Trash2 size={17} />
-                  </button>
-                </div>
-                <strong title={item.name}>{item.name}</strong>
-                <span className="document-type">
-                  {item.name.split('.').at(-1)?.toUpperCase()} · {sizeLabel(item.size)}
-                </span>
-                <div className="document-meta">
-                  <span>{categoryById(item.category)?.name ?? 'Perlu Pilih Kategori'}</span>
-                  {item.subtype && <small>{item.subtype}</small>}
-                </div>
-                <div className="document-card-footer">
-                  <span>
-                    <CalendarDays size={13} />
-                    {dateLabel(item.addedAt)}
-                  </span>
-                  <button className="open-file" onClick={() => viewFile(item.file, item.serverId)}>
-                    <ExternalLink size={15} /> Buka
-                  </button>
-                </div>
-              </article>
-            ))}
+                  <div className="document-meta">
+                    <span className={`doc-category-pill ${categoryClass}`}>
+                      {categoryById(item.category)?.name ?? 'Perlu Pilih Kategori'}
+                    </span>
+                    {item.subtype && <small>{item.subtype}</small>}
+                  </div>
+                  <div className="document-card-footer">
+                    <span>
+                      <CalendarDays size={13} />
+                      {dateLabel(item.addedAt)}
+                    </span>
+                    <button className="open-file" onClick={() => viewFile(item.file, item.serverId)}>
+                      <ExternalLink size={15} /> Buka
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
             {!visibleDocuments.length && (
               <p className="doc-no-results">Tidak ada dokumen yang cocok dengan pencarian.</p>
             )}

@@ -95,7 +95,7 @@
   background: #fff;
   border: 1px solid #e7ebf0;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .match-section-header {
@@ -228,8 +228,8 @@
   background: #f9fafc;
   border: 1px solid #edf0f3;
   padding: 10px 12px;
-  font-size: 11px;
-  color: #68788e;
+  font-size: 12.5px;
+  color: #334155;
   margin-bottom: 12px;
   border-radius: 7px;
 }
@@ -249,8 +249,8 @@
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 12px;
-  color: #32405c;
+  font-size: 13.5px;
+  color: #1e293b;
   line-height: 1.6;
 }
 
@@ -279,9 +279,9 @@
 }
 
 .matching-table th {
-  color: #32445e;
+  color: #1e293b;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .matching-table th:nth-child(1) {
@@ -314,26 +314,26 @@
 }
 
 .matching-table .field-column {
-  color: #293b58;
+  color: #0f172a;
   font-weight: 600;
 }
 
 .matching-table .score-column {
   font-variant-numeric: tabular-nums;
-  color: #3d4d64;
+  color: #1e293b;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .matching-table .empty-observed {
-  color: #b0b7c3;
+  color: #64748b;
 }
 
 .matching-table .empty-table {
   padding: 30px 10px;
   text-align: center;
-  font-size: 12px;
-  color: #8a96a5;
+  font-size: 13.5px;
+  color: #475569;
 }
 
 .status-chip {
@@ -342,7 +342,7 @@
   gap: 5px;
   border-radius: 5px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -379,8 +379,8 @@
   justify-content: space-between;
   gap: 15px;
   padding: 12px 2px 1px;
-  color: #9aa5b4;
-  font-size: 11px;
+  color: #475569;
+  font-size: 12.5px;
 }
 
 .matching-footer {
@@ -388,17 +388,17 @@
   gap: 9px;
   align-items: center;
   padding: 17px 3px 1px;
-  color: #8c96a8;
-  font-size: 11px;
+  color: #475569;
+  font-size: 12.5px;
 }
 
 .matching-footer svg {
-  color: #7b94b6;
+  color: #475569;
   flex: none;
 }
 
 .matching-footer strong {
-  color: #58677f;
+  color: #334155;
 }
 
 @media (max-width: 640px) {
@@ -415,6 +415,8 @@
 }
 
 .personnel-doc-sidebar {
+  position: sticky;
+  top: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -423,11 +425,11 @@
 }
 
 .personnel-doc-list-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--muted, #7d8aa1);
+  color: var(--muted, #475569);
   padding: 2px 4px 4px;
 }
 
@@ -435,6 +437,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: min(65vh, 540px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .personnel-doc-tab {
@@ -477,9 +482,9 @@
 .doc-tab-title {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--ink, #17253d);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -497,15 +502,28 @@
   flex-shrink: 0;
 }
 
+.doc-tab-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 15px;
+  min-width: 0;
+}
+
 .doc-tab-owner {
   padding-left: 15px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.doc-tab-meta .doc-tab-owner {
+  padding-left: 0;
+  min-width: 0;
 }
 
 .doc-tab-owner-unknown {
@@ -516,9 +534,9 @@
 
 .doc-tab-file {
   padding-left: 15px;
-  font-size: 11px;
-  color: #7d8aa1;
-  line-height: 1.3;
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -549,7 +567,7 @@
 
 .doc-tab-badge-status {
   display: inline-block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
@@ -559,7 +577,8 @@
 
 .doc-tab-badge-shared {
   display: inline-block;
-  font-size: 10px;
+  flex-shrink: 0;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
@@ -591,15 +610,15 @@
 
 .personnel-doc-title-group h3 {
   margin: 0 0 4px;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
 }
 
 .personnel-doc-filename {
   margin: 0 0 6px;
-  font-size: 12px;
-  color: #64748b;
+  font-size: 13px;
+  color: #475569;
   word-break: break-word;
 }
 
@@ -607,13 +626,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #0369a1;
-  margin-top: 6px;
+  padding: 9px 12px;
+  background: #f8fbff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #0c4a6e;
+  margin-top: 8px;
 }
 
 .personnel-shared-notice svg {
@@ -621,29 +641,13 @@
   color: #0284c7;
 }
 
-.personnel-information-section {
-  display: flex;
-  flex-direction: column;
-}
-
-.personnel-information-section .protection-evidence {
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.personnel-information-section .protection-evidence:hover {
-  border-color: #94a3b8;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-}
-
 .personnel-period-list {
   list-style: none;
-  margin: 8px 0 6px;
+  margin: 8px 0 4px;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .personnel-period-item {
@@ -656,20 +660,21 @@
 .personnel-period-page {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 6px;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
   white-space: nowrap;
 }
 
 .personnel-period-value {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: #0f172a;
+  line-height: 1.45;
 }
 
 @media (max-width: 960px) {
@@ -679,6 +684,7 @@
   }
 
   .personnel-doc-sidebar {
+    position: static;
     padding-right: 0;
     padding-bottom: 14px;
     border-right: 0;
@@ -688,6 +694,7 @@
   .personnel-doc-tabs {
     max-height: 260px;
     overflow-y: auto;
+    padding-right: 0;
   }
 }
 

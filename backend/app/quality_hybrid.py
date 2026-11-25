@@ -29,13 +29,13 @@ _CLEAN_UNDERLINE_RE = re.compile(r"[_|]+")
 
 _FIELD_LINE_PATTERNS = {
     "merk_unit": re.compile(
-        r"(?i)^(?:manufacturer|merek(?:\s+unit)?|merk(?:\s+unit)?|pabrikan(?:\s+unit)?|brand)\s*[:|]\s*(.+)$"
+        r"(?i)^(?:manufacturer|merek(?:\s+unit)?|merk(?:\s+unit)?|pabrikan(?:\s+unit)?|pabrik(?:\s+pembuat)?|brand)\s*[:|]\s*(.+)$"
     ),
     "tipe_unit": re.compile(
-        r"(?i)^(?:instrument\s+model|(?:unit\s+)?model\s*/?\s*type|model(?:\s+unit)?|tipe(?:\s+unit)?|type)\s*[:|]\s*(.+)$"
+        r"(?i)^(?:instrument\s+model|(?:unit\s+)?model\s*/?\s*type|model(?:\s+unit)?|tipe(?:\s*/\s*model)?(?:\s+unit)?|type(?:\s*/\s*model)?)\s*[:|]\s*(.+)$"
     ),
     "nomor_seri_unit": re.compile(
-        r"(?i)^(?:instrument\s+serial(?:\s+(?:number|no\.?))?|(?:unit\s+)?serial(?:\s+(?:number|no\.?))?|no\.?\s*seri(?:\s+unit)?|nomor\s+seri(?:\s+unit)?|s\s*/\s*n)\s*[:|#]?\s*(.+)$"
+        r"(?i)^(?:instrument\s+serial(?:\s+(?:number|no\.?))?|(?:unit\s+)?serial(?:\s+(?:number|no\.?))?|no\.?\s*seri(?:\s+(?:unit|alat))?|nomor\s+seri(?:\s+(?:unit|alat))?|s\s*/\s*n)\s*[:|#]?\s*(.+)$"
     ),
     "merk_tabung": re.compile(
         r"(?i)^(?:tube\s+manufacturer|merek\s+tabung|merk\s+tabung)\s*[:|]\s*(.+)$"

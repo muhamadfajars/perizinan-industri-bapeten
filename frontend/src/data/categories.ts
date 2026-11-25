@@ -20,23 +20,11 @@ export const CATEGORIES: DocumentCategory[] = [
     description: 'Identitas fasilitas dan pengesahan',
   },
   {
-    id: 'teknis',
-    name: 'Dokumen Teknis',
-    icon: 'blueprint',
-    description: 'Data pesawat, tabung, ruangan, pengesahan',
-  },
-  {
     id: 'personel',
     name: 'Dokumen Personel',
     icon: 'users',
     description: 'SIB, sertifikat kompetensi PPR, pelatihan, dan penugasan',
     requiresSubtype: true,
-  },
-  {
-    id: 'tld',
-    name: 'Dokumen Petugas TLD',
-    icon: 'clipboard',
-    description: 'Fasilitas, alamat, daftar pemakai TLD, pengesahan',
   },
   {
     id: 'spesifikasi',
@@ -57,12 +45,6 @@ export const CATEGORIES: DocumentCategory[] = [
     description: 'Identitas alat dalam dokumen impor',
   },
   {
-    id: 'kesesuaian',
-    name: 'Uji Kesesuaian',
-    icon: 'check',
-    description: 'Identitas fasilitas dan peralatan',
-  },
-  {
     id: 'fungsi',
     name: 'Uji Fungsi / Acceptance Test',
     icon: 'flask',
@@ -72,7 +54,13 @@ export const CATEGORIES: DocumentCategory[] = [
     id: 'mutu',
     name: 'Sertifikat Uji Mutu',
     icon: 'filecheck',
-    description: 'Identitas alat, QC/kalibrasi pabrikan, pengesahan',
+    description: 'Identitas alat, QC pabrikan, pengesahan',
+  },
+  {
+    id: 'kalibrasi',
+    name: 'Sertifikat Kalibrasi',
+    icon: 'gauge',
+    description: 'Data alat yang sesuai formulir (kondisional)',
   },
   {
     id: 'paparan',

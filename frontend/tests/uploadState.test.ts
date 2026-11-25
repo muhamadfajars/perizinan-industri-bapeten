@@ -12,7 +12,7 @@ test('pending and unrecognized documents block analysis until a category is chos
   assert.equal(unknown.category, 'unknown');
   assert.equal(unknown.isClassifying, false);
   assert.match(classificationBlocker([unknown])!, /Perlu Pilih Kategori/);
-  assert.equal(classificationBlocker([{ ...unknown, category: 'kesesuaian' }]), null);
+  assert.equal(classificationBlocker([{ ...unknown, category: 'kalibrasi' }]), null);
 });
 
 test('recognized content carries its category and personnel subtype', () => {
@@ -25,14 +25,14 @@ test('recognized content carries its category and personnel subtype', () => {
 
 test('late recognition success or failure cannot overwrite a manual choice', () => {
   const manual: UploadItem = { ...pending, category: 'paparan', isClassifying: false };
-  for (const category of ['teknis', 'unknown'] as const) {
+  for (const category of ['kalibrasi', 'unknown'] as const) {
     assert.equal(applyClassification(manual, { category, layer: 0, confidence: 0, reason: 'Late response' }), manual);
   }
 });
 
 test('analysis requires exactly one reference form and at least one classified supporting document', () => {
   const form: UploadItem = { ...pending, id: 'form', category: 'formulir', isClassifying: false };
-  const support: UploadItem = { ...pending, category: 'teknis', isClassifying: false };
+  const support: UploadItem = { ...pending, category: 'kalibrasi', isClassifying: false };
   assert.match(analysisBlocker([])!, /Unggah/);
   assert.match(analysisBlocker([support])!, /Tambahkan 1 Formulir/);
   assert.match(analysisBlocker([form])!, /dokumen pendukung/);
