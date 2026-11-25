@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import re
-
-
 from .. import storage
 
 
@@ -59,33 +56,53 @@ def _supp(doc, app, ref):
                 status = "MISMATCH"
                 score = addr_score
                 reason = addr_note
-        # Paparan / kebocoran: compare only equipment fields evidenced in this document.
-        # Keep facility and approval checks even when absent: their completeness matters.
-        # A literal dash, null or empty OCR reading is not evidence of a mismatch.
-        if (
-            doc["category"] in ("paparan", "kebocoran")
-            and re.match(r"(?i)^\s*alat\s*\d+\s*:", field_name)
-            and _absent_value(x.get("observed"))
-        ):
+        # Paparan / kebocoran: only show fields that are actually evidenced in the document
+        # (omit empty/dash Nama Fasilitas, Alamat Fasilitas, Alat N, and Pengesahan rows).
+        if doc["category"] in ("paparan", "kebocoran") and _absent_value(x.get("observed")):
             continue
+        display_field = x.get("field")
+        expected = x.get("expected")
+        detail = None
+        if is_approval:
+            display_field = "Lembar Pengesahan"
+            expected = ""
+            status = "INFO"
+            score = None
+            reason = (
+                reason
+                or "Halaman pengesahan ditemukan; tanda tangan tetap memerlukan verifikasi visual."
+            )
+            detail = {
+                "type": "exposure",
+                "group": "Pengesahan",
+                "pages": [page] if isinstance(page, int) and page > 0 else [],
+            }
+        built = _row(
+            display_field,
+            expected,
+            x.get("observed"),
+            status,
+            score,
+            page,
+            reason,
+            doc["id"],
+            x.get("quote") or evidence.get("quote"),
+            detail,
+        )
+        if doc["category"] in ("paparan", "kebocoran") and _absent_value(built["observed"]):
+            continue
+        rows.append(built)
+    if not rows:
         rows.append(
             _row(
-                x.get("field"),
-                x.get("expected"),
-                x.get("observed"),
-                status,
-                score,
-                page,
-                reason,
+                "Ringkasan Dokumen",
+                "—",
+                "Belum terbaca",
+                "REVIEW",
+                None,
+                1,
+                "Tidak ada informasi fasilitas, pesawat, atau pengesahan yang berhasil dibaca otomatis; periksa dokumen sumber.",
                 doc["id"],
-                x.get("quote") or evidence.get("quote"),
-                {
-                    "type": "approval",
-                    "pages": [page] if isinstance(page, int) and page > 0 else [],
-                    "heading": "Pengesahan Dokumen",
-                }
-                if is_approval
-                else None,
             )
         )
     return rows

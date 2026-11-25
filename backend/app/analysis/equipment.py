@@ -67,47 +67,6 @@ def _functional(doc, app, ref):
     return rows
 
 
-def _specification(doc, app, ref):
-    from src.extraction.equipment_specification import parse_equipment_specification
-    from src.matching.specification_matcher import match_equipment_specification
-
-    parsed = parse_equipment_specification(str(storage.file_path(doc)))
-    match = match_equipment_specification(parsed, app.get("equipment") or [])
-    idx = match.get("selected_equipment_index")
-    candidates = match.get("candidates") or []
-    if not isinstance(idx, int) or idx >= len(app.get("equipment") or []):
-        return [
-            _row(
-                "Pemilihan peralatan",
-                "Identitas merek dan tipe unik",
-                "",
-                "REVIEW",
-                note=match.get("reason"),
-                document_id=doc["id"],
-            )
-        ]
-    chosen = next((c for c in candidates if c.get("equipment_index") == idx), {})
-    rows = []
-    for key, matchkey in [("merk_unit", "brand"), ("tipe_unit", "model")]:
-        field = chosen.get(matchkey) or {}
-        proof = field.get("evidence") or field.get("actual") or ""
-        if isinstance(proof, (dict, list)):
-            proof = str(proof)[:160]
-        rows.append(
-            _row(
-                f"Alat {idx + 1}: {FIELDS[key]}",
-                (app["equipment"][idx]).get(key),
-                proof,
-                field.get("status", "REVIEW"),
-                field.get("score"),
-                chosen.get("best_page"),
-                "Bukti berasal dari halaman spesifikasi",
-                doc["id"],
-            )
-        )
-    return rows
-
-
 def _absent_value(value):
     """Only empty evidence, never a real conflicting value, is omitted."""
     value = _text(value)

@@ -47,10 +47,9 @@ _TARGET_CONTEXT_RE = re.compile(
 )
 
 _SIGNOFF_CUE_RE = re.compile(
-    r"(?i)\b(?:conducted\s+by|tested\s+by|surveyed\s+by|verified\s+by|"
-    r"checked\s+by|approved\s+by|edited\s+by|authorized(?:\s+by)?|"
-    r"mengetahui|menyetujui|disahkan|pengesahan|penguji|ditandatangani|"
-    r"manajer|supervisor|pelaksana\s+uji|penanggung\s+jawab)\b"
+    r"(?i)\b(?:verified\s+by|checked\s+by|approved\s+by|authorized(?:\s+by)?|"
+    r"signed\s+by|signature|mengetahui|menyetujui|disahkan|pengesahan|"
+    r"ditandatangani|tanda\s+tangan|ttd)\b"
 )
 
 _CONTRACTOR_HINT_RE = re.compile(
@@ -506,7 +505,7 @@ def extract_exposure_llm(
         "PENTING - Bedakan PESAWAT/UNIT X-RAY yang diuji vs ALAT UKUR (Detector / Surveymeter / Dose Rate Instrument / Calibrator): "
         "JANGAN PERNAH menyalin model atau nomor seri detector/surveymeter/alat ukur (mis. Detector Model, Detector S/N, Alat Ukur, Testing equipment) ke kolom unit maupun tabung. "
         "PENTING - Bedakan PEMOHON/FASILITAS LOKAL vs PABRIKAN/PENGUJI: jangan menyalin nama atau alamat footer pabrikan maupun laboratorium penguji ke facility_name atau facility_address; bila dokumen adalah sertifikat pabrik tanpa fasilitas pemohon, biarkan facility_name dan facility_address kosong \"\". "
-        "Untuk approval_quote: kutip baris penanggung jawab/pelaksana/pengesahan uji (mis. 'Conducted by: ...', 'Checked by: ...', 'Approved by: ...', 'Mengetahui ...', 'Disahkan ...', 'Penguji Paparan Radiasi ...'). "
+        "Untuk approval_quote: kutip HANYA blok persetujuan atau tanda tangan resmi (mis. 'Approved by: ...', 'Authorized by: ...', 'Signed by: ...', 'Checked by: ...', 'Verified by: ...', 'Mengetahui ...', 'Disahkan ...', 'Tanda Tangan ...'); JANGAN mengutip label pelaksana biasa seperti 'Conducted by:' tanpa blok tanda tangan/pengesahan. "
         "quote wajib merupakan kutipan persis (maksimal 260 karakter) dari halaman tersebut yang mendukung nilai record."
     )
 

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "engine"))
 
-from app.analysis import equipment, programs  # noqa: E402
+from app.analysis import equipment, evidence, programs  # noqa: E402
 from app.exposure_hybrid import (  # noqa: E402
     _in_detector_only_context,
     enrich_exposure_rows,
@@ -153,7 +153,7 @@ class ExposureHybridTests(unittest.TestCase):
                 patch("app.storage.file_path", return_value=pdf_path),
                 patch("app.exposure_hybrid.llm.request_records", return_value=mock_llm_records),
             ):
-                rows = programs._supp(doc, app, ref)
+                rows = evidence._postprocess_evidence(programs._supp(doc, app, ref), doc)
 
         by_field = {r["field"]: r for r in rows}
         self.assertEqual(by_field["Alat 1: Merek unit"]["observed"], "Thermo Scientific")
@@ -170,11 +170,10 @@ class ExposureHybridTests(unittest.TestCase):
 
         self.assertNotIn("Alat 1: Tipe tabung", by_field)
         self.assertNotIn("Alat 1: No. seri insersi tabung", by_field)
-        self.assertEqual(by_field["Alamat Fasilitas"]["observed"], "—")
-        self.assertEqual(by_field["Nama Fasilitas"]["observed"], "—")
-
-        self.assertEqual(by_field["Pengesahan"]["status"], "MATCH")
-        self.assertEqual(by_field["Pengesahan"]["page"], 1)
+        self.assertNotIn("Alamat Fasilitas", by_field)
+        self.assertNotIn("Nama Fasilitas", by_field)
+        self.assertNotIn("Pengesahan", by_field)
+        self.assertNotIn("Lembar Pengesahan", by_field)
         self.assertFalse(doc.get("_uncacheable"))
 
     def test_hallucinated_llm_values_are_rejected(self):
@@ -477,6 +476,138 @@ class ExposureHybridTests(unittest.TestCase):
                     {},
                 )
             self.assertEqual(supp_rows[0]["status"], "MISMATCH")
+
+    def test_conditional_fields_and_optional_approval_info(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "leakage_conditional.pdf"
+            _make_pdf(pdf_path, ["Laporan Uji Kebocoran Tabung", "RS Harapan Bangsa"])
+            app = {
+                "general": {
+                    "instansi": "RS Harapan Bangsa",
+                    "alamat_proyek": "Jl. Merdeka No. 10, Bandung",
+                },
+                "equipment": [{"merk_unit": "Philips", "tipe_unit": "Optima", "nomor_seri_unit": "SN-777"}],
+            }
+
+            # Case A: Facility & equipment evidenced, no Pengesahan -> facility/equipment kept, Pengesahan omitted.
+            raw_with_facility = {
+                "rows": [
+                    {
+                        "field": "Nama Fasilitas",
+                        "expected": "RS Harapan Bangsa",
+                        "observed": "RS Harapan Bangsa",
+                        "status": "MATCH",
+                        "score": 100.0,
+                        "evidence": [{"page": 1, "quote": "RS Harapan Bangsa"}],
+                    },
+                    {
+                        "field": "Alamat Fasilitas",
+                        "expected": "Jl. Merdeka No. 10, Bandung",
+                        "observed": "Jl. Merdeka No. 10, Bandung",
+                        "status": "MATCH",
+                        "score": 100.0,
+                        "evidence": [{"page": 1, "quote": "Jl. Merdeka No. 10"}],
+                    },
+                    {
+                        "field": "Alat 1: Merek unit",
+                        "expected": "Philips",
+                        "observed": "Philips",
+                        "status": "MATCH",
+                        "score": 100.0,
+                        "evidence": [{"page": 1, "quote": "Philips"}],
+                    },
+                    {
+                        "field": "Pengesahan",
+                        "expected": "Blok persetujuan/tanda tangan pada dokumen",
+                        "observed": "",
+                        "status": "REVIEW",
+                    },
+                ]
+            }
+            with (
+                patch("app.storage.file_path", return_value=pdf_path),
+                patch("src.extraction.supplementary_matching.analyze", return_value=raw_with_facility),
+                patch("app.exposure_hybrid.enrich_exposure_rows", return_value=(raw_with_facility, False)),
+            ):
+                rows_a = programs._supp(
+                    {"id": "doc-cond-a", "category": "kebocoran", "filename": pdf_path.name},
+                    app,
+                    {},
+                )
+            by_a = {r["field"]: r for r in rows_a}
+            self.assertIn("Nama Fasilitas", by_a)
+            self.assertIn("Alamat Fasilitas", by_a)
+            self.assertIn("Alat 1: Merek unit", by_a)
+            self.assertNotIn("Pengesahan", by_a)
+            self.assertNotIn("Lembar Pengesahan", by_a)
+
+            # Case B: Zero evidenced fields -> single fallback Ringkasan Dokumen REVIEW row.
+            raw_empty = {
+                "rows": [
+                    {"field": "Nama Fasilitas", "expected": "RS Harapan Bangsa", "observed": "", "status": "REVIEW"},
+                    {"field": "Alamat Fasilitas", "expected": "Jl. Merdeka No. 10", "observed": "—", "status": "REVIEW"},
+                    {"field": "Pengesahan", "expected": "Blok ttd", "observed": "", "status": "REVIEW"},
+                ]
+            }
+            with (
+                patch("app.storage.file_path", return_value=pdf_path),
+                patch("src.extraction.supplementary_matching.analyze", return_value=raw_empty),
+                patch("app.exposure_hybrid.enrich_exposure_rows", return_value=(raw_empty, False)),
+            ):
+                rows_b = programs._supp(
+                    {"id": "doc-cond-b", "category": "paparan", "filename": pdf_path.name},
+                    app,
+                    {},
+                )
+            self.assertEqual(len(rows_b), 1)
+            self.assertEqual(rows_b[0]["field"], "Ringkasan Dokumen")
+            self.assertEqual(rows_b[0]["status"], "REVIEW")
+            self.assertEqual(rows_b[0]["observed"], "Belum terbaca")
+
+            # Case C: Explicit approval/signature block present -> Lembar Pengesahan as INFO, protected from legacy type=approval.
+            pdf_approved = Path(tmp) / "exposure_approved.pdf"
+            _make_pdf(
+                pdf_approved,
+                [
+                    "Laporan Uji Paparan Radiasi",
+                    "Nama Fasilitas: RS Harapan Bangsa",
+                    "Merek: Philips",
+                    "Tipe/Model: Optima",
+                    "Nomor Seri: SN-777",
+                    "Mengetahui / Approved by: Kepala Instalasi Radiologi",
+                ],
+            )
+            mock_approved = [
+                {
+                    "page": 1,
+                    "quote": "Mengetahui / Approved by: Kepala Instalasi Radiologi",
+                    "facility_name": "RS Harapan Bangsa",
+                    "facility_address": "",
+                    "merk_unit": "Philips",
+                    "tipe_unit": "Optima",
+                    "nomor_seri_unit": "SN-777",
+                    "merk_tabung": "",
+                    "tipe_tabung": "",
+                    "nomor_seri_tabung": "",
+                    "approval_quote": "Mengetahui / Approved by: Kepala Instalasi Radiologi",
+                }
+            ]
+            doc_c = {"id": "doc-cond-c", "category": "paparan", "filename": pdf_approved.name}
+            with (
+                patch("app.storage.file_path", return_value=pdf_approved),
+                patch("app.exposure_hybrid.llm.request_records", return_value=mock_approved),
+            ):
+                rows_c = evidence._postprocess_evidence(programs._supp(doc_c, app, {}), doc_c)
+            by_c = {r["field"]: r for r in rows_c}
+            self.assertIn("Lembar Pengesahan", by_c)
+            self.assertEqual(by_c["Lembar Pengesahan"]["status"], "INFO")
+            self.assertEqual(by_c["Lembar Pengesahan"]["expected"], "—")
+            self.assertIsNone(by_c["Lembar Pengesahan"]["score"])
+            self.assertEqual(by_c["Lembar Pengesahan"]["page"], 1)
+            self.assertEqual(
+                by_c["Lembar Pengesahan"].get("detail"),
+                {"type": "exposure", "group": "Pengesahan", "pages": [1]},
+            )
 
 
 if __name__ == "__main__":

@@ -49,7 +49,15 @@ export type MatchRow = {
   document_id?: string;
   quote?: string;
   detail?: {
-    type: 'approval' | 'maintenance' | 'protection' | 'management' | 'personnel' | 'quality' | 'calibration';
+    type:
+      | 'approval'
+      | 'maintenance'
+      | 'protection'
+      | 'management'
+      | 'personnel'
+      | 'quality'
+      | 'calibration'
+      | 'exposure';
     source_label?: string;
     source_filename?: string;
     topics?: { label: string; found: boolean }[];

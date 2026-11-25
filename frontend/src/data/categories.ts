@@ -45,12 +45,6 @@ export const CATEGORIES: DocumentCategory[] = [
     description: 'Identitas alat dalam dokumen impor',
   },
   {
-    id: 'fungsi',
-    name: 'Uji Fungsi / Acceptance Test',
-    icon: 'flask',
-    description: 'Uploader gabungan, matching identitas saja',
-  },
-  {
     id: 'mutu',
     name: 'Sertifikat Uji Mutu',
     icon: 'filecheck',
@@ -61,6 +55,12 @@ export const CATEGORIES: DocumentCategory[] = [
     name: 'Sertifikat Kalibrasi',
     icon: 'gauge',
     description: 'Data alat yang sesuai formulir (kondisional)',
+  },
+  {
+    id: 'fungsi',
+    name: 'Uji Fungsi / Acceptance Test',
+    icon: 'flask',
+    description: 'Uploader gabungan, matching identitas saja',
   },
   {
     id: 'paparan',

@@ -441,7 +441,9 @@ def enrich(parsed, rows, application, doc, *, today=None):
     pages = [p for p in pages if p["text"].strip()]
     records, warnings = recover(pages)
     if any(p.get('recipient_unreadable') for p in parsed.get('pages', [])):
-        warnings.append('Nama penerima pada gambar belum terbaca setelah OCR ulang; periksa dokumen sumber.')
+        warnings.append(
+            'Nama penerima pada gambar (mis. huruf sambung/dekoratif atau kualitas pindai rendah) belum dapat dipastikan otomatis; periksa dokumen sumber.'
+        )
     if not any(r['kind'] == 'holder' for r in records):
         fallback = assigned_holder(pages)
         if fallback:
@@ -543,6 +545,7 @@ def enrich(parsed, rows, application, doc, *, today=None):
     result = [r for r in rows if r["field"] not in ("Nama", "Profesi / Keahlian", "Masa Berlaku")]
     today = today or datetime.now(ZoneInfo("Asia/Jakarta")).date()
     dtype = parsed.get("document_type")
+    is_training = dtype == "TRAINING" or doc.get("subtype") == "Sertifikat Pelatihan"
     for field, kind, expected in (
         ("Nama", "holder", expected_name),
         ("Profesi / Keahlian", "role", expected_role),
@@ -558,10 +561,11 @@ def enrich(parsed, rows, application, doc, *, today=None):
             continue
         if kind == "expiry" and not evidence and dtype not in PERMIT_TYPES:
             continue
+        row_expected = "" if (kind == "role" and is_training) else expected
         row = make_row(
             doc["id"],
             field,
-            expected,
+            row_expected,
             " / ".join(values),
             evidence,
             kind="role" if kind == "role" else "text",
@@ -596,6 +600,12 @@ def enrich(parsed, rows, application, doc, *, today=None):
                     if dtype in PERMIT_TYPES
                     else "Informasi kondisional belum memiliki bukti yang terhubung dengan pemilik."
                 ),
+            )
+        elif kind == "role" and is_training:
+            row.update(
+                status="INFO",
+                score=None,
+                note="Informasi pelatihan/keahlian pada Sertifikat Pelatihan ditampilkan sebagai informasi dokumen.",
             )
         if kind == "expiry" and evidence:
             dates = {d["date"] for value in values for d in find_all_dates(value)}

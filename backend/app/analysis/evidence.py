@@ -174,6 +174,13 @@ def _postprocess_evidence(rows, doc):
         for r in rows
         if isinstance(r, dict)
         and re.search(r"(?i)\b(?:pengesahan|tanda\s+tangan)\b", _text(r.get("field")))
+        and not (
+            isinstance(r.get("detail"), dict)
+            and (
+                r["detail"].get("group") == "Pengesahan"
+                or r["detail"].get("type") in ("exposure", "protection", "management")
+            )
+        )
     ]
     if not approval_rows:
         return rows

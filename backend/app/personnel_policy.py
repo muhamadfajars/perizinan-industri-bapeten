@@ -136,9 +136,13 @@ def conditional_rows(parsed, original, application, doc, *, today=None):
     if parsed.get("document_type") != "DOSE" and (
         evidence or parsed.get("document_type") in PERMIT_TYPES
     ):
+        is_training = (
+            parsed.get("document_type") == "TRAINING"
+            or doc.get("subtype") == "Sertifikat Pelatihan"
+        )
         result = add(
             "Profesi / Keahlian",
-            expected_role if evidence else expected_role,
+            "" if (is_training and evidence) else expected_role,
             role,
             evidence,
             kind="role",
@@ -155,6 +159,12 @@ def conditional_rows(parsed, original, application, doc, *, today=None):
                 status="INFO",
                 score=None,
                 note="Profesi terbaca; keterkaitannya dengan petugas perlu diperiksa.",
+            )
+        elif is_training:
+            result.update(
+                status="INFO",
+                score=None,
+                note="Informasi pelatihan/keahlian pada Sertifikat Pelatihan ditampilkan sebagai informasi dokumen.",
             )
 
     # Only a labelled validity statement is eligible. Issue dates and monitoring

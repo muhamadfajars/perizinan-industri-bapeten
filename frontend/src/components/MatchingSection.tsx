@@ -6,12 +6,14 @@ import { matchingSectionTitle, rowMatchesFilter } from '../lib/matchingDisplay';
 import type { MatchRow, MatchSection } from '../types/models';
 import { Filter } from '../types/workspace';
 import { ApprovalEvidence, MaintenanceEvidence } from './Evidence';
+import { ManagementInformation } from './ManagementInformation';
 import { PersonnelDocuments } from './PersonnelDocuments';
 import Glyph from './Glyph';
 import { SectionTopicSplitView } from './SectionTopicSplitView';
 import {
   buildSectionTopicTabs,
   isAdditionalLocation,
+  isExposureInformation,
   isManagementInformation,
   isSupportingInformation,
   personnelGroups,
@@ -87,8 +89,12 @@ export function MatchingSection({
   const filtered = scopedRows.filter((row) => rowMatchesFilter(row, filter, search));
   const isPerson = (row: MatchRow) => row.detail?.type === 'protection' && row.detail.group === 'Petugas';
   const managementRows = filtered.filter(isManagementInformation);
+  const exposureInfoRows = filtered.filter(isExposureInformation);
   const comparisonRows = filtered.filter(
-    (row) => !isSupportingInformation(row) && !isManagementInformation(row),
+    (row) =>
+      !isSupportingInformation(row) &&
+      !isManagementInformation(row) &&
+      !isExposureInformation(row),
   );
   const personLabels = new Map(
     personnelGroups(scopedRows).flatMap((person, index) =>
@@ -191,6 +197,15 @@ export function MatchingSection({
         </table>
       </div>
       <MatchingEvidence section={section} filter={filter} search={search} />
+      {exposureInfoRows.length > 0 && (
+        <ManagementInformation
+          rows={exposureInfoRows}
+          openEvidence={openEvidence}
+          loadSourceDocument={loadSourceDocument}
+          title="Informasi Pendukung"
+          ariaLabel="Informasi Pendukung Dokumen"
+        />
+      )}
     </>
   );
   return (

@@ -135,7 +135,7 @@ def analyze_application(aid, progress):
     def record_support(index, d, group, detail):
         rows = (
             detail["rows"]
-            if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu", "kalibrasi")
+            if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu", "kalibrasi", "spesifikasi")
             else finalize_legacy_rows(detail["rows"], d)
         )
         timings.append(

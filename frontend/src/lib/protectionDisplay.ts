@@ -119,6 +119,10 @@ export function isManagementInformation(row: MatchRow): boolean {
   return row.detail?.type === 'management' && ['Pengesahan', 'Budaya'].includes(row.detail.group ?? '');
 }
 
+export function isExposureInformation(row: MatchRow): boolean {
+  return row.detail?.type === 'exposure' && row.detail.group === 'Pengesahan';
+}
+
 export type ProtectionTabKey = 'dasar-hukum' | 'zonasi' | 'pembatas-dosis' | 'pengesahan';
 
 export function getProtectionTabKey(row: MatchRow): ProtectionTabKey {

@@ -93,15 +93,17 @@
 
 .matching-section {
   background: #fff;
-  border: 1px solid #e7ebf0;
+  border: 1px solid #c5d9e8;
   border-radius: 10px;
   overflow: clip;
+  box-shadow: 0 2px 8px rgba(15, 45, 75, 0.06);
 }
 
 .match-section-header {
-  background: var(--accent-pale);
+  background: linear-gradient(90deg, #d7ecfa 0%, #e4f2fc 100%);
   padding: 16px 18px;
   border: 0;
+  border-bottom: 1px solid #b9d7ec;
   width: 100%;
   display: flex;
   align-items: center;
@@ -110,7 +112,7 @@
 }
 
 .match-section-header:hover {
-  background: var(--accent-hover);
+  background: linear-gradient(90deg, #c7e4f8 0%, #d8ecfa 100%);
 }
 
 .match-heading-group {
@@ -133,7 +135,7 @@
   font-size: 11px;
   display: block;
   margin-top: 3px;
-  color: #a0aabc;
+  color: #546a82;
 }
 
 .match-pills {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildSectionTopicTabs,
   isAdditionalLocation,
+  isExposureInformation,
   isManagementInformation,
   isSupportingInformation,
   personnelGroups,
@@ -194,4 +195,37 @@ test('splitRegulationTitle separates compact law code from tentang subject', () 
     code: 'PP Nomor 5 Tahun 2021',
     subject: '',
   });
+});
+
+test('isExposureInformation identifies exposure approval rows for inline display below the table', () => {
+  const exposureComparison: MatchRow = {
+    id: 'e1',
+    field: 'Alat 1: No. seri unit',
+    expected: 'CD0719',
+    observed: 'CD0719',
+    score: 100,
+    status: 'MATCH',
+  };
+  const exposureApproval: MatchRow = {
+    id: 'e2',
+    field: 'Lembar Pengesahan',
+    expected: '—',
+    observed: 'Halaman 1',
+    score: null,
+    status: 'INFO',
+    page: 1,
+    detail: { type: 'exposure', group: 'Pengesahan', pages: [1] },
+  };
+  const unrelatedExposure: MatchRow = {
+    id: 'e3',
+    field: 'Ringkasan Dokumen',
+    expected: '—',
+    observed: 'Belum terbaca',
+    score: null,
+    status: 'REVIEW',
+    detail: { type: 'exposure', group: 'Ringkasan' },
+  };
+  assert.equal(isExposureInformation(exposureApproval), true);
+  assert.equal(isExposureInformation(exposureComparison), false);
+  assert.equal(isExposureInformation(unrelatedExposure), false);
 });

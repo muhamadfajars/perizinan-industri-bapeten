@@ -232,7 +232,7 @@ def cache_key(doc, reference_digest, source_digest):
         "ocr_profile": os.getenv("BAPETEN_OCR_PROFILE", "fast"),
         "engine": os.getenv("BAPETEN_OCR_ENGINE", "auto"),
         "protection": protection_digest()
-        if doc["category"] in ("proteksi", "manajemen", "personel", "mutu", "kalibrasi")
+        if doc["category"] in ("proteksi", "manajemen", "personel", "mutu", "kalibrasi", "spesifikasi")
         else None,
         "personnel_date": datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat()
         if doc["category"] == "personel"

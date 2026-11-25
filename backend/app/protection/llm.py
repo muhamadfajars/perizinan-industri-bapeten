@@ -1,5 +1,6 @@
 """Bounded local Qwen calls. Document text is untrusted; results need source validation."""
 
+import base64
 import fcntl
 import hashlib
 import json
@@ -34,6 +35,14 @@ def configuration():
         "model": os.getenv("BAPETEN_LLM_MODEL", "qwen3:8b"),
         "url": os.getenv("BAPETEN_OLLAMA_URL", "http://127.0.0.1:11434"),
         "prompt": PROMPT_VERSION,
+    }
+
+
+def vision_configuration():
+    return {
+        "enabled": os.getenv("BAPETEN_VISION_OCR", "1"),
+        "model": os.getenv("BAPETEN_VISION_MODEL", "glm-ocr"),
+        "url": os.getenv("BAPETEN_OLLAMA_URL", "http://127.0.0.1:11434"),
     }
 
 
@@ -98,38 +107,38 @@ def _thread_budget():
     return max(1, min(available, int(os.getenv("BAPETEN_LLM_THREADS", str(default)))))
 
 
-@contextmanager
-def request_slot(*, wait_seconds=None):
-    """Shared concurrency limit across workers using this application's storage.
+def _vision_thread_budget():
+    budget = _thread_budget()
+    default = min(8, budget)
+    raw = os.getenv("BAPETEN_VISION_THREADS", str(default))
+    try:
+        threads = int(raw)
+    except ValueError:
+        threads = default
+    return max(1, min(budget, threads))
 
-    Restart all workers after changing the limit. Slot zero retains the old lock.
-    """
-    if wait_seconds is None:
-        raw_wait = os.getenv("BAPETEN_LLM_QUEUE_WAIT", "600")
-        try:
-            wait_seconds = int(raw_wait)
-        except ValueError as exc:
-            raise ValueError("BAPETEN_LLM_QUEUE_WAIT harus bilangan bulat >= 0") from exc
-        if wait_seconds < 0:
-            raise ValueError("BAPETEN_LLM_QUEUE_WAIT harus bilangan bulat >= 0")
-    else:
-        try:
-            wait_seconds = int(wait_seconds)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("wait_seconds harus bilangan bulat >= 0") from exc
-        if wait_seconds < 0:
-            raise ValueError("wait_seconds harus bilangan bulat >= 0")
-    limit = int(os.getenv("BAPETEN_LLM_MAX_CONCURRENT", "1"))
-    if not 1 <= limit <= 4:
-        raise ValueError("BAPETEN_LLM_MAX_CONCURRENT harus antara 1 dan 4")
+
+def _parse_wait_seconds(wait_seconds, env_name: str, default: str) -> int:
+    raw = os.getenv(env_name, default) if wait_seconds is None else wait_seconds
+    label = env_name if wait_seconds is None else "wait_seconds"
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} harus bilangan bulat >= 0") from exc
+    if parsed < 0:
+        raise ValueError(f"{label} harus bilangan bulat >= 0")
+    return parsed
+
+
+@contextmanager
+def _lock_slot(lock_names: list[str], wait_seconds: int, full_message: str):
     directory = storage.ROOT / "locks"
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     deadline = time.monotonic() + wait_seconds
     acquired = None
     try:
         while acquired is None:
-            for index in range(limit):
-                name = "protection-llm.lock" if index == 0 else f"protection-llm-{index}.lock"
+            for name in lock_names:
                 candidate = (directory / name).open("a")
                 try:
                     fcntl.flock(candidate, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -143,9 +152,7 @@ def request_slot(*, wait_seconds=None):
                 break
             if acquired is None:
                 if time.monotonic() >= deadline:
-                    raise RuntimeError(
-                        f"Antrean Qwen penuh setelah menunggu {wait_seconds} detik; ekstraksi ini perlu dicoba kembali."
-                    )
+                    raise RuntimeError(full_message)
                 time.sleep(0.2)
         yield
     finally:
@@ -154,6 +161,40 @@ def request_slot(*, wait_seconds=None):
                 fcntl.flock(acquired, fcntl.LOCK_UN)
             finally:
                 acquired.close()
+
+
+@contextmanager
+def request_slot(*, wait_seconds=None):
+    """Shared concurrency limit across workers using this application's storage.
+
+    Restart all workers after changing the limit. Slot zero retains the old lock.
+    """
+    resolved = _parse_wait_seconds(wait_seconds, "BAPETEN_LLM_QUEUE_WAIT", "600")
+    limit = int(os.getenv("BAPETEN_LLM_MAX_CONCURRENT", "1"))
+    if not 1 <= limit <= 4:
+        raise ValueError("BAPETEN_LLM_MAX_CONCURRENT harus antara 1 dan 4")
+    names = [
+        "protection-llm.lock" if index == 0 else f"protection-llm-{index}.lock"
+        for index in range(limit)
+    ]
+    with _lock_slot(
+        names,
+        resolved,
+        f"Antrean Qwen penuh setelah menunggu {resolved} detik; ekstraksi ini perlu dicoba kembali.",
+    ):
+        yield
+
+
+@contextmanager
+def vision_request_slot(*, wait_seconds=None):
+    """Dedicated single-slot queue for local Vision OCR, independent from text LLM."""
+    resolved = _parse_wait_seconds(wait_seconds, "BAPETEN_VISION_QUEUE_WAIT", "90")
+    with _lock_slot(
+        ["vision-llm.lock"],
+        resolved,
+        f"Antrean Vision OCR penuh setelah menunggu {resolved} detik; ekstraksi ini perlu dicoba kembali.",
+    ):
+        yield
 
 
 def request_records(schema, task, pages, instructions, *, output_limit=2300):
@@ -234,5 +275,120 @@ def request_records(schema, task, pages, instructions, *, output_limit=2300):
         raise
 
 
+def transcribe_image_text(
+    image_bytes: bytes, *, prompt: str | None = None, timeout: int | None = None
+) -> str:
+    """Bounded blind OCR transcription for tiny unreadable name crops via local VLM."""
+    if not image_bytes:
+        return ""
+    text_cfg = configuration()
+    vision_cfg = vision_configuration()
+    if text_cfg["enabled"] != "1" or vision_cfg["enabled"] != "1":
+        raise RuntimeError("Bantuan Vision LLM dinonaktifkan.")
+    encoded_image = base64.b64encode(image_bytes).decode("ascii")
+    is_glm_ocr = "glm-ocr" in vision_cfg["model"].lower()
+    if is_glm_ocr:
+        endpoint = vision_cfg["url"].rstrip("/") + "/api/generate"
+        payload = {
+            "model": vision_cfg["model"],
+            "prompt": prompt or "Text Recognition:",
+            "images": [encoded_image],
+            "stream": False,
+            "keep_alive": "5m",
+            "options": {
+                "num_ctx": 4096,
+                "num_predict": 96,
+                "num_thread": _vision_thread_budget(),
+                "temperature": 0,
+            },
+        }
+    else:
+        schema = {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+            "additionalProperties": False,
+        }
+        user_prompt = prompt or (
+            "Transkripsikan persis teks nama yang terlihat pada potongan gambar ini "
+            "(termasuk tulisan tegak bersambung atau kaligrafi). Jangan menerjemahkan, "
+            "menebak, atau menambahkan gelar/penjelasan. Jika kosong atau tidak terbaca, "
+            "kembalikan string kosong."
+        )
+        endpoint = vision_cfg["url"].rstrip("/") + "/api/chat"
+        payload = {
+            "model": vision_cfg["model"],
+            "stream": False,
+            "format": schema,
+            "keep_alive": "5m",
+            "options": {
+                "num_ctx": 2048,
+                "num_predict": 96,
+                "num_thread": _vision_thread_budget(),
+                "temperature": 0,
+            },
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Anda adalah mesin transkripsi teks visual (OCR). Salin hanya karakter "
+                        "yang benar-benar terlihat pada gambar tanpa mengarang, memperbaiki, "
+                        "atau menambahkan komentar."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                    "images": [encoded_image],
+                },
+            ],
+        }
+        if "qwen3" in vision_cfg["model"].lower():
+            payload["think"] = False
+    effective_timeout = (
+        int(timeout) if timeout is not None else int(os.getenv("BAPETEN_VISION_TIMEOUT", "90"))
+    )
+    started = time.perf_counter()
+    try:
+        with vision_request_slot():
+            request = urllib.request.Request(
+                endpoint,
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=effective_timeout) as response:
+                result = json.load(response)
+            if result.get("done_reason") == "length":
+                raise RuntimeError("Keluaran Vision LLM terpotong.")
+            if is_glm_ocr:
+                raw_text = str(result.get("response") or "").strip()
+                if raw_text.startswith("```"):
+                    lines = raw_text.splitlines()
+                    if len(lines) >= 2 and lines[-1].strip().startswith("```"):
+                        raw_text = "\n".join(lines[1:-1]).strip()
+                text = raw_text.strip()
+            else:
+                parsed = json.loads(result["message"]["content"])
+                text = str(parsed.get("text") or "").strip()
+            elapsed = time.perf_counter() - started
+            _LOGGER.info(
+                "[VLM] model=%s durasi=%.2fs chars=%d",
+                vision_cfg["model"],
+                elapsed,
+                len(text),
+            )
+            return text
+    except Exception as exc:
+        elapsed = time.perf_counter() - started
+        _LOGGER.warning(
+            "[VLM] model=%s GAGAL (%s) dalam %.2fs",
+            vision_cfg["model"],
+            type(exc).__name__,
+            elapsed,
+        )
+        raise
+
+
 def digest():
-    return hashlib.sha256(json.dumps(configuration(), sort_keys=True).encode()).hexdigest()
+    payload = {"text": configuration(), "vision": vision_configuration()}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()

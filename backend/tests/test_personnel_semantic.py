@@ -605,3 +605,89 @@ class PersonnelSemanticTests(unittest.TestCase):
                 self.assertEqual(by_field["Profesi / Keahlian"]["observed"], expected_role)
                 self.assertEqual(by_field["Profesi / Keahlian"]["status"], "MATCH")
                 self.assertNotEqual(by_field["Profesi / Keahlian"]["observed"], "Manager")
+
+    def test_training_certificate_role_is_info_while_assignment_calon_stays_review(self):
+        app = {
+            "personnel": [
+                {
+                    "nama": "Juviandy",
+                    "keahlian": "PPR Analisis Menggunakan Sumber Radiasi Pengion",
+                }
+            ]
+        }
+        train_text = (
+            "SERTIFIKAT PELATIHAN\n"
+            "Dengan ini menyatakan bahwa\n"
+            "Juviandy\n"
+            "Telah mengikuti Pelatihan Calon PPR Analisis Menggunakan Sumber Radiasi Pengion"
+        )
+        train_parsed = {
+            "document_type": "TRAINING",
+            "text": train_text,
+            "pages": [{"page": 1, "text": train_text, "native_text": train_text, "ocr": []}],
+        }
+        train_doc = {
+            "id": "doc_train",
+            "filename": "sertifikat_pelatihan.pdf",
+            "category": "personel",
+            "subtype": "Sertifikat Pelatihan",
+        }
+        record = {
+            "page": 1,
+            "person": "Juviandy",
+            "role": "Telah mengikuti Pelatihan Calon PPR Analisis Menggunakan Sumber Radiasi Pengion",
+            "expiry": "",
+            "start_line": 2,
+            "end_line": 4,
+        }
+        with patch("app.personnel_semantic.llm.request_records", return_value=[record]):
+            by_field = {r["field"]: r for r in enrich(train_parsed, [], app, train_doc)}
+        self.assertEqual(by_field["Nama"]["status"], "MATCH")
+        self.assertEqual(by_field["Profesi / Keahlian"]["status"], "INFO")
+        self.assertIsNone(by_field["Profesi / Keahlian"]["score"])
+        self.assertEqual(by_field["Profesi / Keahlian"]["expected"], "—")
+
+        # Also check deterministic conditional_rows directly for TRAINING.
+        policy_rows = {
+            r["field"]: r
+            for r in conditional_rows(
+                train_parsed,
+                [
+                    {"field": "Nama Petugas", "expected": "Juviandy", "observed": "Juviandy", "status": "MATCH"},
+                    {
+                        "field": "Keahlian",
+                        "observed": "Telah mengikuti Pelatihan Calon PPR Analisis Menggunakan Sumber Radiasi Pengion",
+                    },
+                ],
+                app,
+                train_doc,
+            )
+        }
+        self.assertEqual(policy_rows["Profesi / Keahlian"]["status"], "INFO")
+        self.assertEqual(policy_rows["Profesi / Keahlian"]["expected"], "—")
+        self.assertIsNone(policy_rows["Profesi / Keahlian"]["score"])
+
+        # Non-training documents (e.g. ASSIGNMENT) still mark "Calon PPR" as REVIEW.
+        assign_text = "SURAT PENUGASAN\nDengan ini menugaskan kepada:\nNama: Juviandy\nSebagai Calon PPR Analisis"
+        assign_parsed = {
+            "document_type": "ASSIGNMENT",
+            "text": assign_text,
+            "pages": [{"page": 1, "text": assign_text, "native_text": assign_text, "ocr": []}],
+        }
+        assign_doc = {
+            "id": "doc_assign",
+            "filename": "penugasan.pdf",
+            "category": "personel",
+            "subtype": "Surat Penugasan / Keterangan Kerja",
+        }
+        assign_record = {
+            "page": 1,
+            "person": "Juviandy",
+            "role": "Calon PPR Analisis",
+            "expiry": "",
+            "start_line": 2,
+            "end_line": 4,
+        }
+        with patch("app.personnel_semantic.llm.request_records", return_value=[assign_record]):
+            assign_fields = {r["field"]: r for r in enrich(assign_parsed, [], app, assign_doc)}
+        self.assertEqual(assign_fields["Profesi / Keahlian"]["status"], "REVIEW")

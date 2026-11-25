@@ -8,15 +8,19 @@ export function ManagementInformation({
   rows,
   openEvidence,
   loadSourceDocument,
+  title = 'Informasi Pendukung Sistem Manajemen',
+  ariaLabel = 'Informasi Sistem Manajemen',
 }: {
   rows: MatchRow[];
   openEvidence: (documentId: string, page?: number) => void;
   loadSourceDocument: (documentId: string) => Promise<Blob>;
+  title?: string;
+  ariaLabel?: string;
 }) {
   const [source, setSource] = useState<{ row: MatchRow; page: number } | null>(null);
   return (
-    <section className="protection-information" aria-label="Informasi Sistem Manajemen">
-      <h3>Informasi Pendukung Sistem Manajemen</h3>
+    <section className="protection-information" aria-label={ariaLabel}>
+      <h3>{title}</h3>
       {rows.map((row) => (
         <ManagementCard key={row.id} row={row} open={(page) => setSource({ row, page })} />
       ))}
