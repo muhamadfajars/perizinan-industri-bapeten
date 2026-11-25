@@ -30,6 +30,7 @@ def _supp(doc, app, ref):
         field_name = _text(x.get("field"))
         status = x.get("status")
         score = x.get("score")
+        reason = x.get("reason") or ""
         # A model suffix is material, never silently accept E7894X as E7894.
         # Partial multi-word model families (e.g. DXL 800 vs DXL 800 Niton) remain REVIEW + score.
         if "tipe" in field_name.lower() and (x.get("expected") and x.get("observed")):
@@ -45,6 +46,19 @@ def _supp(doc, app, ref):
                 else:
                     status = "MISMATCH"
                     score = check["score"]
+        if (
+            "alamat fasilitas" in field_name.lower()
+            and status == "REVIEW"
+            and not _absent_value(x.get("expected"))
+            and not _absent_value(x.get("observed"))
+        ):
+            from ..protection.matching import compare_address
+
+            addr_status, addr_score, addr_note = compare_address(x["expected"], x["observed"])
+            if addr_status == "MISMATCH":
+                status = "MISMATCH"
+                score = addr_score
+                reason = addr_note
         # Paparan / kebocoran: compare only equipment fields evidenced in this document.
         # Keep facility and approval checks even when absent: their completeness matters.
         # A literal dash, null or empty OCR reading is not evidence of a mismatch.
@@ -62,7 +76,7 @@ def _supp(doc, app, ref):
                 status,
                 score,
                 page,
-                x.get("reason") or "",
+                reason,
                 doc["id"],
                 x.get("quote") or evidence.get("quote"),
                 {

@@ -103,12 +103,12 @@ class TestBapetenApi(unittest.TestCase):
         response = self.client.patch(
             url,
             headers=self.headers,
-            json={"category": "personel", "subtype": "Surat Perintah"},
+            json={"category": "personel", "subtype": "Surat Penugasan / Keterangan Kerja"},
         )
         self.assertEqual(response.status_code, 200, response.text)
         corrected = response.json()["document"]
         self.assertEqual(corrected["category"], "personel")
-        self.assertEqual(corrected["subtype"], "Surat Perintah")
+        self.assertEqual(corrected["subtype"], "Surat Penugasan / Keterangan Kerja")
         self.assertEqual(corrected["sha256"], document["sha256"])
         persisted = self.client.get(base + "/documents", headers=self.headers).json()["documents"][
             0
@@ -226,11 +226,14 @@ class TestBapetenApi(unittest.TestCase):
         self.assertIn("Server terhenti", latest["error"])
 
     def test_01_health(self):
+        from app.config import APP_VERSION
+
         res = self.client.get("/api/v1/health")
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data.get("status"), "ok")
         self.assertIn("engine", data)
+        self.assertEqual(data.get("engine"), f"bapeten-industri/{APP_VERSION}")
 
     def test_02_authentication_enforcement(self):
         old_dev = os.environ.get("BAPETEN_ALLOW_UNAUTHENTICATED_LOCAL_DEV")

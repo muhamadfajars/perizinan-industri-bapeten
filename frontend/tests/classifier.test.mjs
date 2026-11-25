@@ -74,7 +74,7 @@ test('PPR appointment titles take precedence over generic protection terms', () 
   for (const name of ['20260918090751-Surat Penunjukan PPR FIX 2.jpg', 'Surat_Penunjukan_Sebagai_PPR.pdf',
     'Surat Penunjukan Petugas Proteksi Radiasi.jpg', 'Surat Penunjukan sebagai Petugas Proteksi Radiasi.pdf']) {
     assert.equal(classify(name)?.category, 'personel', name);
-    assert.equal(classify(name)?.subtype, 'Surat Penunjukan Tugas', name);
+    assert.equal(classify(name)?.subtype, 'Surat Penugasan / Keterangan Kerja', name);
   }
   assert.equal(classify('PROGRAM PROTEKSI RADIASI FIX SIP.pdf')?.category, 'proteksi');
 });
@@ -87,9 +87,10 @@ test('unrelated names still need a category', () => {
 
 test('worker appointment variants are recognized and removed categories stay unclassified', () => {
   for (const name of ['20260818155148-SK PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN PPR.pdf',
-    'SK_PENETAPAN_PEKERJA_RADIASI.pdf', 'Penunjukan Petugas Proteksi Radiasi.pdf']) {
+    'SK_PENETAPAN_PEKERJA_RADIASI.pdf', 'Penunjukan Petugas Proteksi Radiasi.pdf',
+    'Surat Tugas dan Keterangan Kerja PPR.pdf']) {
     assert.equal(classify(name)?.category, 'personel', name);
-    assert.equal(classify(name)?.subtype, 'Surat Penunjukan Tugas', name);
+    assert.equal(classify(name)?.subtype, 'Surat Penugasan / Keterangan Kerja', name);
   }
   for (const name of ['DOKUMEN_PERAWATAN_MOBILE.pdf', 'perawatan fasilitas.pdf', 'SIP dokter.pdf']) {
     assert.equal(classify(name), null, name);

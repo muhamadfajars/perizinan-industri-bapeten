@@ -320,6 +320,86 @@ class ProtectionTests(unittest.TestCase):
             "MATCH",
         )
 
+    def test_institution_brand_and_model_support_mismatch_and_preserve_review(self):
+        # Institutions: unrelated entities -> MISMATCH; acronyms/branches/mild typos -> REVIEW.
+        self.assertEqual(
+            compare("PT Kolaka Nickel Indonesia", "PT Maju Jaya Sentosa", "institution")[0],
+            "MISMATCH",
+        )
+        self.assertEqual(
+            compare("RS Hermina Kepanjen", "RS Bhayangkara Surabaya", "institution")[0],
+            "MISMATCH",
+        )
+        self.assertEqual(compare("PT Hitek Indo Mulia", "PT HIM", "institution")[0], "REVIEW")
+        self.assertEqual(
+            compare("PT Tuku Emas Indonesia", "Tuku Emas Indonesia - Cabang Kiaracondong", "institution")[0],
+            "REVIEW",
+        )
+        self.assertEqual(
+            compare("PT Kolaka Nickel", "PT Kolakka Nikel", "institution")[0],
+            "MATCH",
+        )
+        self.assertEqual(
+            compare("PT Kolaka Nickel Mandiri", "PT Kolakka Nikel", "institution")[0],
+            "REVIEW",
+        )
+
+        # Equipment brand & model via compare() align with exposure_hybrid rules.
+        self.assertEqual(compare("Olympus", "LANScientific", "brand")[0], "MISMATCH")
+        self.assertEqual(
+            compare("Thermo Fisher Scientific", "Thermo Scientific", "brand")[0], "REVIEW"
+        )
+        self.assertEqual(
+            compare("LANScientific", "LANScientific Co., Ltd.", "brand")[0], "MATCH"
+        )
+        self.assertEqual(compare("E7894", "E7894X", "model")[0], "MISMATCH")
+        self.assertEqual(compare("TrueX G5", "Vanta M", "model")[0], "MISMATCH")
+        self.assertEqual(compare("DXL 800 Niton", "DXL 800", "model")[0], "REVIEW")
+        self.assertEqual(compare("Vanta M0", "Vanta MO", "model")[0], "REVIEW")
+
+        # Protection build_rows emits MISMATCH on unrelated equipment brand/model and REVIEW on partial.
+        rows = build_rows(
+            "d",
+            {
+                "equipment": [
+                    {
+                        "merk_unit": "Olympus",
+                        "tipe_unit": "Vanta M",
+                        "nomor_seri_unit": "SN-01",
+                    },
+                    {
+                        "merk_unit": "Thermo Fisher Scientific",
+                        "tipe_unit": "DXL 800 Niton",
+                        "nomor_seri_unit": "SN-02",
+                    },
+                ]
+            },
+            [],
+            {
+                "equipment": [
+                    {
+                        "merk_unit": "LANScientific",
+                        "tipe_unit": "TrueX G5",
+                        "nomor_seri_unit": "SN-01",
+                        "page": 1,
+                        "quote": "LANScientific TrueX G5 SN-01",
+                    },
+                    {
+                        "merk_unit": "Thermo Scientific",
+                        "tipe_unit": "DXL 800",
+                        "nomor_seri_unit": "SN-02",
+                        "page": 2,
+                        "quote": "Thermo Scientific DXL 800 SN-02",
+                    },
+                ]
+            },
+        )
+        by_field = {r["field"]: r for r in rows}
+        self.assertEqual(by_field["Alat 1: Merek Unit"]["status"], "MISMATCH")
+        self.assertEqual(by_field["Alat 1: Tipe Unit"]["status"], "MISMATCH")
+        self.assertEqual(by_field["Alat 2: Merek Unit"]["status"], "REVIEW")
+        self.assertEqual(by_field["Alat 2: Tipe Unit"]["status"], "REVIEW")
+
     def test_missing_reference_is_display_only(self):
         self.assertEqual(make_row("d", "Nomor Dokumen", "", "PPR-1", [])["status"], "INFO")
 

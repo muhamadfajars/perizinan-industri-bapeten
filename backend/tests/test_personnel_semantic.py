@@ -517,3 +517,91 @@ class PersonnelSemanticTests(unittest.TestCase):
         self.assertFalse(result["Periode Pemakaian"]["detail"].get("review_required"))
         self.assertEqual(result["Periode Pemakaian"]["detail"]["pages"], [1, 2])
         self.assertNotIn("_uncacheable", doc)
+
+    def test_assigned_holder_handles_columnar_orders_and_work_letters(self):
+        col_work_letter = (
+            "SURAT KETERANGAN KERJA\n"
+            "Dengan ini menugaskan kepada :\n"
+            "Nama    \n"
+            "Tempat/ Tanggal Lahir  \n"
+            "NIK / No. Identitas    \n"
+            "Jabatan       \n"
+            ": Juviandy    \n"
+            ": Palembang, 19-02-1995  \n"
+            ": 1671071902950008 \n"
+            ": Petugas Proteksi Radiasi\n"
+        )
+        col_assignment = (
+            "Surat penunjukkan tugas\n"
+            "Dengan ini menugaskan kepada:\n"
+            "Nama\n"
+            "NIK\n"
+            "No. SIB\n"
+            "Alamat\n"
+            ": Shafira Rafa Maulida\n"
+            ": 3277036605020003\n"
+        )
+        order_text = "SURAT PERINTAH\nDengan ini memerintahkan kepada:\nNama: Neza Putri\nJabatan: PPR"
+        statement_text = "SURAT KETERANGAN KERJA\nYang bertanda tangan di bawah ini menerangkan bahwa:\nNama: Isra Pratama\nJabatan: Radiografer"
+
+        self.assertEqual([r["person"] for r in assigned_holder([{"page": 1, "text": col_work_letter}])], ["Juviandy"])
+        self.assertEqual([r["person"] for r in assigned_holder([{"page": 1, "text": col_assignment}])], ["Shafira Rafa Maulida"])
+        self.assertEqual([r["person"] for r in assigned_holder([{"page": 2, "text": order_text}])], ["Neza Putri"])
+        self.assertEqual([r["person"] for r in assigned_holder([{"page": 3, "text": statement_text}])], ["Isra Pratama"])
+        self.assertEqual(
+            assigned_holder([{"page": 1, "text": "Dengan ini menugaskan kepada:\nNama:\nNIK: 123456\nJabatan: Direktur"}]),
+            [],
+        )
+
+    def test_merged_assignment_formats_extract_name_and_radiation_role(self):
+        from src.matching.personnel_document_matcher import validate_personnel_document
+
+        cases = [
+            (
+                "Juviandy",
+                "Petugas Proteksi Radiasi",
+                (
+                    "SURAT KETERANGAN KERJA\n"
+                    "Dengan ini menugaskan kepada :\n"
+                    "Nama\nTempat/ Tanggal Lahir\nNIK / No. Identitas\nJabatan\n"
+                    ": Juviandy\n: Palembang, 19-02-1995\n: 1671071902950008\n: Petugas Proteksi Radiasi\n"
+                    "Adalah benar merupakan karyawan dari CV Mulia Perbaikan Garansi dan bekerja sebagai Manager sejak 2019 "
+                    "hingga saat ini masih aktif bekerja dan akan bertugas juga sebagai Petugas Proteksi Radiasi.\n"
+                    "Direktur, Sari Dewi"
+                ),
+            ),
+            (
+                "Shafira Rafa Maulida",
+                "Petugas Proteksi Radiasi",
+                (
+                    "Surat penunjukkan tugas\n"
+                    "Dengan ini menugaskan kepada:\n"
+                    "Nama\nNIK\nNo. SIB\nAlamat\n"
+                    ": Shafira Rafa Maulida\n: 3277036605020003\n: 468442\n: Jl. Cidurian Utara No. 43\n"
+                    "Untuk melaksanakan tugas di PT Tuku Emas Indonesia sebagai Petugas Proteksi Radiasi.\n"
+                    "Demikian surat tugas ini dibuat"
+                ),
+            ),
+            (
+                "Isra Pratama",
+                "Radiografer",
+                (
+                    "SURAT KETERANGAN KERJA\n"
+                    "Yang bertanda tangan di bawah ini menerangkan bahwa:\n"
+                    "Nama: Isra Pratama\n"
+                    "Saat ini aktif bekerja sebagai Radiografer di fasilitas radiologi."
+                ),
+            ),
+        ]
+        for expected_name, expected_role, text in cases:
+            with self.subTest(person=expected_name):
+                app = {"general": {"instansi": "PT Tuku Emas Indonesia"}, "personnel": [{"nama": expected_name, "keahlian": expected_role}]}
+                parsed = {"document_type": "ASSIGNMENT", "text": text, "pages": [{"page": 1, "text": text, "native_text": text, "ocr": []}]}
+                validation = validate_personnel_document(parsed, app)
+                rows = conditional_rows(parsed, validation["fields"], app, {"id": "doc1", "filename": "tugas.pdf", "subtype": "Surat Penugasan / Keterangan Kerja"})
+                by_field = {r["field"]: r for r in rows}
+                self.assertEqual(by_field["Nama"]["observed"], expected_name)
+                self.assertEqual(by_field["Nama"]["status"], "MATCH")
+                self.assertEqual(by_field["Profesi / Keahlian"]["observed"], expected_role)
+                self.assertEqual(by_field["Profesi / Keahlian"]["status"], "MATCH")
+                self.assertNotEqual(by_field["Profesi / Keahlian"]["observed"], "Manager")

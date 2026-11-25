@@ -417,7 +417,15 @@ def _import(doc, app, ref):
                 field_sources,
                 note,
                 group="Pesawat Sinar-X",
-                kind="serial" if "seri" in key else "text",
+                kind=(
+                    "serial"
+                    if "seri" in key
+                    else "brand"
+                    if "merk" in key
+                    else "model"
+                    if "tipe" in key
+                    else "text"
+                ),
                 conflict=len(
                     {norm(x.get(key)) for x in field_sources if not _absent_value(x.get(key))}
                 )

@@ -44,7 +44,7 @@ def _row(
 
         observed = clean_evidence(clean_address_evidence(observed), "address")
         status, score, address_note = address_decision(expected, observed, _status(status), score)
-        if address_note:
+        if address_note and address_note not in _text(note):
             note = (" ".join(filter(None, [_text(note), address_note])))[:300]
     elif re.match(r"(?i)^nama\s+(?:fasilitas|rumah\s+sakit|rs|instansi)\b", _text(field)):
         observed = clean_evidence(observed, "facility")

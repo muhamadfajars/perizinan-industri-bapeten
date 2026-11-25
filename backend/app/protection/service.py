@@ -232,7 +232,15 @@ def build_rows(document_id, application, pages, records, *, semantic=None):
                     field_sources[0][key] if field_sources else "",
                     field_sources,
                     group="Pesawat Sinar-X",
-                    kind="serial" if "seri" in key else "text",
+                    kind=(
+                        "serial"
+                        if "seri" in key
+                        else "brand"
+                        if "merk" in key
+                        else "model"
+                        if "tipe" in key
+                        else "text"
+                    ),
                     conflict=len({norm(x.get(key)) for x in found if x.get(key)}) > 1,
                 )
             )

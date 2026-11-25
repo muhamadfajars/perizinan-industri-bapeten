@@ -181,11 +181,12 @@ def _personnel(doc, app, ref):
     parsed = parse_personnel_documents(pages)
     kinds = {
         "Surat Izin Bekerja (SIB)": "SIB",
-        "Surat Perintah": "SPRINT",
+        "Surat Penugasan / Keterangan Kerja": "ASSIGNMENT",
+        "Surat Perintah": "ASSIGNMENT",
         "Sertifikat Kompetensi": "COMPETENCE",
         "Sertifikat Kompetensi PPR": "COMPETENCE",
         "Sertifikat Pelatihan": "TRAINING",
-        "Surat Keterangan Kerja": "WORK_LETTER",
+        "Surat Keterangan Kerja": "ASSIGNMENT",
         "Surat Penunjukan Tugas": "ASSIGNMENT",
         "Evaluasi Dosis": "DOSE",
         "Evaluasi Dosis / Zero Check": "DOSE",

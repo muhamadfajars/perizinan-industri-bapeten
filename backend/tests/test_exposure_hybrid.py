@@ -366,6 +366,118 @@ class ExposureHybridTests(unittest.TestCase):
                 _, warn = enrich_functional_rows(doc, app, str(pdf_path), [])
         self.assertTrue(warn)
 
+    def test_facility_address_mismatch_vs_review_in_hybrid_and_supp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "exposure_addr.pdf"
+            _make_pdf(
+                pdf_path,
+                [
+                    "LAPORAN UJI PAPARAN RADIASI",
+                    "Alamat Lokasi: Jl. Mesjid Darul Falah No. 17, Petukangan Utara, Jakarta Selatan 12260",
+                    "Alamat Sama: Jl. Tekno Raya Blok H1 No. 8, Kel. Setu, Kota Tangerang Selatan, Banten",
+                    "Alamat Parsial: Jl. Tekno Raya No. 18, Setu, Kota Tangerang Selatan",
+                    "Equipment Model: TrueX G5",
+                ],
+            )
+            eq = [{"merk_unit": "LANScientific", "tipe_unit": "TrueX G5", "nomor_seri_unit": "1536367"}]
+            app = {
+                "general": {
+                    "instansi": "PT Tuku Emas Indonesia",
+                    "alamat_proyek": "Jl. Tekno Raya Blok H1 No. 8, Setu, Kota Tangerang Selatan, Banten 15314",
+                },
+                "equipment": eq,
+            }
+
+            # Case 1: enrich_exposure_rows marks distinct address as MISMATCH.
+            raw_mismatch = {
+                "rows": [
+                    {
+                        "field": "Alamat Fasilitas",
+                        "expected": app["general"]["alamat_proyek"],
+                        "observed": "",
+                        "status": "REVIEW",
+                    }
+                ]
+            }
+            mock_diff = [
+                {
+                    "page": 1,
+                    "quote": "Equipment Model: TrueX G5",
+                    "facility_name": "",
+                    "facility_address": "Jl. Mesjid Darul Falah No. 17, Petukangan Utara, Jakarta Selatan 12260",
+                    "merk_unit": "",
+                    "tipe_unit": "",
+                    "nomor_seri_unit": "",
+                    "merk_tabung": "",
+                    "tipe_tabung": "",
+                    "nomor_seri_tabung": "",
+                    "approval_quote": "",
+                }
+            ]
+            with patch("app.exposure_hybrid.llm.request_records", return_value=mock_diff):
+                out_diff, _ = enrich_exposure_rows(
+                    {"id": "doc-addr-1", "category": "paparan"}, app, str(pdf_path), raw_mismatch
+                )
+            self.assertEqual(out_diff["rows"][0]["status"], "MISMATCH")
+
+            # Case 2: enrich_functional_rows marks matching address as MATCH and same-street different number as REVIEW.
+            base_rows = [
+                {
+                    "field": "Alamat Fasilitas",
+                    "expected": app["general"]["alamat_proyek"],
+                    "observed": "",
+                    "status": "REVIEW",
+                }
+            ]
+            mock_match = [
+                {
+                    **mock_diff[0],
+                    "facility_address": "Jl. Tekno Raya Blok H1 No. 8, Kel. Setu, Kota Tangerang Selatan, Banten",
+                }
+            ]
+            mock_review = [
+                {
+                    **mock_diff[0],
+                    "facility_address": "Jl. Tekno Raya No. 18, Setu, Kota Tangerang Selatan",
+                }
+            ]
+            with patch("app.exposure_hybrid.llm.request_records", return_value=mock_match):
+                out_match, _ = enrich_functional_rows(
+                    {"id": "doc-addr-2", "category": "fungsi"}, app, str(pdf_path), base_rows
+                )
+            self.assertEqual(out_match[0]["status"], "MATCH")
+
+            with patch("app.exposure_hybrid.llm.request_records", return_value=mock_review):
+                out_review, _ = enrich_functional_rows(
+                    {"id": "doc-addr-3", "category": "fungsi"}, app, str(pdf_path), base_rows
+                )
+            self.assertEqual(out_review[0]["status"], "REVIEW")
+
+            # Case 3: programs._supp upgrades clearly distinct REVIEW Alamat Fasilitas to MISMATCH.
+            supp_raw = {
+                "rows": [
+                    {
+                        "field": "Alamat Fasilitas",
+                        "expected": app["general"]["alamat_proyek"],
+                        "observed": "Jl. Mesjid Darul Falah No. 8, Petukangan Utara, Jakarta Selatan 12260",
+                        "status": "REVIEW",
+                        "score": 25.0,
+                        "evidence": [{"page": 1, "quote": "Jl. Mesjid Darul Falah"}],
+                    }
+                ]
+            }
+            with (
+                patch("app.storage.file_path", return_value=pdf_path),
+                patch("src.extraction.supplementary_matching.analyze", return_value=supp_raw),
+                patch("app.exposure_hybrid.enrich_exposure_rows", return_value=(supp_raw, False)),
+            ):
+                supp_rows = programs._supp(
+                    {"id": "doc-addr-4", "category": "paparan", "filename": pdf_path.name},
+                    app,
+                    {},
+                )
+            self.assertEqual(supp_rows[0]["status"], "MISMATCH")
+
 
 if __name__ == "__main__":
     unittest.main()

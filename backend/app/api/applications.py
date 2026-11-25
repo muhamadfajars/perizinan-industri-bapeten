@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from ..config import TOKEN
+from ..config import APP_VERSION, TOKEN
 from .. import storage, vpn_access
 from .dependencies import authorize
 
@@ -11,7 +11,7 @@ def health():
     return {
         "status": "ok",
         "api_version": "v2",
-        "engine": "BAPETEN v46",
+        "engine": f"bapeten-industri/{APP_VERSION}",
         "authentication_configured": bool(TOKEN),
     }
 

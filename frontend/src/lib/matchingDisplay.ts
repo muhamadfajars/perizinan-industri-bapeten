@@ -24,7 +24,7 @@ export function matchingSectionTitle(section: MatchSection): string {
   // Backend supplies a controlled subtype label, never the uploaded filename.
   if (
     section.category === 'personel' &&
-    /^Dokumen Personel - (SIB|Surat Perintah|Sertifikat Kompetensi PPR|Sertifikat Pelatihan|Surat Keterangan Kerja|Surat Penunjukan Tugas|Evaluasi Dosis|Evaluasi Dosis \/ Zero Check)$/.test(
+    /^Dokumen Personel - (SIB|Sertifikat Kompetensi PPR|Sertifikat Pelatihan|Surat Penugasan \/ Keterangan Kerja|Evaluasi Dosis|Evaluasi Dosis \/ Zero Check)$/.test(
       section.name,
     )
   ) {

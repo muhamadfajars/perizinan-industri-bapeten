@@ -407,8 +407,9 @@ def assigned_holder(pages):
     found = []
     for page in pages:
         pattern = re.compile(
-            r"(?:dengan\s+ini\s+)?(?:menugaskan|menunjuk|mengangkat)\s+(?:kepada\s*)?:?\s*"
-            r"\n\s*Nama\s*(?:/\s*Name)?\s*:?\s*\n?\s*:?\s*([^\n:]+)", re.I
+            r"(?:dengan\s+ini\s+)?(?:menugaskan|menunjuk|mengangkat|memerintahkan|menerangkan(?:\s+bahwa)?|menyatakan(?:\s+bahwa)?)\b(?:\s+kepada\b)?\s*:?"
+            r"[^\S\n]*\n\s*Nama\s*(?:/\s*Name)?\s*(?::\s*|\n(?:\s*(?!:)[^\n:\d]{2,40}\n){0,5}\s*:\s*)(?![^\n]*:)([^\n:]+)",
+            re.I,
         )
         for match in pattern.finditer(page['text']):
             name = compact(match[1])

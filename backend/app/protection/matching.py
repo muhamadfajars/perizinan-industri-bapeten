@@ -101,6 +101,12 @@ def compare(expected, observed, kind="text"):
         return "MATCH", 100, "Nilai sesuai setelah normalisasi format."
     if kind == "address":
         return compare_address(expected, observed)
+    if kind in ("brand", "model"):
+        from ..exposure_hybrid import evaluate_exposure_field
+
+        field_key = "merk_unit" if kind == "brand" else "tipe_unit"
+        status, eq_score, note = evaluate_exposure_field(field_key, expected, observed)
+        return status, eq_score, note or "Ada perbedaan nilai; periksa bukti sumber."
     score = similarity(a, b)
     if kind == "institution" and score >= 90:
         return (
@@ -108,6 +114,8 @@ def compare(expected, observed, kind="text"):
             score,
             "Nama instansi sangat mirip; variasi ejaan tetap ditampilkan untuk ditinjau.",
         )
+    if kind == "institution":
+        return compare_institution(expected, observed, score)
     if kind == "number" and min(len(a), len(b)) >= 4:
         clean_exp = re.sub(r"[\s_/.-]+", " ", str(expected).strip().casefold()).strip()
         clean_obs = re.sub(r"[\s_/.-]+", " ", str(observed).strip().casefold()).strip()
@@ -122,6 +130,105 @@ def compare(expected, observed, kind="text"):
         0 if kind in ("serial", "date", "number") else score,
         "Ada perbedaan nilai; periksa bukti sumber.",
     )
+
+
+_INSTITUTION_GENERIC_TOKENS = {
+    "pt",
+    "cv",
+    "ud",
+    "fa",
+    "tbk",
+    "persero",
+    "perseroda",
+    "perum",
+    "pd",
+    "yayasan",
+    "koperasi",
+    "ltd",
+    "co",
+    "inc",
+    "corp",
+    "llc",
+    "gmbh",
+    "sdn",
+    "bhd",
+    "indonesia",
+    "nusantara",
+    "rumah",
+    "sakit",
+    "rs",
+    "rsud",
+    "rsj",
+    "rsu",
+    "rsia",
+    "rumkit",
+    "klinik",
+    "puskesmas",
+    "laboratorium",
+    "lab",
+    "balai",
+    "dinas",
+    "badan",
+    "kementerian",
+    "universitas",
+    "institut",
+    "politeknik",
+    "umum",
+    "daerah",
+    "utama",
+    "pratama",
+    "cabang",
+    "site",
+    "plant",
+    "factory",
+    "office",
+    "head",
+    "kantor",
+    "pusat",
+    "unit",
+    "divisi",
+    "departemen",
+    "bagian",
+    "tk",
+    "tingkat",
+}
+_CORPORATE_PREFIXES = {"pt", "cv", "ud", "fa", "tbk", "persero", "ltd", "co", "inc"}
+
+
+def compare_institution(expected, observed, score):
+    """Distinguish minor institution/acronym/typo variants (REVIEW) from different entities (MISMATCH)."""
+
+    def _inst_words(value):
+        t = re.sub(r"\brs\.?\b|\brumkit\b", "rumah sakit", str(value or "").lower())
+        return [w for w in re.findall(r"[a-z0-9]+", t) if w]
+
+    raw_a = _inst_words(expected)
+    raw_b = _inst_words(observed)
+    core_list_a = [w for w in raw_a if w not in _INSTITUTION_GENERIC_TOKENS]
+    core_list_b = [w for w in raw_b if w not in _INSTITUTION_GENERIC_TOKENS]
+    words_a = set(core_list_a)
+    words_b = set(core_list_b)
+
+    fuzzy_shared = any(
+        SequenceMatcher(None, wa, wb).ratio() >= 0.80
+        for wa in words_a
+        for wb in words_b
+    )
+    non_corp_a = [w for w in raw_a if w not in _CORPORATE_PREFIXES]
+    non_corp_b = [w for w in raw_b if w not in _CORPORATE_PREFIXES]
+    initials_a = "".join(w[0] for w in non_corp_a)
+    initials_b = "".join(w[0] for w in non_corp_b)
+    acronym_match = (
+        len(initials_a) >= 2 and (initials_a in words_b or initials_a == norm(observed))
+    ) or (len(initials_b) >= 2 and (initials_b in words_a or initials_b == norm(expected)))
+    core_sim = (
+        round(100 * SequenceMatcher(None, "".join(core_list_a), "".join(core_list_b)).ratio(), 1)
+        if (core_list_a and core_list_b)
+        else 0.0
+    )
+    if words_a and words_b and not fuzzy_shared and not acronym_match and core_sim < 55.0:
+        return ("MISMATCH", score, "Nama instansi pada dokumen berbeda dari formulir.")
+    return ("REVIEW", score, "Ada perbedaan penulisan nama instansi; periksa bukti sumber.")
 
 
 def similarity(a, b):

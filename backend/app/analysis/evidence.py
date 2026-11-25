@@ -115,12 +115,13 @@ def _personnel_title(doc):
     subtype = _text(doc.get("subtype"))
     titles = {
         "Surat Izin Bekerja (SIB)": "SIB",
-        "Surat Perintah": "Surat Perintah",
+        "Surat Penugasan / Keterangan Kerja": "Surat Penugasan / Keterangan Kerja",
+        "Surat Perintah": "Surat Penugasan / Keterangan Kerja",
         "Sertifikat Kompetensi": "Sertifikat Kompetensi PPR",
         "Sertifikat Kompetensi PPR": "Sertifikat Kompetensi PPR",
         "Sertifikat Pelatihan": "Sertifikat Pelatihan",
-        "Surat Keterangan Kerja": "Surat Keterangan Kerja",
-        "Surat Penunjukan Tugas": "Surat Penunjukan Tugas",
+        "Surat Keterangan Kerja": "Surat Penugasan / Keterangan Kerja",
+        "Surat Penunjukan Tugas": "Surat Penugasan / Keterangan Kerja",
         "Evaluasi Dosis": "Evaluasi Dosis",
         "Evaluasi Dosis / Zero Check": "Evaluasi Dosis / Zero Check",
     }

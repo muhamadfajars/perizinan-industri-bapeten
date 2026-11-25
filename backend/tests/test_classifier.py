@@ -29,7 +29,7 @@ class TestClassifier(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(
                     classify_by_filename(name)[:2],
-                    ("personel", "Surat Penunjukan Tugas"),
+                    ("personel", "Surat Penugasan / Keterangan Kerja"),
                 )
         for name in ("sn tubing.jpg", "Surat Penunjukan Vendor.pdf", "scan001.jpg"):
             with self.subTest(name=name):
@@ -83,11 +83,15 @@ class TestClassifier(unittest.TestCase):
             "SURAT PENUNJUKAN\nSEBAGAI\nPPR",
             "SURAT PENUNJUKAN PETUGAS PROTEKSI RADIASI",
             "SURAT PENUNJUKAN TUGAS",
+            "SURAT PERINTAH",
+            "SURAT TUGAS",
+            "SURAT PENUGASAN",
+            "SURAT KETERANGAN KERJA",
         ):
             with self.subTest(title=title):
                 self.assertEqual(
                     classify_by_content(title)[:2],
-                    ("personel", "Surat Penunjukan Tugas"),
+                    ("personel", "Surat Penugasan / Keterangan Kerja"),
                 )
         self.assertIsNone(classify_by_content("SURAT PENUNJUKAN VENDOR")[0])
 
@@ -103,9 +107,10 @@ class TestClassifier(unittest.TestCase):
             (
                 "SK Penunjukan dan Pengangkatan Siti Azizah PPR.pdf",
                 "personel",
-                "Surat Penunjukan Tugas",
+                "Surat Penugasan / Keterangan Kerja",
             ),
-            ("sprint neza.pdf", "personel", "Surat Perintah"),
+            ("sprint neza.pdf", "personel", "Surat Penugasan / Keterangan Kerja"),
+            ("Surat Penugasan PPR.pdf", "personel", "Surat Penugasan / Keterangan Kerja"),
             (
                 "Sertifikat Lulus Kompetensi PPR.pdf",
                 "personel",
@@ -115,7 +120,7 @@ class TestClassifier(unittest.TestCase):
             (
                 "surat keterangan kerja Radiografer isra new.docx",
                 "personel",
-                "Surat Keterangan Kerja",
+                "Surat Penugasan / Keterangan Kerja",
             ),
             (
                 "HASIL UJI (ZERO CHECK) TLD BARC.pdf",
@@ -147,7 +152,7 @@ class TestClassifier(unittest.TestCase):
             (
                 "SK PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN PPR.pdf",
                 "personel",
-                "Surat Penunjukan Tugas",
+                "Surat Penugasan / Keterangan Kerja",
             ),
             ("dokumen perawatan Fasilitas Radiodiagnostik.pdf", "unknown", None),
             ("DOKUMEN TEKNIS RSH KEPANJEN.pdf", "unknown", None),
@@ -178,7 +183,7 @@ class TestClassifier(unittest.TestCase):
                 "PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN\nPETUGAS PROTEKSI RADIASI (PPR)\n"
                 "Untuk pelaksanaan program proteksi dan keselamatan radiasi."
             )[:2],
-            ("personel", "Surat Penunjukan Tugas"),
+            ("personel", "Surat Penugasan / Keterangan Kerja"),
         )
 
     def test_ambiguous_name_does_not_fall_back_to_a_single_content_category(self):
@@ -203,14 +208,14 @@ class TestClassifier(unittest.TestCase):
                 "122761.26",
                 "20260918090751-Surat Penunjukan PPR FIX 2.jpg",
                 "personel",
-                "Surat Penunjukan Tugas",
+                "Surat Penugasan / Keterangan Kerja",
                 True,
             ),
             (
                 "124143.26",
                 "20260818155148-SK PENETAPAN PEKERJA RADIASI DAN PENUNJUKAN PPR.pdf",
                 "personel",
-                "Surat Penunjukan Tugas",
+                "Surat Penugasan / Keterangan Kerja",
                 True,
             ),
         ]

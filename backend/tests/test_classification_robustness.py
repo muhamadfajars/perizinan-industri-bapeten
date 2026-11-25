@@ -14,9 +14,13 @@ from app.classification_reader import extract_document_text
 class ClassificationRobustnessTests(unittest.TestCase):
     def test_personnel_subtype_follows_explicit_title_not_filename(self):
         with patch("app.classifier.extract_document_text", return_value="SURAT KETERANGAN KERJA"):
-            result = classify_document("Pengangkatan karyawan PPR.pdf", b"pdf")
+            result = classify_document("Sertifikat Pelatihan PPR.pdf", b"pdf")
         self.assertEqual(result["category"], "personel")
-        self.assertEqual(result["subtype"], "Surat Keterangan Kerja")
+        self.assertEqual(result["subtype"], "Surat Penugasan / Keterangan Kerja")
+        with patch("app.classifier.extract_document_text", return_value="SURAT KETERANGAN KERJA"):
+            result2 = classify_document("Pengangkatan karyawan PPR.pdf", b"pdf")
+        self.assertEqual(result2["category"], "personel")
+        self.assertEqual(result2["subtype"], "Surat Penugasan / Keterangan Kerja")
 
     def test_training_certificate_is_not_its_management_course(self):
         text = "SERTIFIKAT PELATIHAN\nTelah mengikuti pelatihan PPR\fDAFTAR UNIT KOMPETENSI\nSISTEM MANAJEMEN"

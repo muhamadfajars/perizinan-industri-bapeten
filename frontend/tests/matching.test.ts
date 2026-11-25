@@ -229,9 +229,9 @@ test('stripUploadTimestamp and findDuplicatePersonnelTabIds identify colliding t
   );
   const duplicates = findDuplicatePersonnelTabIds([
     { id: 'd1', docType: 'Sertifikat Pelatihan', owners: ['Shafira'] },
-    { id: 'd2', docType: 'Surat Penunjukan Tugas', owners: ['Shafira'] },
-    { id: 'd3', docType: 'Surat Penunjukan Tugas', owners: ['Shafira'] },
-    { id: 'd4', docType: 'Surat Penunjukan Tugas', owners: ['Juviandy'] },
+    { id: 'd2', docType: 'Surat Penugasan / Keterangan Kerja', owners: ['Shafira'] },
+    { id: 'd3', docType: 'Surat Penugasan / Keterangan Kerja', owners: ['Shafira'] },
+    { id: 'd4', docType: 'Surat Penugasan / Keterangan Kerja', owners: ['Juviandy'] },
   ]);
   assert.deepEqual([...duplicates], ['d2', 'd3']);
 });

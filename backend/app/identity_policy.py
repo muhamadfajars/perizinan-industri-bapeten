@@ -160,6 +160,11 @@ def address_decision(expected, observed, original_status, score):
             None,
             "Alamat hanya memuat fragmen lokasi, belum cukup spesifik",
         )
+    from .protection.matching import compare_address
+
+    addr_status, addr_score, addr_note = compare_address(left, right)
+    if addr_status == "MISMATCH":
+        return "MISMATCH", addr_score, addr_note
     n1, n2 = _number(left), _number(right)
     p1, p2 = _postal(left), _postal(right)
     if rt_rw_conflict(left, right):

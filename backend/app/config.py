@@ -32,3 +32,4 @@ EXT = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff", ".docx
 MAX_FILE = int(os.environ.get("BAPETEN_MAX_FILE_MB", "40")) * 1024 * 1024
 MAX_DOCS = int(os.environ.get("BAPETEN_MAX_DOCUMENTS", "120"))
 TOKEN = os.environ.get("BAPETEN_API_TOKEN", "")
+APP_VERSION = "0.2.0"

@@ -4,6 +4,7 @@ import time
 
 
 from .. import storage
+from ..config import APP_VERSION
 
 
 from ..reference_evidence import improve_rows as _improve_rows
@@ -284,7 +285,7 @@ def analyze_application(aid, progress):
     duration = round(time.perf_counter() - started, 3)
     return {
         "application_id": aid,
-        "result_version": "BAPETEN-v054-remove-kesesuaian",
+        "result_version": APP_VERSION,
         "source": "backend",
         "form_reference": form,
         "matching_sections": sections,

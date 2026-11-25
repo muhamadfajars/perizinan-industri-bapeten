@@ -738,16 +738,25 @@ def enrich_exposure_rows(doc: dict, app: dict, path: str, raw: dict) -> tuple[di
                 )
             elif "alamat fasilitas" in fname and _absent(row.get("observed")) and chosen.get("facility_address"):
                 obs = chosen["facility_address"]
+                exp = row.get("expected") or ""
                 pg = chosen.get("facility_address_page") or chosen["page"]
                 q = chosen.get("facility_address_quote") or chosen.get("quote") or obs
+                if not _absent(exp):
+                    from .protection.matching import compare_address
+
+                    addr_status, addr_score, addr_note = compare_address(exp, obs)
+                    reason = f"Terbaca melalui bantuan Qwen; {addr_note}"
+                else:
+                    addr_status, addr_score = "REVIEW", None
+                    reason = "Terbaca melalui bantuan Qwen dari teks dokumen"
                 row.update(
                     {
                         "observed": obs,
-                        "status": "REVIEW",
-                        "score": None,
+                        "status": addr_status,
+                        "score": addr_score,
                         "page": pg,
                         "quote": q,
-                        "reason": "Terbaca melalui bantuan Qwen dari teks dokumen",
+                        "reason": reason,
                         "evidence": [{"page": pg, "quote": q}],
                     }
                 )
@@ -896,14 +905,22 @@ def enrich_functional_rows(doc: dict, app: dict, path: str, rows: list[dict]) ->
             exp = "" if _absent(row.get("expected")) else row["expected"]
             pg = chosen.get("facility_address_page") or chosen["page"]
             q = chosen.get("facility_address_quote") or chosen.get("quote") or obs
+            if exp:
+                from .protection.matching import compare_address
+
+                addr_status, addr_score, addr_note = compare_address(exp, obs)
+                reason = f"Terbaca melalui bantuan Qwen; {addr_note}"
+            else:
+                addr_status, addr_score = "REVIEW", None
+                reason = "Terbaca melalui bantuan Qwen dari teks dokumen"
             rows[row_idx] = build_row(
                 row["field"],
                 exp,
                 obs,
-                "REVIEW",
-                None,
+                addr_status,
+                addr_score,
                 pg,
-                "Terbaca melalui bantuan Qwen dari teks dokumen",
+                reason,
                 doc["id"],
                 q,
             )

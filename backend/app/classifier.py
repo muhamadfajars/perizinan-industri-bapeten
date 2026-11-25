@@ -58,13 +58,17 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
         None,
     ),
     # Personel
-    (r"(?i)SURAT\s+KETERANGAN\s+KERJA", "personel", "Surat Keterangan Kerja"),
+    (r"(?i)SURAT\s+KETERANGAN\s+KERJA", "personel", "Surat Penugasan / Keterangan Kerja"),
     (
         r"(?i)SURAT\s+PENUNJUK{1,2}AN\s+(?:TUGAS|(?:SEBAGAI\s+)?(?:PPR\b|PETUGAS\s+PROTEKSI(?:\s+RADIASI)?))|PENETAPAN\s+PEKERJA\s+RADIASI|PENUNJUKAN\s+(?:PPR\b|PETUGAS\s+PROTEKSI\s+RADIASI)|SURAT\s+KEPUTUSAN\s+PENUNJUKAN|PENGANGKATAN\s+PETUGAS\s+PROTEKSI",
         "personel",
-        "Surat Penunjukan Tugas",
+        "Surat Penugasan / Keterangan Kerja",
     ),
-    (r"(?i)SURAT\s+PERINTAH", "personel", "Surat Perintah"),
+    (
+        r"(?i)SURAT\s+(?:PERINTAH|TUGAS|PENUGASAN)\b",
+        "personel",
+        "Surat Penugasan / Keterangan Kerja",
+    ),
     (
         r"(?i)SERTIFIKAT\s+PELATIHAN|TRAINING\s+CERTIFICATE|SAFETY\s+RADIATION\s+TRAINING",
         "personel",

@@ -106,10 +106,8 @@ export type FormReference = {
 
 export const PERSONNEL_TYPES = [
   'Surat Izin Bekerja (SIB)',
-  'Surat Perintah',
   'Sertifikat Kompetensi PPR',
   'Sertifikat Pelatihan',
-  'Surat Keterangan Kerja',
-  'Surat Penunjukan Tugas',
+  'Surat Penugasan / Keterangan Kerja',
   'Evaluasi Dosis / Zero Check',
 ] as const;

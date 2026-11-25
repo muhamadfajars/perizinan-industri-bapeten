@@ -16,9 +16,9 @@ test('pending and unrecognized documents block analysis until a category is chos
 });
 
 test('recognized content carries its category and personnel subtype', () => {
-  const known = applyClassification(pending, { category: 'personel', subtype: 'Surat Perintah', layer: 2, confidence: .9, reason: 'Isi dokumen' });
+  const known = applyClassification(pending, { category: 'personel', subtype: 'Surat Penugasan / Keterangan Kerja', layer: 2, confidence: .9, reason: 'Isi dokumen' });
   assert.equal(known.category, 'personel');
-  assert.equal(known.subtype, 'Surat Perintah');
+  assert.equal(known.subtype, 'Surat Penugasan / Keterangan Kerja');
   assert.equal(classificationBlocker([known]), null);
   assert.match(classificationBlocker([known, pending])!, /Sedang mengenali/);
 });

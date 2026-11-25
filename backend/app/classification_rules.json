@@ -10,7 +10,7 @@
     {
       "pattern": "surat[\\s_-]*penunjuk{1,2}an[\\s_-]*(?:tugas|(?:sebagai[\\s_-]*)?(?:ppr|petugas[\\s_-]*proteksi(?:[\\s_-]*radiasi)?))(?![a-z0-9])|(?:sk[\\s_-]*)?penetapan[\\s_-]*pekerja[\\s_-]*radiasi|penunjuk{1,2}an[\\s_-]*(?:ppr(?![a-z0-9])|petugas[\\s_-]*proteksi[\\s_-]*radiasi)|sk[\\s_-]*penunjuk{1,2}an|pengangkatan.*ppr",
       "category": "personel",
-      "subtype": "Surat Penunjukan Tugas"
+      "subtype": "Surat Penugasan / Keterangan Kerja"
     },
     {
       "pattern": "program[\\s_-]*proteksi|proteksi[\\s_-]*radiasi|ppkr|keselamatan[\\s_-]*radiasi",
@@ -25,12 +25,12 @@
     {
       "pattern": "surat[\\s_-]*keterangan[\\s_-]*kerja|skk\\b",
       "category": "personel",
-      "subtype": "Surat Keterangan Kerja"
+      "subtype": "Surat Penugasan / Keterangan Kerja"
     },
     {
-      "pattern": "sprint|surat[\\s_-]*perintah|surat[\\s_-]*tugas",
+      "pattern": "sprint|surat[\\s_-]*perintah|surat[\\s_-]*tugas|surat[\\s_-]*penugasan",
       "category": "personel",
-      "subtype": "Surat Perintah"
+      "subtype": "Surat Penugasan / Keterangan Kerja"
     },
     {
       "pattern": "sertifikat.*(?:pelatihan|training)|sertifikat[\\s_-]*pekerja(?:\\.|[\\s_-]|$)",

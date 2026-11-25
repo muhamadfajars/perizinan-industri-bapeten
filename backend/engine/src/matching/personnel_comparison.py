@@ -187,7 +187,7 @@ def explicit_assignment_role(text):
         ):
             prefix = blob[: m.start()]
             if re.search(
-                r"(?i)\b(?:tugas|menugaskan|ditunjuk|menetapkan|pengangkatan|kepada|melaksanakan)\b",
+                r"(?i)\b(?:tugas|bertugas|ditugaskan|menugaskan|ditunjuk|menunjuk|menetapkan|pengangkatan|diangkat|memerintahkan|kepada|melaksanakan|bekerja|menjabat)\b",
                 prefix,
             ):
                 return m.group(1)

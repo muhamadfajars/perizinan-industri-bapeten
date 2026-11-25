@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .config import TOKEN as TOKEN
+from .config import APP_VERSION, TOKEN as TOKEN
 from . import storage, vpn_access
 from .api import applications, documents, classification, analyses
 
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="BAPETEN AI Evaluator API",
-    version="0.2.0",
+    version=APP_VERSION,
     docs_url=None,
     redoc_url=None,
     lifespan=lifespan,
