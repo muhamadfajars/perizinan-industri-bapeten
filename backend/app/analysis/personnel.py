@@ -129,9 +129,14 @@ def _format_personnel_rows(parsed, validation, app, doc):
                 document_id=doc["id"],
             )
             if label == "Pengesahan":
+                approval_pages = [
+                    p.get("page")
+                    for p in (parsed.get("pages") or [])
+                    if isinstance(p, dict) and isinstance(p.get("page"), int) and p.get("page") > 0
+                ]
                 row["detail"] = {
                     "type": "approval",
-                    "pages": [1],
+                    "pages": approval_pages[:1] or [1],
                     "heading": "Pengesahan " + dtype,
                 }
                 row["note"] = "Periksa tanda tangan atau stempel pada PDF asli"
@@ -161,6 +166,50 @@ def _format_personnel_rows(parsed, validation, app, doc):
     ]
 
 
+_SUBTYPE_CANONICAL = {
+    "Sertifikat Kompetensi": "Sertifikat Kompetensi PPR",
+    "Evaluasi Dosis": "Evaluasi Dosis / Zero Check",
+    "Surat Perintah": "Surat Penugasan / Keterangan Kerja",
+    "Surat Keterangan Kerja": "Surat Penugasan / Keterangan Kerja",
+    "Surat Penunjukan Tugas": "Surat Penugasan / Keterangan Kerja",
+}
+
+
+def _page_text_for_classification(page_data: dict) -> str:
+    parts = []
+    native = _text(page_data.get("native_text"))
+    if native:
+        parts.append(native)
+    ocr_lines = [
+        _text(line.get("text")) if isinstance(line, dict) else _text(line)
+        for line in (page_data.get("ocr") or [])
+    ]
+    ocr_joined = "\n".join(line for line in ocr_lines if line)
+    if ocr_joined:
+        parts.append(ocr_joined)
+    return "\n".join(parts)
+
+
+def _scope_personnel_pages(pages: list[dict], target_subtype: str) -> list[dict]:
+    """Filter bundled multi-subtype personnel pages to pages matching `target_subtype`."""
+    from ..classifier import classify_by_content
+
+    target = _SUBTYPE_CANONICAL.get(target_subtype, target_subtype)
+    current_sub: str | None = None
+    tagged: list[tuple[str | None, dict]] = []
+    observed_subtypes: set[str] = set()
+    for page_data in pages:
+        cat, sub, _ = classify_by_content(_page_text_for_classification(page_data))
+        if cat == "personel" and sub:
+            current_sub = _SUBTYPE_CANONICAL.get(sub, sub)
+            observed_subtypes.add(current_sub)
+        tagged.append((current_sub, page_data))
+    if len(observed_subtypes) < 2:
+        return pages
+    scoped = [page_data for sub, page_data in tagged if sub == target]
+    return scoped or pages
+
+
 def _personnel(doc, app, ref):
     """Extract and validate personnel documents by subtype."""
     from src.extraction.personnel_document import (
@@ -178,6 +227,22 @@ def _personnel(doc, app, ref):
             }
         ]
     )
+    if not doc.get("_virtual_extra") and "_observed_pages" not in doc:
+        doc["_observed_pages"] = [
+            (
+                p.get("page") if isinstance(p.get("page"), int) and p.get("page") > 0 else idx + 1,
+                _page_text_for_classification(p),
+            )
+            for idx, p in enumerate(pages)
+            if isinstance(p, dict)
+        ]
+    subtype = _text(doc.get("subtype"))
+    is_multi_personnel = bool(doc.get("_virtual_extra")) or any(
+        isinstance(e, dict) and e.get("category") == "personel"
+        for e in (doc.get("extra_categories") or [])
+    )
+    if is_multi_personnel and subtype and len(pages) > 1:
+        pages = _scope_personnel_pages(pages, subtype)
     parsed = parse_personnel_documents(pages)
     kinds = {
         "Surat Izin Bekerja (SIB)": "SIB",
@@ -191,7 +256,6 @@ def _personnel(doc, app, ref):
         "Evaluasi Dosis": "DOSE",
         "Evaluasi Dosis / Zero Check": "DOSE",
     }
-    subtype = _text(doc.get("subtype"))
     for source in parsed:
         if subtype in kinds:
             source["document_type"] = kinds[subtype]

@@ -1,10 +1,11 @@
 import sharedRules from '../../../backend/app/classification_rules.json';
 import { classifyFile as apiClassifyFile } from '../api';
-import type { CategoryId } from '../types/models';
+import type { CategoryId, ExtraCategory } from '../types/models';
 
 export type ClassificationResult = {
   category: CategoryId | 'unknown';
   subtype?: string;
+  extraCategories?: ExtraCategory[];
   layer: 1 | 2 | 0;
   reason: string;
   confidence: number;
@@ -61,6 +62,10 @@ export async function classifyFile(file: File): Promise<ClassificationResult> {
     return {
       category: (res.category as CategoryId) || 'unknown',
       subtype: res.subtype,
+      extraCategories: (res.extra_categories ?? []).map((item) => ({
+        category: item.category,
+        subtype: item.subtype ?? undefined,
+      })),
       layer: res.layer ?? 0,
       reason: res.reason || 'Pemeriksaan isi teks dokumen',
       confidence: res.confidence ?? 0,

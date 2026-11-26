@@ -336,3 +336,79 @@ class PersonnelPolicyTests(unittest.TestCase):
         validity = next(r for r in rows if r["field"] == "Masa Berlaku")
         self.assertEqual(validity["observed"], "13/08/2031")
         self.assertEqual(validity["status"], "INFO")
+
+    def test_bundled_personnel_page_scoping_and_group_sections(self):
+        from app.analysis.personnel import _scope_personnel_pages
+
+        pages = [
+            {
+                "page": 1,
+                "native_text": "Izin Bekerja Petugas Fasilitas Radiasi dan Zat Radioaktif\nNo. SIB 468442.120.20.240626\nNama: Shafira Rafa Maulida",
+                "ocr": [],
+            },
+            {
+                "page": 2,
+                "native_text": "Izin Bekerja hanya dapat digunakan di 1 fasilitas radiasi",
+                "ocr": [],
+            },
+            {
+                "page": 3,
+                "native_text": "Sertifikat Kompetensi Petugas Proteksi Radiasi\nNomor Sertifikat: 468442.120.10.240626\nNama: Shafira Rafa Maulida",
+                "ocr": [],
+            },
+            {
+                "page": 4,
+                "native_text": "Tanggal Ujian: 11 - 12 Juni 2026\nNilai Ujian: 70",
+                "ocr": [],
+            },
+        ]
+        sib_pages = _scope_personnel_pages(pages, "Surat Izin Bekerja (SIB)")
+        cert_pages = _scope_personnel_pages(pages, "Sertifikat Kompetensi PPR")
+        self.assertEqual([p["page"] for p in sib_pages], [1, 2])
+        self.assertEqual([p["page"] for p in cert_pages], [3, 4])
+
+        # Bundled sections sharing the same document_id should not falsely flag co_owners for distinct subtypes.
+        row_sib = {
+            "id": "r1",
+            "field": "Nama",
+            "expected": "Shafira Rafa Maulida",
+            "observed": "Shafira Rafa Maulida",
+            "status": "MATCH",
+            "detail": {"type": "personnel", "person_id": "p1", "person_name": "Shafira Rafa Maulida"},
+        }
+        row_cert = {
+            "id": "r2",
+            "field": "Nama",
+            "expected": "Shafira Rafa Maulida",
+            "observed": "Shafira Rafa Maulida",
+            "status": "MATCH",
+            "detail": {"type": "personnel", "person_id": "p1", "person_name": "Shafira Rafa Maulida"},
+        }
+        grouped = group_sections(
+            [
+                {
+                    "id": "doc_bundle",
+                    "category": "personel",
+                    "name": "Dokumen Personel - SIB",
+                    "document_id": "doc_bundle",
+                    "source_documents": [{"id": "doc_bundle", "filename": "bundle.pdf"}],
+                    "rows": [row_sib],
+                },
+                {
+                    "id": "doc_bundle__personel__Sertifikat Kompetensi PPR",
+                    "category": "personel",
+                    "name": "Dokumen Personel - Sertifikat Kompetensi PPR",
+                    "document_id": "doc_bundle",
+                    "source_documents": [{"id": "doc_bundle", "filename": "bundle.pdf"}],
+                    "rows": [row_cert],
+                },
+            ]
+        )
+        self.assertEqual(len(grouped), 1)
+        self.assertEqual(grouped[0]["name"], "Dokumen Personel · 2 Dokumen")
+        self.assertEqual(grouped[0]["rows"][0]["detail"]["source_label"], "SIB")
+        self.assertEqual(
+            grouped[0]["rows"][1]["detail"]["source_label"],
+            "Sertifikat Kompetensi PPR",
+        )
+        self.assertFalse(grouped[0]["rows"][0]["detail"].get("shared_document"))

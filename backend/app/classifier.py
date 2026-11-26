@@ -138,10 +138,7 @@ CONTENT_PATTERNS: list[tuple[str, str, Optional[str]]] = [
 WEAK_NAME_HINTS = set(_RULES["weakNameHints"])
 
 
-def _classify_filename_detailed(
-    filename: str,
-) -> Tuple[Optional[str], Optional[str], Optional[str], bool]:
-    """Match filename pattern against known document rules, tracking weak hints."""
+def _filename_candidate_matches(filename: str) -> list[tuple[str, Optional[str], str, bool]]:
     clean_name = Path(filename).name
     matches = []
     for pattern, cat, subtype in NAME_PATTERNS:
@@ -150,7 +147,18 @@ def _classify_filename_detailed(
             hint = re.sub(r"[\s_-]+", " ", m.group(0)).lower().strip()
             matches.append((cat, subtype, m.group(0), hint not in WEAK_NAME_HINTS))
     strong = [match for match in matches if match[3]]
-    candidates = strong or matches
+    return strong or matches
+
+
+def _filename_candidate_categories(filename: str) -> set[str]:
+    return {cat for cat, _, _, _ in _filename_candidate_matches(filename)}
+
+
+def _classify_filename_detailed(
+    filename: str,
+) -> Tuple[Optional[str], Optional[str], Optional[str], bool]:
+    """Match filename pattern against known document rules, tracking weak hints."""
+    candidates = _filename_candidate_matches(filename)
     if len({(cat, subtype) for cat, subtype, _, _ in candidates}) > 1:
         return (
             None,
@@ -309,6 +317,45 @@ def classify_by_content(
     return None, None, None
 
 
+def detect_extra_categories(
+    text: str,
+    primary_category: Optional[str],
+    primary_subtype: Optional[str] = None,
+) -> list[dict[str, Optional[str]]]:
+    """Detect co-occurring supporting categories bundled in the same document header."""
+    if not text or not primary_category or primary_category in ("unknown", "formulir"):
+        return []
+    normalized = unicodedata.normalize("NFKC", text).replace("\u00ad", "")
+    header = normalized.split("\f")[0][:1200]
+    if re.search(
+        r"daftar\s+unit\s+kompetensi|mata\s+ajar|subjects\s+of\s+the\s+training", header, re.I
+    ):
+        return []
+    co_patterns = (
+        (
+            "fungsi",
+            r"(?i)\b(?:uji\s+(?:fungsi|komisioning)|functional\s+test|acceptance\s+test|commissioning\s+test)\b",
+        ),
+        (
+            "paparan",
+            r"(?i)\b(?:uji\s+paparan(?:\s+radiasi)?|radiation\s+survey|dose\s+rate\s+(?:test|report))\b",
+        ),
+        (
+            "kebocoran",
+            r"(?i)\b(?:uji\s+kebocoran(?:\s+tabung)?|tube\s+leakage(?:\s+test)?)\b",
+        ),
+    )
+    extras: list[dict[str, Optional[str]]] = []
+    seen = {primary_category}
+    for cat, pattern in co_patterns:
+        if cat in seen:
+            continue
+        if re.search(pattern, header):
+            seen.add(cat)
+            extras.append({"category": cat, "subtype": None})
+    return extras
+
+
 def _is_photo_album_pdf(filename: str, file_bytes: bytes, ocr_text: str) -> bool:
     """Detect multi-photo PDFs (unit/label photos) that lack native text and OCR prose."""
     if Path(filename).suffix.lower() != ".pdf":
@@ -339,6 +386,140 @@ def _is_photo_album_pdf(filename: str, file_bytes: bytes, ocr_text: str) -> bool
                 photo_pages += 1
                 large_images += page_large
         return native_chars < 30 and (photo_pages >= 2 or large_images >= 2)
+
+
+_BUNDLE_REPORT_CATS = {"fungsi", "paparan", "kebocoran", "mutu", "kalibrasi"}
+
+
+def detect_content_categories(
+    text: str,
+) -> Tuple[Optional[str], Optional[str], Optional[str], list[dict[str, Optional[str]]]]:
+    """Detect primary and any additional bundled categories across multi-page documents."""
+    cat2, sub2, reason2 = classify_by_content(text)
+    if cat2:
+        extras = detect_extra_categories(text, cat2, sub2)
+        if "\f" in text and cat2 in _BUNDLE_REPORT_CATS:
+            seen_cats = {cat2, *(e["category"] for e in extras if e.get("category"))}
+            for page in text.split("\f")[1:]:
+                p_cat, _, _ = classify_by_content(page)
+                if p_cat in _BUNDLE_REPORT_CATS and p_cat not in seen_cats:
+                    seen_cats.add(p_cat)
+                    extras.append({"category": p_cat, "subtype": None})
+        return cat2, sub2, reason2, extras
+
+    if "\f" in text:
+        normalized = unicodedata.normalize("NFKC", text).replace("\u00ad", "")
+        first = normalized.split("\f")[0]
+        if re.search(r"(?im)^\s*FORMULIR\s+PERMOHONAN", first[:1000]):
+            return None, None, reason2, []
+        page_hits: list[tuple[str, str]] = []
+        seen_pairs: set[tuple[str, str]] = set()
+        has_conflict = False
+        for page in normalized.split("\f"):
+            p_cat, p_sub, p_reason = classify_by_content(page)
+            if not p_cat:
+                if p_reason:
+                    has_conflict = True
+                continue
+            if p_cat != "personel" or not p_sub:
+                has_conflict = True
+                continue
+            pair = (p_cat, p_sub)
+            if pair not in seen_pairs:
+                seen_pairs.add(pair)
+                page_hits.append(pair)
+        if not has_conflict and len(page_hits) >= 2:
+            first_cat, first_sub = page_hits[0]
+            extras = [{"category": c, "subtype": s} for c, s in page_hits[1:]]
+            return (
+                first_cat,
+                first_sub,
+                "Beberapa jenis dokumen personel terdeteksi dalam satu file (multi-kategori)",
+                extras,
+            )
+
+    return None, None, reason2, []
+
+
+_AUDIT_SUBTYPE_CANONICAL = {
+    "Sertifikat Kompetensi": "Sertifikat Kompetensi PPR",
+    "Evaluasi Dosis": "Evaluasi Dosis / Zero Check",
+    "Surat Perintah": "Surat Penugasan / Keterangan Kerja",
+    "Surat Keterangan Kerja": "Surat Penugasan / Keterangan Kerja",
+    "Surat Penunjukan Tugas": "Surat Penugasan / Keterangan Kerja",
+}
+
+_AUDIT_CATEGORY_LABELS = {
+    "fungsi": "Uji Fungsi / Acceptance Test",
+    "paparan": "Uji Paparan Radiasi",
+    "kebocoran": "Uji Kebocoran Tabung",
+    "mutu": "Sertifikat Uji Mutu",
+    "kalibrasi": "Sertifikat Kalibrasi",
+}
+
+_AUDIT_REPORT_CATS = {"fungsi", "paparan", "kebocoran", "mutu", "kalibrasi"}
+
+
+def _canonical_pair(cat: Optional[str], sub: Optional[str]) -> tuple[str, Optional[str]]:
+    c = str(cat or "").strip()
+    if c == "personel":
+        raw_sub = str(sub or "").strip()
+        return c, _AUDIT_SUBTYPE_CANONICAL.get(raw_sub, raw_sub or None)
+    return c, None
+
+
+def audit_unselected_bundle_warnings(
+    doc: dict[str, Any],
+    page_texts: list[tuple[int, str]],
+) -> list[str]:
+    """Warn if already-read pages indicate another category/subtype not selected by user."""
+    primary_cat = doc.get("category")
+    if (
+        doc.get("_virtual_extra")
+        or not page_texts
+        or primary_cat not in (_AUDIT_REPORT_CATS | {"personel", "spesifikasi"})
+    ):
+        return []
+
+    selected: set[tuple[str, Optional[str]]] = {_canonical_pair(primary_cat, doc.get("subtype"))}
+    for extra in doc.get("extra_categories") or []:
+        if isinstance(extra, dict) and extra.get("category"):
+            selected.add(_canonical_pair(extra.get("category"), extra.get("subtype")))
+
+    warnings_out: list[str] = []
+    seen_warned: set[tuple[str, Optional[str]]] = set()
+    filename = Path(str(doc.get("filename") or "dokumen")).name
+
+    def _record_candidate(cat: str, sub: Optional[str], pg: int) -> None:
+        pair = _canonical_pair(cat, sub)
+        if pair in selected or pair in seen_warned:
+            return
+        if primary_cat == "personel":
+            if pair[0] != "personel" or not pair[1]:
+                return
+            label = f"Dokumen Personel ({pair[1]})"
+        else:
+            if pair[0] not in _AUDIT_REPORT_CATS:
+                return
+            label = _AUDIT_CATEGORY_LABELS.get(pair[0], pair[0])
+        seen_warned.add(pair)
+        warnings_out.append(
+            f'Berkas "{filename}" terindikasi juga memuat {label} (hal. {pg}). Tambahkan kategori tersebut di menu Upload bila ingin ikut dievaluasi.'
+        )
+
+    for idx, (pg_num, raw_text) in enumerate(page_texts):
+        text = str(raw_text or "")
+        if len(text.strip()) < 10:
+            continue
+        pg = pg_num if isinstance(pg_num, int) and pg_num > 0 else idx + 1
+        p_cat, p_sub, _ = classify_by_content(text)
+        if p_cat:
+            _record_candidate(p_cat, p_sub, pg)
+        if idx == 0 and primary_cat in _AUDIT_REPORT_CATS:
+            for item in detect_extra_categories(text, primary_cat, doc.get("subtype")):
+                _record_candidate(item["category"], item.get("subtype"), pg)
+
+    return warnings_out
 
 
 def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict[str, Any]:
@@ -375,11 +556,20 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
                 "confidence": 0.0,
                 "reason": "Isi dokumen belum dapat diperiksa (file rusak, terkunci, atau OCR gagal). Silakan pilih kategori.",
             }
-        cat2, sub2, reason2 = classify_by_content(text)
+        cat2, sub2, reason2, extra2 = detect_content_categories(text)
+        detected_cats = (
+            {cat2, *(e["category"] for e in extra2 if e.get("category"))} if cat2 else set()
+        )
+        name_cats = (
+            _filename_candidate_categories(clean_name) if (reason1 and not cat1) else set()
+        )
+        name_multi_aligned = bool(
+            cat2 and extra2 and name_cats and name_cats <= detected_cats
+        )
         conflict = (
-            (reason1 and not cat1)
-            or (reason2 and not cat2)
-            or (cat1 and cat2 and cat1 != cat2 and not weak1)
+            (bool(reason1 and not cat1) and not name_multi_aligned)
+            or bool(reason2 and not cat2)
+            or bool(cat1 and cat2 and cat1 != cat2 and not weak1 and cat1 not in detected_cats)
         )
         if conflict:
             return {
@@ -397,6 +587,7 @@ def classify_document(filename: str, file_bytes: Optional[bytes] = None) -> dict
                 "filename": clean_name,
                 "category": cat2,
                 "subtype": sub2,
+                "extra_categories": extra2,
                 "layer": 2,
                 "reason": reason2,
                 "confidence": 0.90,

@@ -687,6 +687,8 @@ def enrich_exposure_rows(doc: dict, app: dict, path: str, raw: dict) -> tuple[di
         return raw, False
 
     pages = read_exposure_pages(path)
+    if not doc.get("_virtual_extra") and "_observed_pages" not in doc:
+        doc["_observed_pages"] = [(p["page"], p.get("text") or "") for p in pages]
     records, warning = extract_exposure_llm(pages, needed, equipments)
     if not records:
         return raw, warning
@@ -864,6 +866,8 @@ def enrich_functional_rows(doc: dict, app: dict, path: str, rows: list[dict]) ->
         return rows, False
 
     pages = read_exposure_pages(path)
+    if not doc.get("_virtual_extra") and "_observed_pages" not in doc:
+        doc["_observed_pages"] = [(p["page"], p.get("text") or "") for p in pages]
     records, warning = extract_exposure_llm(pages, needed, equipments)
     if not records:
         return rows, warning

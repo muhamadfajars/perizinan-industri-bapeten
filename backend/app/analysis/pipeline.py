@@ -65,7 +65,20 @@ def analyze_application(aid, progress):
     sections = []
     warnings = list(application.get("warnings") or [])
     errors = []
-    supports = [storage.document(d["id"], aid) for d in docs if d["category"] != "formulir"]
+    raw_supports = [storage.document(d["id"], aid) for d in docs if d["category"] != "formulir"]
+    supports = []
+    for doc in raw_supports:
+        supports.append(doc)
+        for extra in doc.get("extra_categories") or []:
+            ecat = (extra or {}).get("category")
+            esub = (extra or {}).get("subtype") if ecat == "personel" else None
+            if (
+                not ecat
+                or ecat == "formulir"
+                or (ecat == doc["category"] and esub == doc.get("subtype"))
+            ):
+                continue
+            supports.append({**doc, "category": ecat, "subtype": esub, "_virtual_extra": True})
     progress(5, f"Formulir selesai ({form_seconds:.1f}s), menyiapkan {len(supports)} dokumen")
     futures = {}
     label_futures = {}
@@ -109,8 +122,13 @@ def analyze_application(aid, progress):
     group_seconds = 0.0
     group_failures = []
     if label_cached is not None:
+        label_section_id = (
+            f"{label_documents[0]['id']}__label"
+            if all(ld.get("_virtual_extra") for ld in label_documents)
+            else label_documents[0]["id"]
+        )
         completed[label_index] = {
-            "id": label_documents[0]["id"],
+            "id": label_section_id,
             "category": "label",
             "name": NAMES["label"] + (" · %d file" % len(label_documents)),
             "document_id": label_documents[0]["id"],
@@ -133,6 +151,9 @@ def analyze_application(aid, progress):
     label_finished = None
 
     def record_support(index, d, group, detail):
+        for w in detail.get("warnings") or []:
+            if w and w not in warnings:
+                warnings.append(w)
         rows = (
             detail["rows"]
             if d["category"] in ("proteksi", "manajemen", "personel", "impor", "mutu", "kalibrasi", "spesifikasi")
@@ -156,8 +177,12 @@ def analyze_application(aid, progress):
                 }
             )
             return
+        section_id = d["id"]
+        if d.get("_virtual_extra"):
+            suffix = f"{d['category']}__{d['subtype']}" if d.get("subtype") else d["category"]
+            section_id = f"{d['id']}__{suffix}"
         completed[index] = {
-            "id": d["id"],
+            "id": section_id,
             "category": d["category"],
             "name": _personnel_title(d)
             if d["category"] == "personel"
@@ -236,8 +261,13 @@ def analyze_application(aid, progress):
             )
             rows = detail["rows"]
             if rows:
+                label_section_id = (
+                    f"{label_documents[0]['id']}__label"
+                    if all(ld.get("_virtual_extra") for ld in label_documents)
+                    else label_documents[0]["id"]
+                )
                 completed[label_index] = {
-                    "id": label_documents[0]["id"],
+                    "id": label_section_id,
                     "category": "label",
                     "name": NAMES["label"] + (" · %d file" % len(label_documents)),
                     "document_id": label_documents[0]["id"],

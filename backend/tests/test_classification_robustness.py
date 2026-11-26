@@ -216,3 +216,124 @@ class ClassificationRobustnessTests(unittest.TestCase):
                 "Berdasarkan PERKA BAPETEN No. 4/2013, NBD untuk Hp(10): 20 mSv/tahun untuk pemakai TLD."
             )[0]
         )
+
+    def test_combined_exposure_and_functional_report_detects_extra_categories(self):
+        combined = (
+            "LAPORAN HASIL UJI PAPARAN RADIASI, DAN UJI FUNGSI/ UJI KOMISIONING\n"
+            "PESAWAT SINAR-X FLUORESENSI (XRF)\n"
+        )
+        with patch("app.classifier.extract_document_text", return_value=combined):
+            res = classify_document("20260911103436-1536367 Uji.pdf", b"pdf")
+        self.assertEqual(res["category"], "fungsi")
+        self.assertEqual(res["extra_categories"], [{"category": "paparan", "subtype": None}])
+
+        with patch(
+            "app.classifier.extract_document_text",
+            return_value="Test Report\nTesting Type: Commission Test\nItem Name: Radiation protection detection",
+        ):
+            single_exp = classify_document("report.pdf", b"pdf")
+        self.assertEqual(single_exp["category"], "paparan")
+        self.assertEqual(single_exp["extra_categories"], [])
+
+    def test_bundled_personnel_subtypes_across_pages_detects_extra_categories(self):
+        bundled_text = "\f".join(
+            [
+                "BADAN PENGAWAS TENAGA NUKLIR\nIzin Bekerja Petugas Fasilitas Radiasi dan Zat Radioaktif\nNama / Name\nShafira Rafa Maulida",
+                "Izin Bekerja hanya dapat digunakan di 1 fasilitas radiasi",
+                "Sertifikat Kompetensi Petugas Proteksi Radiasi\nNomor Sertifikat: 468442.120.10.240626\nNama/Name: Shafira Rafa Maulida",
+                "Klasifikasi: PPR Analisis\nNilai Ujian",
+            ]
+        )
+        with patch("app.classifier.extract_document_text", return_value=bundled_text):
+            res = classify_document(
+                "20260831154014-SHAFIRA RAFA MAULIDA_SERTIF & SIB PPR.pdf", b"pdf"
+            )
+        self.assertEqual(res["category"], "personel")
+        self.assertEqual(res["subtype"], "Surat Izin Bekerja (SIB)")
+        self.assertEqual(
+            res["extra_categories"],
+            [{"category": "personel", "subtype": "Sertifikat Kompetensi PPR"}],
+        )
+
+        # Ambiguous multi-category filename must STILL remain unknown when content supports only one category.
+        with patch("app.classifier.extract_document_text", return_value="PROGRAM PROTEKSI RADIASI"):
+            single_only = classify_document("program proteksi dan spesifikasi alat.pdf", b"pdf")
+        self.assertEqual(single_only["category"], "unknown")
+
+    def test_adaptive_header_ocr_detects_second_document_after_page_3(self):
+        scan_doc = pymupdf.open()
+        for _ in range(6):
+            scan_doc.new_page()
+
+        def fake_ocr(image):
+            idx = fake_ocr.count
+            fake_ocr.count += 1
+            if idx == 3:
+                return "UJI PAPARAN RADIASI"
+            return "HASIL UJI FUNGSI PESAWAT SINAR-X"
+
+        fake_ocr.count = 0
+        with patch("app.classification_reader.ocr", side_effect=fake_ocr):
+            res = classify_document("scan_6pages.pdf", scan_doc.tobytes())
+        scan_doc.close()
+        self.assertEqual(fake_ocr.count, 6)
+        self.assertEqual(res["category"], "fungsi")
+        self.assertEqual(res["extra_categories"], [{"category": "paparan", "subtype": None}])
+
+        # Long-form cover page on a 6-page scanned PDF skips bonus header OCR beyond budget=3.
+        prot_doc = pymupdf.open()
+        for _ in range(6):
+            prot_doc.new_page()
+        with patch(
+            "app.classification_reader.ocr",
+            return_value="PROGRAM PROTEKSI RADIASI",
+        ) as prot_ocr:
+            prot_res = classify_document("ppr_scan.pdf", prot_doc.tobytes())
+        prot_doc.close()
+        self.assertEqual(prot_ocr.call_count, 3)
+        self.assertEqual(prot_res["category"], "proteksi")
+
+    def test_post_analysis_bundle_warning_flags_unselected_category_only(self):
+        from app.classifier import audit_unselected_bundle_warnings
+
+        doc = {
+            "id": "doc-bundle-1",
+            "filename": "gabungan_p12.pdf",
+            "category": "fungsi",
+            "subtype": None,
+            "extra_categories": [],
+        }
+        pages = [
+            (1, "LAPORAN UJI FUNGSI PESAWAT SINAR-X"),
+            (12, "PENGUKURAN PAPARAN RADIASI\nNilai Batas"),
+        ]
+        warn_missing = audit_unselected_bundle_warnings(doc, pages)
+        self.assertEqual(len(warn_missing), 1)
+        self.assertIn("Uji Paparan Radiasi", warn_missing[0])
+        self.assertIn("hal. 12", warn_missing[0])
+
+        doc_selected = {**doc, "extra_categories": [{"category": "paparan", "subtype": None}]}
+        self.assertEqual(audit_unselected_bundle_warnings(doc_selected, pages), [])
+
+        # Personnel bundle warns only on distinct unselected personnel subtype.
+        doc_personel = {
+            "id": "doc-pers-1",
+            "filename": "bundel_personel.pdf",
+            "category": "personel",
+            "subtype": "Surat Izin Bekerja (SIB)",
+            "extra_categories": [],
+        }
+        pers_pages = [
+            (1, "Izin Bekerja Petugas Fasilitas Radiasi"),
+            (5, "Sertifikat Kompetensi Petugas Proteksi Radiasi"),
+        ]
+        warn_pers = audit_unselected_bundle_warnings(doc_personel, pers_pages)
+        self.assertEqual(len(warn_pers), 1)
+        self.assertIn("Sertifikat Kompetensi PPR", warn_pers[0])
+        self.assertIn("hal. 5", warn_pers[0])
+
+        # Virtual extra documents do not duplicate warnings.
+        self.assertEqual(
+            audit_unselected_bundle_warnings({**doc_personel, "_virtual_extra": True}, pers_pages),
+            [],
+        )

@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyClassification, classificationBlocker, analysisBlocker } from '../src/lib/uploadState.ts';
+import {
+  applyClassification,
+  classificationBlocker,
+  analysisBlocker,
+  toggleCategorySelection,
+} from '../src/lib/uploadState.ts';
 import type { UploadItem } from '../src/types/models.ts';
 
 const pending: UploadItem = { id: 'scan', name: 'scan.pdf', size: 100,
@@ -47,4 +52,89 @@ test('analysis requires exactly one reference form and at least one classified s
   assert.equal(result.category, 'unknown');
   assert.equal(result.subtype, undefined);
   assert.match(classificationBlocker([{ ...pending, isClassifying: false, category: 'personel', subtype: 'Sertifikat Kompetensi' }])!, /Perlu Pilih Kategori/);
+});
+
+test('applyClassification and blockers handle multiple categories per file safely', () => {
+  const form: UploadItem = { ...pending, id: 'form', category: 'formulir', isClassifying: false };
+  const combined = applyClassification(pending, {
+    category: 'fungsi',
+    extraCategories: [
+      { category: 'paparan' },
+      { category: 'fungsi' },
+      { category: 'formulir' },
+      { category: 'paparan' },
+    ],
+    layer: 2,
+    confidence: 0.9,
+    reason: 'Laporan gabungan',
+  });
+  assert.equal(combined.category, 'fungsi');
+  assert.deepEqual(combined.extraCategories, [{ category: 'paparan' }]);
+  assert.equal(analysisBlocker([form, combined]), null);
+
+  assert.match(
+    classificationBlocker([
+      {
+        ...combined,
+        extraCategories: [{ category: 'personel', subtype: 'Sertifikat Kompetensi' }],
+      },
+    ])!,
+    /Perlu Pilih Kategori/,
+  );
+  assert.match(
+    analysisBlocker([
+      { ...form, extraCategories: [{ category: 'paparan' }] },
+      combined,
+    ])!,
+    /Formulir Permohonan tidak dapat digabung/,
+  );
+});
+
+test('toggleCategorySelection supports Opsi A multi-select checkbox rules cleanly', () => {
+  // Adding a second category to a single category puts it in extraCategories.
+  const added = toggleCategorySelection('fungsi', undefined, [], 'paparan');
+  assert.deepEqual(added, {
+    category: 'fungsi',
+    subtype: undefined,
+    extraCategories: [{ category: 'paparan' }],
+  });
+
+  // Adding a distinct personnel subtype to an existing personnel subtype.
+  const bundledPersonnel = toggleCategorySelection(
+    'personel',
+    'Surat Izin Bekerja (SIB)',
+    [],
+    'personel',
+    'Sertifikat Kompetensi PPR',
+  );
+  assert.deepEqual(bundledPersonnel, {
+    category: 'personel',
+    subtype: 'Surat Izin Bekerja (SIB)',
+    extraCategories: [{ category: 'personel', subtype: 'Sertifikat Kompetensi PPR' }],
+  });
+
+  // Removing primary category promotes the remaining extra category cleanly.
+  const removedPrimary = toggleCategorySelection(
+    bundledPersonnel.category,
+    bundledPersonnel.subtype,
+    bundledPersonnel.extraCategories,
+    'personel',
+    'Surat Izin Bekerja (SIB)',
+  );
+  assert.deepEqual(removedPrimary, {
+    category: 'personel',
+    subtype: 'Sertifikat Kompetensi PPR',
+    extraCategories: [],
+  });
+
+  // Cannot uncheck the last remaining category.
+  const keptLast = toggleCategorySelection('kalibrasi', undefined, [], 'kalibrasi');
+  assert.deepEqual(keptLast, { category: 'kalibrasi', subtype: undefined, extraCategories: [] });
+
+  // Selecting formulir clears extras; selecting supporting replaces formulir.
+  const asForm = toggleCategorySelection('fungsi', undefined, [{ category: 'paparan' }], 'formulir');
+  assert.deepEqual(asForm, { category: 'formulir', subtype: undefined, extraCategories: [] });
+
+  const fromForm = toggleCategorySelection('formulir', undefined, [], 'mutu');
+  assert.deepEqual(fromForm, { category: 'mutu', subtype: undefined, extraCategories: [] });
 });

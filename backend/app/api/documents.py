@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 from fastapi import (
     APIRouter,
@@ -19,6 +20,36 @@ from .dependencies import authorize, must_app
 router = APIRouter()
 
 
+def _normalize_extra_categories(
+    primary_category: str,
+    primary_subtype: str | None,
+    raw_extras: list | None,
+) -> list[dict[str, str | None]]:
+    if not raw_extras:
+        return []
+    if primary_category == "formulir":
+        raise HTTPException(422, "Formulir Permohonan tidak dapat digabung dengan kategori lain")
+    seen = {(primary_category, (primary_subtype or "").strip() or None)}
+    normalized: list[dict[str, str | None]] = []
+    for item in raw_extras:
+        cat = item.category if hasattr(item, "category") else (item.get("category") if isinstance(item, dict) else None)
+        sub = item.subtype if hasattr(item, "subtype") else (item.get("subtype") if isinstance(item, dict) else None)
+        cat = str(cat or "").strip()
+        if cat not in CATEGORIES:
+            raise HTTPException(422, "Kategori tambahan tidak dikenal")
+        if cat == "formulir":
+            raise HTTPException(422, "Formulir Permohonan tidak dapat digabung dengan kategori lain")
+        norm_sub = (str(sub or "").strip() or None) if cat == "personel" else None
+        if cat == "personel" and not norm_sub:
+            raise HTTPException(422, "Pilih subjenis dokumen personel untuk kategori tambahan")
+        key = (cat, norm_sub)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append({"category": cat, "subtype": norm_sub})
+    return normalized
+
+
 @router.get("/api/v1/applications/{aid}/documents", dependencies=[Depends(authorize)])
 def list_documents(aid: str):
     must_app(aid)
@@ -30,6 +61,7 @@ async def upload(
     aid: str,
     category: str | None = Form(None),
     subtype: str | None = Form(None),
+    extra_categories: str | None = Form(None),
     file: UploadFile = File(...),
 ):
     must_app(aid)
@@ -42,6 +74,15 @@ async def upload(
     ext = Path(filename).suffix.lower()
     if not filename or ext not in EXT:
         raise HTTPException(415, "Format dokumen tidak didukung")
+
+    parsed_extras = None
+    if extra_categories is not None and extra_categories.strip():
+        try:
+            parsed_extras = json.loads(extra_categories)
+        except ValueError:
+            raise HTTPException(422, "Format extra_categories tidak valid")
+        if not isinstance(parsed_extras, list):
+            raise HTTPException(422, "extra_categories harus berupa daftar")
 
     temp_name = storage.make_id() + ext
     folder = storage.ROOT / "uploads" / aid
@@ -79,17 +120,21 @@ async def upload(
             category = detected["category"]
             if not subtype:
                 subtype = detected.get("subtype")
+            if parsed_extras is None:
+                parsed_extras = detected.get("extra_categories") or []
 
         if category not in CATEGORIES:
             raise HTTPException(422, "Kategori tidak dikenal")
         if category == "formulir" and ext != ".pdf":
             raise HTTPException(415, "Formulir acuan saat ini harus PDF")
+        subtype = (subtype or "").strip() if category == "personel" else None
         if category == "personel" and not subtype:
             raise HTTPException(422, "Pilih subjenis dokumen personel")
+        normalized_extras = _normalize_extra_categories(category, subtype, parsed_extras)
 
         # Do not deduplicate different categories or uploads silently.
         did = storage.add_document(
-            aid, category, subtype, filename, size, digest.hexdigest(), temp_name
+            aid, category, subtype, filename, size, digest.hexdigest(), temp_name, normalized_extras
         )
         return {"document": next(d for d in storage.documents(aid) if d["id"] == did)}
     except BaseException:
@@ -115,7 +160,10 @@ def update_document_category(aid: str, did: str, payload: DocumentCategoryUpdate
         subtype = (payload.subtype or "").strip() if payload.category == "personel" else None
         if payload.category == "personel" and not subtype:
             raise HTTPException(422, "Pilih subjenis dokumen personel")
-        storage.update_document_category(did, aid, payload.category, subtype)
+        normalized_extras = _normalize_extra_categories(
+            payload.category, subtype, payload.extra_categories
+        )
+        storage.update_document_category(did, aid, payload.category, subtype, normalized_extras)
         return {"document": next(d for d in storage.documents(aid) if d["id"] == did)}
 
 

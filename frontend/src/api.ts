@@ -1,4 +1,4 @@
-import type { CategoryId, FormReference, MatchSection } from './types/models';
+import type { CategoryId, ExtraCategory, FormReference, MatchSection } from './types/models';
 const API_BASE = (() => {
   const envUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '');
   if (envUrl) return envUrl;
@@ -24,6 +24,7 @@ export type StoredDocument = {
   id: string;
   category: CategoryId;
   subtype?: string;
+  extra_categories?: Array<{ category: CategoryId; subtype?: string | null }>;
   filename: string;
   size: number;
   sha256: string;
@@ -88,10 +89,24 @@ async function monitoringRequest<T>(path: string, signal?: AbortSignal): Promise
 export function listFiles(aid: string, signal?: AbortSignal) {
   return monitoringRequest<{ documents: StoredDocument[] }>(`/api/v1/applications/${aid}/documents`, signal);
 }
-export function uploadFile(aid: string, category: CategoryId | string, file: File, subtype?: string) {
+export function uploadFile(
+  aid: string,
+  category: CategoryId | string,
+  file: File,
+  subtype?: string,
+  extraCategories?: ExtraCategory[],
+) {
   const data = new FormData();
   if (category && category !== 'auto') data.append('category', category);
   if (subtype) data.append('subtype', subtype);
+  if (extraCategories?.length) {
+    data.append(
+      'extra_categories',
+      JSON.stringify(
+        extraCategories.map((item) => ({ category: item.category, subtype: item.subtype ?? null })),
+      ),
+    );
+  }
   data.append('file', file);
   return request<{ document: StoredDocument }>(`/api/v1/applications/${aid}/documents`, {
     method: 'POST',
@@ -102,6 +117,7 @@ export type ClassifyResponse = {
   filename: string;
   category: CategoryId | 'unknown';
   subtype?: string;
+  extra_categories?: Array<{ category: CategoryId; subtype?: string | null }>;
   layer: 1 | 2 | 0;
   reason: string;
   confidence: number;
@@ -118,11 +134,24 @@ export function classifyFile(file: File) {
 export function deleteFile(aid: string, did: string) {
   return request<{ deleted: boolean }>(`/api/v1/applications/${aid}/documents/${did}`, { method: 'DELETE' });
 }
-export function updateFileCategory(aid: string, did: string, category: CategoryId, subtype?: string) {
+export function updateFileCategory(
+  aid: string,
+  did: string,
+  category: CategoryId,
+  subtype?: string,
+  extraCategories?: ExtraCategory[],
+) {
   return request<{ document: StoredDocument }>(`/api/v1/applications/${aid}/documents/${did}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category, subtype: subtype ?? null }),
+    body: JSON.stringify({
+      category,
+      subtype: subtype ?? null,
+      extra_categories: (extraCategories ?? []).map((item) => ({
+        category: item.category,
+        subtype: item.subtype ?? null,
+      })),
+    }),
   });
 }
 export function analyze(aid: string) {

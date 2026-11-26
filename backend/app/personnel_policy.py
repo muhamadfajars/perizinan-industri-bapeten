@@ -294,7 +294,8 @@ def group_sections(sections):
                 p_id = detail.get("person_id")
                 p_name = detail.get("person_name")
                 if p_id and p_name and doc_id:
-                    doc_people.setdefault(doc_id, set()).add((p_id, p_name))
+                    owner_key = (doc_id, detail.get("source_label") or sec_label or "")
+                    doc_people.setdefault(owner_key, set()).add((p_id, p_name))
 
     if not personnel_sections:
         return list(sections)
@@ -303,6 +304,9 @@ def group_sections(sections):
     merged_docs_map = {}
     for section in personnel_sections:
         sec_doc_id = section.get("document_id") or section.get("id")
+        cur_sec_label = section.get("name") or ""
+        if cur_sec_label.startswith("Dokumen Personel - "):
+            cur_sec_label = cur_sec_label[len("Dokumen Personel - ") :]
         sec_docs = section.get("source_documents") or ([{"id": sec_doc_id}] if sec_doc_id else [])
         for sdoc in sec_docs:
             if not isinstance(sdoc, dict) or not sdoc.get("id"):
@@ -322,9 +326,14 @@ def group_sections(sections):
                     entry["filename"] = detail["source_filename"]
                 merged_docs_map[doc_id] = entry
             detail = r.get("detail")
-            if isinstance(detail, dict) and doc_id and len(doc_people.get(doc_id, set())) > 1:
+            owner_key = (
+                (doc_id, detail.get("source_label") or cur_sec_label or "")
+                if isinstance(detail, dict) and doc_id
+                else None
+            )
+            if isinstance(detail, dict) and owner_key and len(doc_people.get(owner_key, set())) > 1:
                 cur_pid = detail.get("person_id")
-                co = sorted({name for pid, name in doc_people[doc_id] if pid != cur_pid})
+                co = sorted({name for pid, name in doc_people[owner_key] if pid != cur_pid})
                 if co:
                     detail["shared_document"] = True
                     detail["co_owners"] = co
@@ -332,7 +341,7 @@ def group_sections(sections):
 
     first = personnel_sections[0]
     merged_source_docs = list(merged_docs_map.values())
-    doc_count = len(merged_source_docs) or len(personnel_sections)
+    doc_count = len(personnel_sections)
     merged_section = {
         "id": first.get("id"),
         "category": "personel",

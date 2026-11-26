@@ -22,12 +22,18 @@ export type DocumentCategory = {
   requiresSubtype?: boolean;
 };
 
+export type ExtraCategory = {
+  category: CategoryId;
+  subtype?: string;
+};
+
 export type UploadItem = {
   id: string;
   name: string;
   size: number;
   category: CategoryId | 'unknown';
   subtype?: string;
+  extraCategories?: ExtraCategory[];
   addedAt: string;
   file?: File;
   serverId?: string;

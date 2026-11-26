@@ -10,14 +10,14 @@ import {
   Trash2,
   UploadCloud,
 } from 'lucide-react';
+import { CategoryMultiSelect } from '../components/CategoryMultiSelect';
 import { SectionHeading } from '../components/Common';
 import Glyph from '../components/Glyph';
 import { SourceDocumentViewer } from '../components/SourceDocumentViewer';
-import { CATEGORIES, categoryById } from '../data/categories';
+import { categoryById } from '../data/categories';
 import type { EvaluationWorkspace } from '../hooks/useEvaluationWorkspace';
 import { sizeLabel } from '../lib/presentation';
-import type { CategoryId, UploadItem } from '../types/models';
-import { PERSONNEL_TYPES } from '../types/models';
+import type { UploadItem } from '../types/models';
 
 type Props = Pick<
   EvaluationWorkspace,
@@ -244,11 +244,6 @@ export function UploadPage({
                   </thead>
                   <tbody>
                     {reviewItems.map((item) => {
-                      const invalidSubtype = item.category === 'personel' &&
-                        !(PERSONNEL_TYPES as readonly string[]).includes(item.subtype ?? '');
-                      const currentVal = invalidSubtype ? 'unknown' :
-                        item.category === 'personel' ? `personel:${item.subtype}` : item.category;
-
                       return (
                         <tr
                           key={item.id}
@@ -272,45 +267,17 @@ export function UploadPage({
                             </div>
                           </td>
                           <td className="batch-td-category">
-                            <select
-                              className="table-category-select"
-                              aria-label={`Kategori ${item.name}`}
+                            <CategoryMultiSelect
+                              ariaLabel={`Kategori ${item.name}`}
+                              category={item.category}
+                              subtype={item.subtype}
+                              extraCategories={item.extraCategories}
+                              isClassifying={item.isClassifying}
                               disabled={working || savingCategory}
-                              value={currentVal}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val.startsWith('personel:')) {
-                                  updateItemCategory(item.id, 'personel', val.slice('personel:'.length));
-                                } else {
-                                  updateItemCategory(item.id, val as CategoryId);
-                                }
-                              }}
-                            >
-                              {(item.category === 'unknown' || invalidSubtype) && (
-                                <option value="unknown" disabled>
-                                  {item.isClassifying ? 'Mengenali…' : 'Perlu Pilih Kategori'}
-                                </option>
-                              )}
-                              {CATEGORIES.map((c) => {
-                                if (c.id === 'personel') {
-                                  return (
-                                    <optgroup key="personel-group" label="Dokumen Personel">
-                                      {PERSONNEL_TYPES.map((t) => (
-                                        <option key={`personel:${t}`} value={`personel:${t}`}>
-                                          Personel: {t}
-                                        </option>
-                                      ))}
-
-                                    </optgroup>
-                                  );
-                                }
-                                return (
-                                  <option key={c.id} value={c.id}>
-                                    {c.name}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                              onChange={(cat, sub, extras) =>
+                                updateItemCategory(item.id, cat, sub, extras)
+                              }
+                            />
                           </td>
                           <td className="batch-td-action">
                             <div className="batch-file-actions">

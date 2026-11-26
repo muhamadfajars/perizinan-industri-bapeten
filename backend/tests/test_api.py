@@ -431,6 +431,108 @@ class TestBapetenApi(unittest.TestCase):
         self.assertEqual(job_after["status"], "failed")
         self.assertIn("server restart", job_after["error"].lower())
 
+    def test_09_multi_category_upload_patch_validation_and_analysis(self):
+        import json
+
+        aid = self._create_app()
+        form_bytes = _make_synthetic_form_pdf()
+        self.client.post(
+            f"/api/v1/applications/{aid}/documents",
+            data={"category": "formulir"},
+            files={"file": ("formulir.pdf", form_bytes, "application/pdf")},
+            headers=self.headers,
+        )
+
+        # Upload 1 combined support doc with primary 'fungsi' + extra 'paparan' (plus duplicate 'fungsi')
+        combined_doc = pymupdf.open()
+        page = combined_doc.new_page()
+        page.insert_text(
+            (50, 70),
+            "LAPORAN HASIL UJI PAPARAN RADIASI DAN UJI FUNGSI\n"
+            "Nama Instansi: RS Harapan Sehat Sentosa\n"
+            "Nama Fasilitas: RS Harapan Sehat Sentosa\n"
+            "Alamat: Jl. Kesehatan No. 10 Jakarta\n"
+            "Approved by: Kepala Instalasi\n",
+        )
+        support_bytes = combined_doc.tobytes()
+        combined_doc.close()
+
+        res_up = self.client.post(
+            f"/api/v1/applications/{aid}/documents",
+            data={
+                "category": "fungsi",
+                "extra_categories": json.dumps(
+                    [{"category": "paparan"}, {"category": "fungsi"}, {"category": "kalibrasi"}]
+                ),
+            },
+            files={"file": ("uji_gabungan.pdf", support_bytes, "application/pdf")},
+            headers=self.headers,
+        )
+        self.assertEqual(res_up.status_code, 200)
+        doc = res_up.json()["document"]
+        self.assertEqual(doc["category"], "fungsi")
+        self.assertEqual(
+            doc["extra_categories"],
+            [{"category": "paparan", "subtype": None}, {"category": "kalibrasi", "subtype": None}],
+        )
+
+        # Validation: formulir cannot be paired with extra_categories
+        res_bad_patch = self.client.patch(
+            f"/api/v1/applications/{aid}/documents/{doc['id']}",
+            json={"category": "fungsi", "extra_categories": [{"category": "formulir"}]},
+            headers=self.headers,
+        )
+        self.assertEqual(res_bad_patch.status_code, 422)
+
+        res_bad_form = self.client.patch(
+            f"/api/v1/applications/{aid}/documents/{doc['id']}",
+            json={"category": "formulir", "extra_categories": [{"category": "paparan"}]},
+            headers=self.headers,
+        )
+        self.assertEqual(res_bad_form.status_code, 422)
+
+        # Valid PATCH updates primary & extra_categories to deterministic categories for fast analysis
+        res_patch = self.client.patch(
+            f"/api/v1/applications/{aid}/documents/{doc['id']}",
+            json={"category": "spesifikasi", "extra_categories": [{"category": "kalibrasi"}]},
+            headers=self.headers,
+        )
+        self.assertEqual(res_patch.status_code, 200)
+        self.assertEqual(res_patch.json()["document"]["category"], "spesifikasi")
+        self.assertEqual(
+            res_patch.json()["document"]["extra_categories"],
+            [{"category": "kalibrasi", "subtype": None}],
+        )
+
+        # Analyze and verify both categories produce sections sharing the uploaded document
+        res_an = self.client.post(f"/api/v1/applications/{aid}/analyses", headers=self.headers)
+        self.assertEqual(res_an.status_code, 200)
+        jid = res_an.json()["job_id"]
+        completed = False
+        for _ in range(40):
+            time.sleep(0.5)
+            j = self.client.get(
+                f"/api/v1/applications/{aid}/jobs/{jid}", headers=self.headers
+            ).json()
+            if j.get("status") == "completed":
+                completed = True
+                break
+            if j.get("status") == "failed":
+                self.fail(f"Job failed unexpectedly: {j.get('error')}")
+        self.assertTrue(completed)
+
+        res_data = self.client.get(
+            f"/api/v1/applications/{aid}/results", headers=self.headers
+        ).json()
+        sections = res_data["matching_sections"]
+        self.assertEqual([s["category"] for s in sections], ["spesifikasi", "kalibrasi"])
+        self.assertNotEqual(sections[0]["id"], sections[1]["id"])
+        self.assertEqual(sections[0]["document_id"], doc["id"])
+        self.assertEqual(sections[1]["document_id"], doc["id"])
+        self.assertEqual(res_data.get("analyzed_documents"), 2)
+        self.assertEqual(res_data.get("total_documents"), 2)
+        self.assertEqual(res_data.get("errors"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

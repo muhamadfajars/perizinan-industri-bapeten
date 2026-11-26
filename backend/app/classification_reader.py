@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 from pathlib import Path
 
 import pymupdf
@@ -61,8 +62,56 @@ def _ocr_embedded_images(doc, page):
     return "\n".join(chunks)
 
 
+def _is_long_single_doc_cover(page_text: str) -> bool:
+    head = (page_text or "").strip()[:1200]
+    if not head:
+        return False
+    return bool(
+        re.search(
+            r"(?im)^\s*(?:FORMULIR\s+PERMOHONAN|"
+            r"(?:DOKUMEN\s+)?PROGRAM\s+PROTEKSI(?:\s+DAN\s+KESELAMATAN)?\s+RADIASI|"
+            r"(?:DOKUMEN\s+)?SISTEM\s+MANAJEMEN)\b",
+            head,
+        )
+    )
+
+
+def _read_pdf_page_text(doc, page, budget: int, allow_header_ocr: bool) -> tuple[str, int]:
+    native = page.get_text("text", sort=True) or ""
+    area = max(page.rect.width * page.rect.height, 1)
+    large_scan = any(
+        pymupdf.Rect(info["bbox"]).get_area() / area >= 0.25 for info in page.get_image_info()
+    )
+    sparse = len("".join(native.split())) < 80 or large_scan
+    if budget and sparse:
+        budget -= 1
+        scale = min(150 / 72, 2400 / max(page.rect.width, page.rect.height))
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale))
+        try:
+            scanned = ocr(Image.open(io.BytesIO(pix.tobytes("png"))))
+            if len("".join(scanned.split())) < 10 and page.get_images():
+                embedded = _ocr_embedded_images(doc, page)
+                if len("".join(embedded.split())) > len("".join(scanned.split())):
+                    scanned = embedded
+        except (RuntimeError, OSError, ValueError) as exc:
+            # Do not silently treat an OCR failure as successful verification.
+            raise ValueError("OCR belum berhasil; kategori perlu diperiksa") from exc
+        native += "\n" + scanned
+    elif not budget and allow_header_ocr and sparse:
+        clip = pymupdf.Rect(0, 0, page.rect.width, page.rect.height * 0.38)
+        scale = min(110 / 72, 1800 / max(clip.width, clip.height, 1))
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), clip=clip)
+        try:
+            header_scan = ocr(Image.open(io.BytesIO(pix.tobytes("png"))))
+        except (RuntimeError, OSError, ValueError):
+            header_scan = ""
+        if header_scan:
+            native += "\n" + header_scan
+    return native[:24000], budget
+
+
 def extract_document_text(filename, file_bytes, max_pages=6):
-    """Inspect up to six opening pages; at most three OCR calls per upload.
+    """Inspect opening pages cleanly; adaptive header OCR inspects pages 4-10 on short scans.
 
     A native letterhead must not suppress OCR of a large embedded scan. Page
     boundaries are retained so a cover is not confused with later references.
@@ -73,30 +122,20 @@ def extract_document_text(filename, file_bytes, max_pages=6):
         with pymupdf.open(stream=file_bytes, filetype="pdf") as doc:
             if doc.needs_pass:
                 raise ValueError("PDF terkunci; pilih kategori atau unggah PDF yang dapat dibaca")
+            total_pages = len(doc)
+            if total_pages == 0:
+                return ""
             budget = 3
-            for index in range(min(max_pages, len(doc))):
-                page = doc[index]
-                native = page.get_text("text", sort=True) or ""
-                area = max(page.rect.width * page.rect.height, 1)
-                large_scan = any(
-                    pymupdf.Rect(info["bbox"]).get_area() / area >= 0.25
-                    for info in page.get_image_info()
+            adaptive_short_pdf = 4 <= total_pages <= 10
+            first_text, budget = _read_pdf_page_text(doc, doc[0], budget, allow_header_ocr=False)
+            pages.append(first_text)
+            allow_bonus = adaptive_short_pdf and not _is_long_single_doc_cover(first_text)
+            limit = total_pages if allow_bonus else min(max_pages, total_pages)
+            for index in range(1, limit):
+                page_text, budget = _read_pdf_page_text(
+                    doc, doc[index], budget, allow_header_ocr=(allow_bonus and index >= 3)
                 )
-                if budget and (len("".join(native.split())) < 80 or large_scan):
-                    budget -= 1
-                    scale = min(150 / 72, 2400 / max(page.rect.width, page.rect.height))
-                    pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale))
-                    try:
-                        scanned = ocr(Image.open(io.BytesIO(pix.tobytes("png"))))
-                        if len("".join(scanned.split())) < 10 and page.get_images():
-                            embedded = _ocr_embedded_images(doc, page)
-                            if len("".join(embedded.split())) > len("".join(scanned.split())):
-                                scanned = embedded
-                    except (RuntimeError, OSError, ValueError) as exc:
-                        # Do not silently treat an OCR failure as successful verification.
-                        raise ValueError("OCR belum berhasil; kategori perlu diperiksa") from exc
-                    native += "\n" + scanned
-                pages.append(native[:24000])
+                pages.append(page_text)
     elif ext == ".docx":
         doc = Document(io.BytesIO(file_bytes))
         # Include table-based covers and headers as well as paragraphs.

@@ -73,11 +73,13 @@ export function PersonnelDocuments({
     page?: number;
   } | null>(null);
 
-  // Group rows by document_id
+  // Group rows by document_id + personnel document label so bundled multi-subtype files stay distinct tabs
   const groupMap = new Map<string, MatchRow[]>();
   for (const row of rows) {
     if (row.field === 'Jenis Dokumen') continue;
-    const key = row.document_id ?? section.id;
+    const docKey = row.document_id ?? section.id;
+    const labelKey = row.detail?.source_label?.trim() || '';
+    const key = labelKey ? `${docKey}::${labelKey}` : docKey;
     groupMap.set(key, [...(groupMap.get(key) ?? []), row]);
   }
 

@@ -227,6 +227,9 @@ def cache_key(doc, reference_digest, source_digest):
         "sha256": doc["sha256"],
         "category": doc["category"],
         "subtype": doc.get("subtype"),
+        "extra_categories": (doc.get("extra_categories") or [])
+        if not doc.get("_virtual_extra")
+        else [],
         "ref": reference_digest,
         "source": source_digest,
         "ocr_profile": os.getenv("BAPETEN_OCR_PROFILE", "fast"),
@@ -251,7 +254,7 @@ def _cache_file(doc, key):
     )
 
 
-def _read_cache(path, doc):
+def _read_cache_entry(path, doc):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if data["cache_format"] != 2 or not isinstance(data["rows"], list):
@@ -259,14 +262,23 @@ def _read_cache(path, doc):
         # Every row is bound to this specific document (never re-use another user's ID).
         if any(r.get("document_id") != doc["id"] for r in data["rows"]):
             return None
-        return data["rows"]
+        raw_warnings = data.get("warnings")
+        warnings = [str(w) for w in raw_warnings if w] if isinstance(raw_warnings, list) else []
+        return data["rows"], warnings
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
-def _write_cache(path, rows):
+def _read_cache(path, doc):
+    entry = _read_cache_entry(path, doc)
+    return entry[0] if entry is not None else None
+
+
+def _write_cache(path, rows, warnings=None):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     payload = {"cache_format": 2, "rows": rows}
+    if warnings:
+        payload["warnings"] = list(warnings)
     fd, tmp = tempfile.mkstemp(prefix=".cache_", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fp:
@@ -275,6 +287,30 @@ def _write_cache(path, rows):
         os.replace(tmp, path)
     finally:
         Path(tmp).unlink(missing_ok=True)
+
+
+def _collect_bundle_warnings(doc):
+    """Zero-OCR safety audit for bundled categories overlooked during bounded upload scan."""
+    if doc.get("_virtual_extra"):
+        return []
+    try:
+        from . import classifier
+
+        page_texts = doc.get("_observed_pages")
+        if page_texts is None:
+            path = storage.file_path(doc)
+            if path.suffix.lower() != ".pdf" or not path.is_file():
+                return []
+            import pymupdf
+
+            with pymupdf.open(str(path)) as pdf:
+                page_texts = [
+                    (i + 1, pdf[i].get_text("text", sort=True) or "")
+                    for i in range(min(len(pdf), 30))
+                ]
+        return classifier.audit_unselected_bundle_warnings(doc, page_texts)
+    except Exception:
+        return []
 
 
 def process_form(form_doc):
@@ -297,10 +333,12 @@ def process_support(doc, application, reference, key):
     start = time.perf_counter()
     path = _cache_file(doc, key)
     if os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1":
-        cached = _read_cache(path, doc)
+        cached = _read_cache_entry(path, doc)
         if cached is not None:
+            cached_rows, cached_warnings = cached
             return {
-                "rows": cached,
+                "rows": cached_rows,
+                "warnings": cached_warnings,
                 "cached": True,
                 "seconds": round(time.perf_counter() - start, 3),
             }
@@ -321,6 +359,7 @@ def process_support(doc, application, reference, key):
                     "DOCX membutuhkan LibreOffice di HPC untuk kategori ini (sudo apt install libreoffice-writer)"
                 )
         rows = HANDLERS[doc["category"]](effective_doc, application, reference)
+        bundle_warnings = _collect_bundle_warnings(effective_doc)
     finally:
         if path_override:
             Path(path_override).unlink(missing_ok=True)
@@ -332,10 +371,10 @@ def process_support(doc, application, reference, key):
         and os.getenv("BAPETEN_EXTRACTION_CACHE", "1") == "1"
     ):
         try:
-            _write_cache(path, rows)
+            _write_cache(path, rows, warnings=bundle_warnings)
         except OSError:
             pass  # cache failure must never discard fresh evidence
-    return {"rows": rows, "cached": False, "seconds": duration}
+    return {"rows": rows, "warnings": bundle_warnings, "cached": False, "seconds": duration}
 
 
 def cache_key_label_group(documents, reference_digest, source_digest):

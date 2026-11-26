@@ -18,8 +18,8 @@ import { monitorAnalysis, retryRead } from '../lib/analysisMonitor';
 import { matchingTotals, sortMatchingSections } from '../lib/matching';
 import { rowMatchesFilter } from '../lib/matchingDisplay';
 import { administrationDocuments } from '../lib/presentation';
-import { analysisBlocker } from '../lib/uploadState';
-import type { CategoryId, MatchRow, MatchSection, UploadItem } from '../types/models';
+import { analysisBlocker, normalizeExtraCategories } from '../lib/uploadState';
+import type { CategoryId, ExtraCategory, MatchRow, MatchSection, UploadItem } from '../types/models';
 import { PERSONNEL_TYPES } from '../types/models';
 import { Filter, PageId, Toast } from '../types/workspace';
 import { useUploadIntake } from './useUploadIntake';
@@ -131,10 +131,14 @@ export function useEvaluationWorkspace() {
       displaySections.filter((section) => section.rows.some((row) => rowMatchesFilter(row, filter, query))),
     [displaySections, filter, query],
   );
-  const categoryCount = useMemo(
-    () => new Set(items.filter((f) => f.category !== 'unknown').map((f) => f.category)).size,
-    [items],
-  );
+  const categoryCount = useMemo(() => {
+    const categories = new Set<string>();
+    for (const f of items) {
+      if (f.category !== 'unknown') categories.add(f.category);
+      for (const extra of f.extraCategories ?? []) categories.add(extra.category);
+    }
+    return categories.size;
+  }, [items]);
   const analysisMessage = analysisBlocker(items);
   const unclassifiedCount = items.filter((item) => item.category === 'unknown' && !item.isClassifying).length;
   const recognizingCount = items.filter((item) => item.isClassifying).length;
@@ -149,11 +153,14 @@ export function useEvaluationWorkspace() {
             ...items.filter((item) => item.category !== 'unknown' && !item.isClassifying),
           ];
     const search = uploadSearch.trim().toLowerCase();
-    return visible.filter((item) =>
-      `${item.name} ${categoryById(item.category)?.name ?? ''} ${item.subtype ?? ''}`
+    return visible.filter((item) => {
+      const extraText = (item.extraCategories ?? [])
+        .map((extra) => `${categoryById(extra.category)?.name ?? ''} ${extra.subtype ?? ''}`)
+        .join(' ');
+      return `${item.name} ${categoryById(item.category)?.name ?? ''} ${item.subtype ?? ''} ${extraText}`
         .toLowerCase()
-        .includes(search),
-    );
+        .includes(search);
+    });
   }, [items, showUnclassified, uploadSearch]);
   useEffect(() => {
     if (unclassifiedCount === 0) setShowUnclassified(false);
@@ -229,6 +236,7 @@ export function useEvaluationWorkspace() {
               size: d.size,
               category: d.category,
               subtype: d.subtype,
+              extraCategories: normalizeExtraCategories(d.category, d.subtype, d.extra_categories),
               sha256: d.sha256,
               addedAt: new Date(d.uploaded * 1000).toISOString(),
             })),
@@ -306,7 +314,13 @@ export function useEvaluationWorkspace() {
         if (!item.file) throw new Error('File lokal telah hilang. Tambahkan ulang dokumen.');
         setSyncCount(i + 1);
         setAnalysisStage('uploading');
-        const uploaded = await uploadFile(aid, item.category, item.file, item.subtype);
+        const uploaded = await uploadFile(
+          aid,
+          item.category,
+          item.file,
+          item.subtype,
+          item.extraCategories,
+        );
         setItems((old) =>
           old.map((x) =>
             x.id === item.id ? { ...x, serverId: uploaded.document.id, sha256: uploaded.document.sha256 } : x,
@@ -373,19 +387,28 @@ export function useEvaluationWorkspace() {
     announce,
   });
 
-  const updateItemCategory = async (id: string, category: CategoryId, subtype?: string) => {
+  const updateItemCategory = async (
+    id: string,
+    category: CategoryId,
+    subtype?: string,
+    extraCategories?: ExtraCategory[],
+  ) => {
     if (working || categorySaveLock.current) return;
     const item = items.find((it) => it.id === id);
     if (!item) return;
     const actualSubtype = categoryById(category)?.requiresSubtype
       ? subtype || item.subtype || PERSONNEL_TYPES[0]
       : undefined;
+    const nextExtras =
+      category === 'formulir'
+        ? []
+        : normalizeExtraCategories(category, actualSubtype, extraCategories ?? item.extraCategories);
     categorySaveLock.current = true;
     setSavingCategory(true);
     try {
       if (item.serverId) {
         if (!applicationId) throw new Error('Permohonan tidak tersedia. Muat ulang halaman.');
-        await updateFileCategory(applicationId, item.serverId, category, actualSubtype);
+        await updateFileCategory(applicationId, item.serverId, category, actualSubtype, nextExtras);
       }
       setItems((old) =>
         old.map((it) =>
@@ -394,6 +417,7 @@ export function useEvaluationWorkspace() {
                 ...it,
                 category,
                 subtype: actualSubtype,
+                extraCategories: nextExtras,
                 isClassifying: false,
                 detectedLayer: undefined,
                 detectionReason: 'Dipilih manual oleh evaluator',

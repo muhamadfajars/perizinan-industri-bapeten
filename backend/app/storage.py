@@ -21,8 +21,13 @@ def init_db():
                 "CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY, created REAL, updated REAL)"
             )
             con.execute(
-                "CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY, app_id TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, filename TEXT NOT NULL, disk_filename TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, uploaded REAL NOT NULL, FOREIGN KEY(app_id) REFERENCES applications(id))"
+                "CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY, app_id TEXT NOT NULL, category TEXT NOT NULL, subtype TEXT, filename TEXT NOT NULL, disk_filename TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, uploaded REAL NOT NULL, extra_categories TEXT NOT NULL DEFAULT '[]', FOREIGN KEY(app_id) REFERENCES applications(id))"
             )
+            cols = {r[1] for r in con.execute("PRAGMA table_info(documents)").fetchall()}
+            if "extra_categories" not in cols:
+                con.execute(
+                    "ALTER TABLE documents ADD COLUMN extra_categories TEXT NOT NULL DEFAULT '[]'"
+                )
             con.execute("CREATE INDEX IF NOT EXISTS ix_docs_app ON documents(app_id)")
             con.execute(
                 "CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, app_id TEXT NOT NULL, status TEXT, progress INTEGER, message TEXT, error TEXT, created REAL, updated REAL, result TEXT)"
@@ -82,37 +87,64 @@ def app_exists(aid):
         return bool(row(con, "SELECT id FROM applications WHERE id=?", (aid,)))
 
 
+def _parse_extra_categories(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raw = []
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if isinstance(item, dict) and item.get("category"):
+            out.append({"category": str(item["category"]), "subtype": item.get("subtype")})
+    return out
+
+
+def _hydrate_doc(doc):
+    if doc is not None:
+        doc["extra_categories"] = _parse_extra_categories(doc.get("extra_categories"))
+    return doc
+
+
 def documents(aid):
     with db() as con:
-        return rows(
+        items = rows(
             con,
-            "SELECT id,category,subtype,filename,size,sha256,uploaded FROM documents WHERE app_id=? ORDER BY uploaded,id",
+            "SELECT id,category,subtype,filename,size,sha256,uploaded,extra_categories FROM documents WHERE app_id=? ORDER BY uploaded,id",
             (aid,),
         )
+        return [_hydrate_doc(item) for item in items]
 
 
 def document(did, aid):
     with db() as con:
-        return row(con, "SELECT * FROM documents WHERE id=? AND app_id=?", (did, aid))
+        return _hydrate_doc(
+            row(con, "SELECT * FROM documents WHERE id=? AND app_id=?", (did, aid))
+        )
 
 
-def add_document(aid, category, subtype, name, size, sha, disk_filename):
+def add_document(aid, category, subtype, name, size, sha, disk_filename, extra_categories=None):
     did = make_id()
     now = time.time()
+    extras_json = json.dumps(_parse_extra_categories(extra_categories), ensure_ascii=False)
     with _LOCK, db() as con:
         con.execute(
-            "INSERT INTO documents VALUES(?,?,?,?,?,?,?,?,?)",
-            (did, aid, category, subtype, name, disk_filename, size, sha, now),
+            "INSERT INTO documents(id,app_id,category,subtype,filename,disk_filename,size,sha256,uploaded,extra_categories) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (did, aid, category, subtype, name, disk_filename, size, sha, now, extras_json),
         )
         con.execute("UPDATE applications SET updated=? WHERE id=?", (now, aid))
     return did
 
 
-def update_document_category(did, aid, category, subtype):
+def update_document_category(did, aid, category, subtype, extra_categories=None):
+    extras = [] if category == "formulir" else _parse_extra_categories(extra_categories)
+    extras_json = json.dumps(extras, ensure_ascii=False)
     with _LOCK, db() as con:
         con.execute(
-            "UPDATE documents SET category=?,subtype=? WHERE id=? AND app_id=?",
-            (category, subtype, did, aid),
+            "UPDATE documents SET category=?,subtype=?,extra_categories=? WHERE id=? AND app_id=?",
+            (category, subtype, extras_json, did, aid),
         )
         con.execute("UPDATE applications SET updated=? WHERE id=?", (time.time(), aid))
         # File hashes do not change when categories change: invalidate old results explicitly.
